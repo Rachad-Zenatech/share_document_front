@@ -1,4 +1,4 @@
-# Enterprise Portal Starter Template (Frontend)
+# Share Document (Frontend)
 
 A modern, production-grade enterprise portal frontend built with **React 19**, **TypeScript**, **Vite**, **Tailwind CSS v4**, and **shadcn/ui**. It features built-in **Role-Based Access Control (RBAC)**, SSO/Token authentication, real-time Server-Sent Events (SSE) notification streaming, comprehensive audit & system logging, and themeable UI.
 
