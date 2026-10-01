@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiTarget = env.VITE_API_BASE_URL || "http://localhost:8900";
+  const apiTarget = env.VITE_API_BASE_URL || "http://localhost:8006";
 
   return {
     plugins: [
@@ -14,10 +14,10 @@ export default defineConfig(({ mode }) => {
     resolve: {
       tsconfigPaths: true,
     },
-    // Pin the dev server to 6000 so it matches the backend's Microsoft SSO
+    // Pin the dev server to 5176 so it matches the backend's Microsoft SSO
     // redirect target (FRONTEND_URL) and CORS_ALLOWED_ORIGINS.
     server: {
-      port: 6000,
+      port: 5176,
       strictPort: true,
       proxy: {
         "/api": {
