@@ -1,0 +1,53 @@
+# dependencies
+node_modules/
+
+# production
+dist/
+
+# logs
+/logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# editor
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# vite
+.vite/
+
+# typescript
+*.tsbuildinfo
+
+# coverage
+coverage/
+
+# cache
+.cache/
+.eslintcache
+
+# temporary files
+tmp/
+temp/
+
+# local database files
+*.sqlite
+*.db
+
+
+
+.env
