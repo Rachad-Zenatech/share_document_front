@@ -1,5 +1,4 @@
 import {
-  LayoutDashboard,
   ShieldCheck,
   FileClock,
   FileText,
@@ -23,19 +22,13 @@ export interface NavigationItem {
 
 export const navigation: NavigationItem[] = [
   {
-    label: "Dashboard",
-    path: "/dashboard",
-    icon: LayoutDashboard,
-    section: "MAIN",
-    navigationCode: "DASHBOARD",
-  },
-  {
-    label: "SEC Filings",
+    label: "Document",
+    path: "/sec-filings",
     icon: FileText,
-    section: "REPORTING & FILINGS",
+    section: "MAIN",
     navigationCode: "SEC_FILINGS",
     subItems: [
-      { label: "Filings Hub", path: "/sec-filings", navigationCode: "SEC_FILINGS" },
+      { label: "Document Hub", path: "/sec-filings", navigationCode: "SEC_FILINGS" },
       { label: "Document Editor", path: "/sec-filings/editor", navigationCode: "SEC_FILINGS" },
     ],
   },

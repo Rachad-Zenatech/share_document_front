@@ -51,7 +51,11 @@ export default function Breadcrumbs() {
       "system-logs": "System Logs",
       configuration: "Configuration",
       configurations: "Configurations",
-      dashboard: "Dashboard",
+      dashboard: "Document",
+      "sec-filings": "Document",
+      documents: "Document",
+      document: "Document",
+      editor: "Document Editor",
     };
     const key = name.toLowerCase();
     if (specialNames[key]) {
@@ -64,7 +68,7 @@ export default function Breadcrumbs() {
       .join(" ");
   };
 
-  if (pathnames.length === 0 || location.pathname === "/dashboard") {
+  if (pathnames.length === 0 || location.pathname === "/sec-filings" || location.pathname === "/dashboard") {
     return null;
   }
 

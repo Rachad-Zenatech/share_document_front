@@ -172,7 +172,7 @@ export default function TopBar({ onToggleSidebar }: { onToggleSidebar?: () => vo
     sendWindowsNotification(
       "Enterprise Portal",
       "This is a test notification! Desktop alerts are configured correctly.",
-      "/dashboard",
+      "/sec-filings",
       (url) => navigate(url)
     );
     toast.success("Test notification sent!");

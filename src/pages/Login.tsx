@@ -52,7 +52,7 @@ export default function Login() {
           await refreshPermissions();
           toast.success("Successfully logged in");
           window.history.replaceState({}, document.title, window.location.pathname);
-          navigate("/dashboard");
+          navigate("/sec-filings");
         } catch (error) {
           console.error("Failed to process SSO login", error);
           toast.error("Failed to process login");

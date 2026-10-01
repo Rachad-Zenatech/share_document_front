@@ -7,7 +7,6 @@ import { Button } from "./components/ui/button";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 const AppShell = lazy(() => import("./components/AppShell/AppShell"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Users = lazy(() => import("./pages/Configurations/Users"));
 const Roles = lazy(() => import("./pages/Configurations/Roles"));
 const UserRoleAssignment = lazy(() => import("./pages/Configurations/UserRoleAssignment"));
@@ -81,9 +80,9 @@ function NotFoundAlert() {
       <p className="text-sm text-muted-foreground mb-6 max-w-md">
         The page you requested does not exist or you do not have permission to view it.
       </p>
-      <Button onClick={() => (window.location.href = "/dashboard")} variant="outline" className="gap-2 text-xs">
+      <Button onClick={() => (window.location.href = "/sec-filings")} variant="outline" className="gap-2 text-xs">
         <ArrowLeft className="w-3.5 h-3.5" />
-        <span>Back to Dashboard</span>
+        <span>Back to Documents</span>
       </Button>
     </div>
   );
@@ -97,6 +96,10 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/pending-access" element={<PendingAccess />} />
+
+            {/* Document Routes & Aliases */}
+            <Route path="/document" element={<Navigate to="/sec-filings" replace />} />
+            <Route path="/documents" element={<Navigate to="/sec-filings" replace />} />
 
             {/* Standalone Contributor & Mobile Signing Routes */}
             <Route path="/sec-filings/contribute" element={<SecFilingContributorPage />} />
@@ -114,15 +117,8 @@ function App() {
                 </ProtectedRoute>
               }
             >
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute navigationCode="DASHBOARD">
-                    <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/" element={<Navigate to="/sec-filings" replace />} />
+              <Route path="/dashboard" element={<Navigate to="/sec-filings" replace />} />
 
               {/* Configuration Routes */}
               <Route path="/configuration" element={<Navigate to="/configurations/users" replace />} />

@@ -56,9 +56,9 @@ export default function ProtectedRoute({ navigationCode, actionCode = 'VIEW', ch
         <p className="text-sm text-muted-foreground mb-6 max-w-md">
           You do not have permission (<code className="font-mono text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950 px-1.5 py-0.5 rounded">{permissionCode}</code>) to view this page. If you believe this is an error, please contact your system administrator.
         </p>
-        <Button onClick={() => navigate("/dashboard")} variant="outline" className="gap-2 text-xs">
+        <Button onClick={() => navigate("/sec-filings")} variant="outline" className="gap-2 text-xs">
           <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Dashboard</span>
+          <span>Back to Documents</span>
         </Button>
       </div>
     );
