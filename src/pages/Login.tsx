@@ -111,6 +111,19 @@ export default function Login() {
                 "Sign in with Microsoft"
               )}
             </Button>
+
+            {import.meta.env.DEV && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  window.location.href = "/api/auth/dev-login?email=rachad.quintyne@zenatech.com";
+                }}
+                className="w-full h-11 rounded-xl border-dashed border-blue-400 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 font-medium"
+                disabled={isLoading}
+              >
+                Dev Sign In (Rachad Quintyne)
+              </Button>
+            )}
           </CardContent>
           <CardFooter className="flex justify-center pb-8 pt-4 border-t border-slate-100 dark:border-zinc-800/50 mt-2 bg-slate-50/50 dark:bg-zinc-950/30">
             <p className="text-sm text-slate-500 dark:text-zinc-400">
