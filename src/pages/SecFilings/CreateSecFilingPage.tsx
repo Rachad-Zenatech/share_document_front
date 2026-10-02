@@ -60,6 +60,7 @@ import { exportSecFilingToDocx, downloadBlob } from '../../utils/secFilingExport
 import { parseDocumentFile } from '../../utils/secFilingImporter';
 import { FINANCIAL_TABLE_TEMPLATES } from '../../data/financialTableTemplates';
 import { ZENATECH_LOGO_DATA_URL } from '../../data/zenatechLogoAsset';
+import { SpreadsheetSelectorModal } from './components/SpreadsheetSelectorModal';
 
 
 interface PublicCompanyEntity {
@@ -249,7 +250,11 @@ export default function CreateSecFilingPage() {
   const [newTitle, setNewTitle] = useState('');
   const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
   const [showWizardModal, setShowWizardModal] = useState(false);
+  const [selectorDoc, setSelectorDoc] = useState<SecDocumentSummary | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const allSpreadsheets = useMemo(() => secFilingService.getAllSpreadsheets(), [documents]);
+  const getAssignedSpreadsheet = (docId: string) => allSpreadsheets.find((s) => s.assignedDocIds?.includes(docId));
 
   // Import Document Modal State
   const [showImportModal, setShowImportModal] = useState(false);
@@ -979,6 +984,18 @@ export default function CreateSecFilingPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {/* Spreadsheet Hub Shortcut Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/sec-filings/spreadsheets')}
+              className="h-8 text-xs gap-1.5 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100/60"
+              title="Open Spreadsheet Hub - Central workbook repository and document assignments"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span className="hidden sm:inline">Spreadsheet Hub</span>
+            </Button>
+
             {/* Folder Picker Icon */}
             <button
               onClick={() => {
@@ -1047,6 +1064,27 @@ export default function CreateSecFilingPage() {
                         {doc.isShared && <Users className="w-3 h-3 text-slate-400 shrink-0" />}
                         <span className="truncate">{formatDateLabel(doc.updatedAt)}</span>
                       </div>
+                      {/* Linked Spreadsheet Pill */}
+                      {(() => {
+                        const assignedSheet = getAssignedSpreadsheet(doc.id);
+                        if (!assignedSheet) return null;
+                        return (
+                          <div className="mt-1.5 flex items-center">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectorDoc(doc);
+                              }}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors truncate max-w-full"
+                              title={`Linked Workbook: ${assignedSheet.fileName} (Click to change)`}
+                            >
+                              <FileSpreadsheet className="w-3 h-3 text-emerald-600 shrink-0" />
+                              <span className="truncate">{assignedSheet.fileName}</span>
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                   {/* Actions Three Dots */}
@@ -1059,6 +1097,10 @@ export default function CreateSecFilingPage() {
                     <DropdownMenuContent align="end" className="text-xs">
                       <DropdownMenuItem onClick={() => handleOpenDoc(doc.id)}>
                         <FileText className="w-3.5 h-3.5 mr-2" /> Open in editor
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setSelectorDoc(doc)}>
+                        <FileSpreadsheet className="w-3.5 h-3.5 mr-2 text-emerald-600" />
+                        {getAssignedSpreadsheet(doc.id) ? 'Change Linked Workbook...' : 'Link Spreadsheet Workbook...'}
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleOpenRename(doc)}>
                         <Pencil className="w-3.5 h-3.5 mr-2" /> Rename
@@ -1115,6 +1157,24 @@ export default function CreateSecFilingPage() {
                           <img src={ZENATECH_LOGO_DATA_URL} alt="ZenaTech" className="w-full h-full object-contain" />
                         </div>
                         <span className="truncate max-w-md">{doc.title}</span>
+                        {(() => {
+                          const assignedSheet = getAssignedSpreadsheet(doc.id);
+                          if (!assignedSheet) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectorDoc(doc);
+                              }}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 shrink-0"
+                              title={`Linked Workbook: ${assignedSheet.fileName} (Click to change)`}
+                            >
+                              <FileSpreadsheet className="w-3 h-3 text-emerald-600 shrink-0" />
+                              <span className="truncate max-w-[130px]">{assignedSheet.fileName}</span>
+                            </button>
+                          );
+                        })()}
                         {isActiveFiling && (
                           <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200 border-blue-300 text-[10px] py-0 px-1.5 shrink-0">
                             Active Filing
@@ -1134,6 +1194,10 @@ export default function CreateSecFilingPage() {
                           <DropdownMenuContent align="end" className="text-xs">
                             <DropdownMenuItem onClick={() => handleOpenDoc(doc.id)}>
                               <FileText className="w-3.5 h-3.5 mr-2" /> Open in editor
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setSelectorDoc(doc)}>
+                              <FileSpreadsheet className="w-3.5 h-3.5 mr-2 text-emerald-600" />
+                              {getAssignedSpreadsheet(doc.id) ? 'Change Linked Workbook...' : 'Link Spreadsheet Workbook...'}
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleOpenRename(doc)}>
                               <Pencil className="w-3.5 h-3.5 mr-2" /> Rename
@@ -1703,6 +1767,22 @@ export default function CreateSecFilingPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Spreadsheet Selector Modal */}
+      {selectorDoc && (
+        <SpreadsheetSelectorModal
+          open={!!selectorDoc}
+          onOpenChange={(open) => {
+            if (!open) setSelectorDoc(null);
+          }}
+          documentId={selectorDoc.id}
+          documentTitle={selectorDoc.title}
+          currentSpreadsheetId={getAssignedSpreadsheet(selectorDoc.id)?.id || null}
+          onSpreadsheetAssigned={() => {
+            refreshDocuments();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FileText,
+  FileSpreadsheet,
   FileDown,
   Printer,
   History,
@@ -13,10 +14,15 @@ import {
   Search,
   CheckCircle2,
   ChevronDown,
+  ChevronUp,
+  X,
   Share2,
   FolderArchive,
   Undo2,
-  Redo2
+  Redo2,
+  Layers,
+  ExternalLink,
+  Unlink
 } from 'lucide-react';
 import { useSecFiling } from '../../hooks/useSecFiling';
 import { secFilingService } from '../../services/secFilingService';
@@ -29,6 +35,8 @@ import { NewProposalModal } from './components/NewProposalModal';
 import { ContributorInviteModal } from './components/ContributorInviteModal';
 import { SubmitProposalModal } from './components/SubmitProposalModal';
 import { MediaBucketModal } from './components/MediaBucketModal';
+import { AttachedSpreadsheetModal } from './components/AttachedSpreadsheetModal';
+import { SpreadsheetSelectorModal } from './components/SpreadsheetSelectorModal';
 import { exportSecFilingToDocx, downloadBlob, printSecFiling } from '../../utils/secFilingExport';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -61,6 +69,8 @@ export default function SecFilingsPage() {
     activeDiffs,
     sectionFilter,
     searchQuery,
+    searchFilterMode,
+    matchingBlockIds,
     setSelectedBlockId,
     toggleBlockSelection,
     selectAllBlocks,
@@ -69,6 +79,7 @@ export default function SecFilingsPage() {
     setActiveRole,
     setSectionFilter,
     setSearchQuery,
+    setSearchFilterMode,
     addBlock,
     updateBlock,
     moveBlock,
@@ -96,8 +107,60 @@ export default function SecFilingsPage() {
     handleRestoreVersion,
     handleResetToDefault,
     calculateDiffForProposal,
-    contributorSession
+    contributorSession,
+    attachedSpreadsheet,
+    updateAttachedSpreadsheet,
+    updateSpreadsheetCell,
+    assignSpreadsheet
   } = useSecFiling();
+
+  const [activeMatchIdx, setActiveMatchIdx] = useState<number>(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Global Ctrl+F / Cmd+F shortcut to jump straight into in-document search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Reset active match index on query change
+  useEffect(() => {
+    setActiveMatchIdx(0);
+  }, [searchQuery]);
+
+  const activeMatchBlockId = useMemo(() => {
+    if (!matchingBlockIds || matchingBlockIds.length === 0) return null;
+    const safeIdx = Math.min(activeMatchIdx, matchingBlockIds.length - 1);
+    return matchingBlockIds[safeIdx] || null;
+  }, [matchingBlockIds, activeMatchIdx]);
+
+  const jumpToMatch = (idx: number) => {
+    if (!matchingBlockIds || matchingBlockIds.length === 0) return;
+    const safeIdx = (idx + matchingBlockIds.length) % matchingBlockIds.length;
+    setActiveMatchIdx(safeIdx);
+    const targetId = matchingBlockIds[safeIdx];
+    setSelectedBlockId(targetId);
+    setTimeout(() => {
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 40);
+  };
+
+  const handleNextMatch = () => jumpToMatch(activeMatchIdx + 1);
+  const handlePrevMatch = () => jumpToMatch(activeMatchIdx - 1);
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setActiveMatchIdx(0);
+  };
 
   const isJumpingRef = useRef(false);
 
@@ -180,6 +243,30 @@ export default function SecFilingsPage() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isSubmitProposalModalOpen, setIsSubmitProposalModalOpen] = useState(false);
   const [isMediaBucketOpen, setIsMediaBucketOpen] = useState(false);
+  const [isSpreadsheetOpen, setIsSpreadsheetOpen] = useState(false);
+  const [isSpreadsheetPickerOpen, setIsSpreadsheetPickerOpen] = useState(false);
+  const [spreadsheetModalMode, setSpreadsheetModalMode] = useState<'manage' | 'picker'>('manage');
+  const [pickerCallback, setPickerCallback] = useState<((cellRef: string, displayVal: string) => void) | null>(null);
+  const [pickerBlockTitle, setPickerBlockTitle] = useState<string>('');
+
+  const handleOpenCellPicker = (onPick: (cellRef: string, displayVal: string) => void, blockTitle = 'Block') => {
+    if (!attachedSpreadsheet) {
+      toast.warning('No spreadsheet linked to this document', {
+        description: 'Please select a workbook from the Spreadsheet Hub first.',
+        action: {
+          label: 'Link Sheet',
+          onClick: () => setIsSpreadsheetPickerOpen(true)
+        }
+      });
+      setIsSpreadsheetPickerOpen(true);
+      return;
+    }
+    setPickerCallback(() => onPick);
+    setPickerBlockTitle(blockTitle);
+    setSpreadsheetModalMode('picker');
+    setIsSpreadsheetOpen(true);
+  };
+
   const [selectedProposalForReview, setSelectedProposalForReview] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'word' | 'blocks'>('word');
 
@@ -538,6 +625,87 @@ export default function SecFilingsPage() {
               <span className="hidden md:inline">Media Bucket</span>
             </Button>
 
+            {/* Attached Spreadsheet / Dynamic Variable Maker & Switcher */}
+            {attachedSpreadsheet ? (
+              <div className="flex items-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSpreadsheetModalMode('manage');
+                    setIsSpreadsheetOpen(true);
+                  }}
+                  className="h-8 text-xs gap-1.5 text-emerald-700 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 font-medium hover:bg-emerald-100/70 cursor-pointer rounded-r-none border-r-0"
+                  title="Attached Spreadsheet - Dynamic maker, edit cells, and link live variables"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="hidden md:inline">Spreadsheet</span>
+                  <span className="px-1.5 py-0.2 text-[10px] rounded font-mono bg-emerald-200/70 dark:bg-emerald-900/70 text-emerald-900 dark:text-emerald-200 truncate max-w-[110px]">
+                    {attachedSpreadsheet?.sheetName || attachedSpreadsheet?.fileName || 'Sheet'}
+                  </span>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-1.5 text-emerald-700 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 rounded-l-none hover:bg-emerald-100/70"
+                      title="Workbook options"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-60 text-xs">
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setSpreadsheetModalMode('manage');
+                        setIsSpreadsheetOpen(true);
+                      }}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      <span>Open Workbook Editor</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setIsSpreadsheetPickerOpen(true)}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <Layers className="w-4 h-4 text-blue-600" />
+                      <span>Change / Link Different Sheet...</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => navigate('/sec-filings/spreadsheets')}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <ExternalLink className="w-4 h-4 text-slate-500" />
+                      <span>Open in Spreadsheet Hub</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => assignSpreadsheet(null)}
+                      className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                    >
+                      <Unlink className="w-4 h-4" />
+                      <span>Unlink Sheet from Document</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsSpreadsheetPickerOpen(true)}
+                className="h-8 text-xs gap-1.5 text-slate-600 dark:text-slate-300 border-dashed border-slate-300 dark:border-zinc-700 hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer"
+                title="Link a spreadsheet workbook from the central Hub"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-slate-400" />
+                <span>+ Link Spreadsheet</span>
+              </Button>
+            )}
+
             {/* Export Dropdown (.docx, .pdf) */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -690,21 +858,118 @@ export default function SecFilingsPage() {
               <span>Headings Pane</span>
             </Button>
 
-            {/* Search Input */}
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search statements, line items, and notes..."
-                className="pl-8 h-8 text-xs bg-slate-50 dark:bg-zinc-800/70 border-slate-200 dark:border-zinc-700"
-              />
+            {/* Find in Document Search Component */}
+            <div className="relative flex-1 flex items-center gap-1.5">
+              <div className="relative flex-1 flex items-center">
+                <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                <Input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (e.shiftKey) {
+                        handlePrevMatch();
+                      } else {
+                        handleNextMatch();
+                      }
+                    } else if (e.key === 'Escape') {
+                      handleClearSearch();
+                    }
+                  }}
+                  placeholder="Find in document (words, statements, line items, numbers)... (Ctrl+F)"
+                  className="pl-8 pr-20 h-8 text-xs bg-slate-50 dark:bg-zinc-800/70 border-slate-200 dark:border-zinc-700"
+                />
+
+                {/* Right side inside input: clear button & Ctrl+F badge */}
+                <div className="absolute right-1.5 top-1 flex items-center gap-1">
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={handleClearSearch}
+                      title="Clear search (Esc)"
+                      className="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <kbd className="hidden sm:inline-block text-[10px] font-mono text-slate-400 dark:text-zinc-500 bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-700 select-none">
+                    Ctrl+F
+                  </kbd>
+                </div>
+              </div>
+
+              {/* Match Counter & Next / Prev controls */}
+              {searchQuery.trim() !== '' && (
+                <div className="flex items-center gap-1 shrink-0 bg-slate-100 dark:bg-zinc-800/80 p-0.5 rounded-lg border border-slate-200 dark:border-zinc-700 text-xs">
+                  {matchingBlockIds.length > 0 ? (
+                    <span className="px-2 py-0.5 rounded text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                      {activeMatchIdx + 1} of {matchingBlockIds.length}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded text-[11px] font-medium text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50">
+                      0 matches
+                    </span>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={matchingBlockIds.length === 0}
+                    onClick={handlePrevMatch}
+                    title="Previous match (Shift+Enter)"
+                    className="h-6 w-6 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 disabled:opacity-30 cursor-pointer"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={matchingBlockIds.length === 0}
+                    onClick={handleNextMatch}
+                    title="Next match (Enter)"
+                    className="h-6 w-6 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 disabled:opacity-30 cursor-pointer"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </Button>
+
+                  {/* Mode Toggle: Jump & Highlight vs Filter */}
+                  <div className="h-4 w-px bg-slate-200 dark:bg-zinc-700 mx-0.5" />
+                  <button
+                    type="button"
+                    onClick={() => setSearchFilterMode(searchFilterMode === 'navigate' ? 'filter' : 'navigate')}
+                    title={
+                      searchFilterMode === 'navigate'
+                        ? 'Currently showing full document with highlights. Click to filter only matching blocks.'
+                        : 'Currently filtering to matching blocks. Click to show full document with highlights.'
+                    }
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+                      searchFilterMode === 'filter'
+                        ? 'bg-blue-600 text-white shadow-2xs font-semibold'
+                        : 'text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    {searchFilterMode === 'filter' ? 'Filtered' : 'Full Doc'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
           <div className="text-xs text-slate-500 dark:text-zinc-400 flex items-center gap-3">
             <span>
-              Showing <strong>{filteredBlocks.length}</strong> of <strong>{workingBlocks.length}</strong> blocks
+              {searchQuery.trim() !== '' ? (
+                <>
+                  Found <strong className="text-amber-600">{matchingBlockIds.length}</strong> matching block{matchingBlockIds.length === 1 ? '' : 's'}
+                </>
+              ) : (
+                <>
+                  Showing <strong>{filteredBlocks.length}</strong> of <strong>{workingBlocks.length}</strong> blocks
+                </>
+              )}
             </span>
             {activeDiffs.length > 0 && (
               <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
@@ -777,6 +1042,16 @@ export default function SecFilingsPage() {
             diffs={activeDiffs}
             viewMode={viewMode}
             onToggleViewMode={setViewMode}
+            attachedSpreadsheet={attachedSpreadsheet}
+            onOpenSpreadsheet={() => {
+              setSpreadsheetModalMode('manage');
+              setIsSpreadsheetOpen(true);
+            }}
+            onOpenCellPicker={handleOpenCellPicker}
+            searchQuery={searchQuery}
+            activeMatchBlockId={activeMatchBlockId}
+            matchingBlockIds={matchingBlockIds}
+            onClearSearch={handleClearSearch}
           />
         </div>
 
@@ -794,6 +1069,36 @@ export default function SecFilingsPage() {
       </main>
 
       {/* Modals */}
+      <AttachedSpreadsheetModal
+        open={isSpreadsheetOpen}
+        onOpenChange={setIsSpreadsheetOpen}
+        spreadsheet={attachedSpreadsheet}
+        onUpdateSpreadsheet={updateAttachedSpreadsheet}
+        onUpdateCell={updateSpreadsheetCell}
+        blocks={workingBlocks}
+        mode={spreadsheetModalMode}
+        onInsertVariable={pickerCallback || undefined}
+        targetBlockTitle={pickerBlockTitle}
+        onSelectBlock={(blockId) => {
+          setSelectedBlockId(blockId);
+          const el = document.getElementById(blockId);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }}
+      />
+
+      <SpreadsheetSelectorModal
+        open={isSpreadsheetPickerOpen}
+        onOpenChange={setIsSpreadsheetPickerOpen}
+        documentId={mainDoc.id}
+        documentTitle={mainDoc.title}
+        currentSpreadsheetId={attachedSpreadsheet?.id || null}
+        onSpreadsheetAssigned={(sheetId) => {
+          assignSpreadsheet(sheetId);
+        }}
+      />
+
       <MergeReviewModal
         open={isMergeModalOpen}
         onOpenChange={setIsMergeModalOpen}

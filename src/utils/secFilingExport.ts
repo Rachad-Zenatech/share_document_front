@@ -18,6 +18,7 @@ import {
 } from 'docx';
 import type { SecFilingDocument } from '../types/secFiling';
 import { ZENATECH_LOGO_DATA_URL } from '../data/zenatechLogoAsset';
+import { interpolateVariables } from './documentVariables';
 
 export const sanitizeTableCells = (cells: string[]): string[] => {
   const result = [...cells];
@@ -245,7 +246,8 @@ export async function exportSecFilingToDocx(doc: SecFilingDocument): Promise<Blo
       if (block.alignment === 'center') alignment = AlignmentType.CENTER;
       if (block.alignment === 'right') alignment = AlignmentType.RIGHT;
 
-      const isStatementTitle = block.text.includes('Statements of');
+      const interpolatedHeadingText = interpolateVariables(block.text, doc.attachedSpreadsheet);
+      const isStatementTitle = interpolatedHeadingText.includes('Statements of');
 
       const headingColor = block.color
         ? block.color.replace('#', '')
@@ -260,7 +262,7 @@ export async function exportSecFilingToDocx(doc: SecFilingDocument): Promise<Blo
           pageBreakBefore: isStatementTitle,
           children: [
             new TextRun({
-              text: block.text,
+              text: interpolatedHeadingText,
               bold: block.bold ?? true,
               italics: block.italic ?? false,
               size,
@@ -278,13 +280,14 @@ export async function exportSecFilingToDocx(doc: SecFilingDocument): Promise<Blo
       if (block.alignment === 'justify') alignment = AlignmentType.JUSTIFIED;
 
       const textColor = block.color ? block.color.replace('#', '') : '000000';
+      const interpolatedParaText = interpolateVariables(block.text, doc.attachedSpreadsheet);
 
       children.push(
         new Paragraph({
           alignment,
           children: [
             new TextRun({
-              text: block.text,
+              text: interpolatedParaText,
               bold: block.bold ?? false,
               italics: block.italic ?? false,
               size: 20,
@@ -300,6 +303,8 @@ export async function exportSecFilingToDocx(doc: SecFilingDocument): Promise<Blo
       if (calloutTop > 0) {
         children.push(new Paragraph({ spacing: { before: calloutTop, after: 0 } }));
       }
+      const calloutTitle = block.title ? interpolateVariables(block.title, doc.attachedSpreadsheet) : '';
+      const calloutContent = block.content ? interpolateVariables(block.content, doc.attachedSpreadsheet) : '';
       children.push(
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
@@ -308,11 +313,11 @@ export async function exportSecFilingToDocx(doc: SecFilingDocument): Promise<Blo
               children: [
                 new TableCell({
                   children: [
-                    block.title
+                    calloutTitle
                       ? new Paragraph({
                           children: [
                             new TextRun({
-                              text: block.title,
+                              text: calloutTitle,
                               bold: true,
                               size: 19,
                               color: '0E2841',
@@ -325,7 +330,7 @@ export async function exportSecFilingToDocx(doc: SecFilingDocument): Promise<Blo
                     new Paragraph({
                       children: [
                         new TextRun({
-                          text: block.content,
+                          text: calloutContent,
                           italics: true,
                           size: 18,
                           font: 'Calibri'
@@ -368,7 +373,8 @@ export async function exportSecFilingToDocx(doc: SecFilingDocument): Promise<Blo
             children: cleanedHeaders.map((h, i) => {
               const align = block.columnAlignments[i] || (i === 0 ? 'left' : 'center');
               const alignment = align === 'right' ? AlignmentType.RIGHT : align === 'left' ? AlignmentType.LEFT : AlignmentType.CENTER;
-              const lines = (h || '').split('\n');
+              const headerText = interpolateVariables(h || '', doc.attachedSpreadsheet);
+              const lines = headerText.split('\n');
               return new TableCell({
                 shading: { fill: headerFill },
                 children: lines.map((line) => new Paragraph({
@@ -429,7 +435,8 @@ export async function exportSecFilingToDocx(doc: SecFilingDocument): Promise<Blo
               const effectiveIndent = Math.min(row.indent || 0, maxAllowedIndent);
               const indent = isFirstCol && effectiveIndent ? effectiveIndent * 200 : 0;
               const sanitizedCells = sanitizeTableCells(row.cells);
-              const cellVal = sanitizedCells[colIndex] ?? cellText;
+              const rawCellVal = sanitizedCells[colIndex] ?? cellText;
+              const cellVal = interpolateVariables(rawCellVal, doc.attachedSpreadsheet);
               const lines = (cellVal || '').split('\n');
 
               let topBorder: any = noBorder;
@@ -492,11 +499,12 @@ export async function exportSecFilingToDocx(doc: SecFilingDocument): Promise<Blo
       // Dynamic Footnotes
       if (block.footnotes && block.footnotes.length > 0) {
         for (const fn of block.footnotes) {
+          const fnText = interpolateVariables(fn, doc.attachedSpreadsheet);
           children.push(
             new Paragraph({
               children: [
                 new TextRun({
-                  text: fn,
+                  text: fnText,
                   italics: true,
                   size: 17,
                   color: '555555',
@@ -842,20 +850,24 @@ export function printSecFiling(doc: SecFilingDocument) {
               }
               if (b.type === 'heading') {
                 const alignClass = `align-${b.alignment || 'left'}`;
-                const isStatement = b.text.includes('Statements of');
+                const headingText = interpolateVariables(b.text, doc.attachedSpreadsheet);
+                const isStatement = headingText.includes('Statements of');
                 const topMargin = typeof b.spacingTop === 'number' ? `${b.spacingTop}px` : '14px';
-                return `<h${b.level} class="${alignClass} ${isStatement ? 'page-break' : ''}" style="margin: ${topMargin} 0 6px 0; font-weight: bold; color: ${b.color || '#0E2841'};">${b.text}</h${b.level}>`;
+                return `<h${b.level} class="${alignClass} ${isStatement ? 'page-break' : ''}" style="margin: ${topMargin} 0 6px 0; font-weight: bold; color: ${b.color || '#0E2841'};">${headingText}</h${b.level}>`;
               }
               if (b.type === 'paragraph') {
                 const alignClass = `align-${b.alignment || 'left'}`;
                 const topMargin = typeof b.spacingTop === 'number' ? `${b.spacingTop}px` : '5px';
-                return `<p class="${alignClass}" style="margin: ${topMargin} 0; color: ${b.color || 'inherit'};">${b.text}</p>`;
+                const paraText = interpolateVariables(b.text, doc.attachedSpreadsheet);
+                return `<p class="${alignClass}" style="margin: ${topMargin} 0; color: ${b.color || 'inherit'};">${paraText}</p>`;
               }
               if (b.type === 'callout') {
+                const cTitle = b.title ? interpolateVariables(b.title, doc.attachedSpreadsheet) : '';
+                const cContent = b.content ? interpolateVariables(b.content, doc.attachedSpreadsheet) : '';
                 return `
                   <div class="callout" style="margin-top: ${typeof b.spacingTop === 'number' ? `${b.spacingTop}px` : '14px'};">
-                    ${b.title ? `<strong>${b.title}</strong><br/>` : ''}
-                    <em>${b.content}</em>
+                    ${cTitle ? `<strong>${cTitle}</strong><br/>` : ''}
+                    <em>${cContent}</em>
                   </div>
                 `;
               }
@@ -868,7 +880,7 @@ export function printSecFiling(doc: SecFilingDocument) {
                       <tr style="background-color: ${headerBg};">
                         ${b.headers
                           .map((h, i) => {
-                            const cleaned = /^Col\s*\d+$/i.test(h?.trim() || '') ? '' : (h || '');
+                            const cleaned = /^Col\s*\d+$/i.test(h?.trim() || '') ? '' : interpolateVariables(h || '', doc.attachedSpreadsheet);
                             return `<th class="align-${b.columnAlignments[i] || 'left'}">${cleaned}</th>`;
                           })
                           .join('')}
@@ -887,8 +899,10 @@ export function printSecFiling(doc: SecFilingDocument) {
                             <tr class="${rowClass}" style="${rowBg}">
                               ${sanitizeTableCells(r.cells)
                                 .map((c, i) => {
-                                  const isDateHeader = !isSection && isComparativeDateHeaderCell(c, rIdx, i);
-                                  const isMajorHeader = !isSection && (isMajorStatementHeaderCell(c) || (isMajorHeaderRow && i === 0));
+                                  const rawCell = c;
+                                  const cellVal = interpolateVariables(rawCell, doc.attachedSpreadsheet);
+                                  const isDateHeader = !isSection && isComparativeDateHeaderCell(cellVal, rIdx, i);
+                                  const isMajorHeader = !isSection && (isMajorStatementHeaderCell(cellVal) || (isMajorHeaderRow && i === 0));
                                   const alignVal = r.cellAlignments?.[i]
                                     ? r.cellAlignments[i]
                                     : r.align
@@ -900,7 +914,7 @@ export function printSecFiling(doc: SecFilingDocument) {
                                   const indent = i === 0 && effectiveIndent ? `indent-${effectiveIndent}` : '';
                                   const bold = isDateHeader || isMajorHeader || r.bold || r.type === 'section_title' || r.type === 'header' ? 'font-weight: bold;' : '';
                                   const italic = r.italic ? 'font-style: italic;' : '';
-                                  return `<td class="${align} ${indent}" style="text-align: ${alignVal}; ${bold} ${italic}">${c || '&nbsp;'}</td>`;
+                                  return `<td class="${align} ${indent}" style="text-align: ${alignVal}; ${bold} ${italic}">${cellVal || '&nbsp;'}</td>`;
                                 })
                                 .join('')}
                             </tr>
@@ -911,7 +925,7 @@ export function printSecFiling(doc: SecFilingDocument) {
                   </table>
                   ${
                     b.footnotes
-                      ? b.footnotes.map((fn) => `<p style="font-size: 8.5pt; font-style: italic;">${fn}</p>`).join('')
+                      ? b.footnotes.map((fn) => `<p style="font-size: 8.5pt; font-style: italic;">${interpolateVariables(fn, doc.attachedSpreadsheet)}</p>`).join('')
                       : ''
                   }
                 `;

@@ -22,7 +22,7 @@ export function estimateBlockHeight(block: SecBlock, globalSpacing: SecBlockSpac
   const spacing = block.spacing || globalSpacing;
   const mult = SPACING_MULTIPLIERS[spacing] || 1.0;
 
-  let baseHeight = 40;
+  let baseHeight: number;
 
   switch (block.type) {
     case 'metadata':

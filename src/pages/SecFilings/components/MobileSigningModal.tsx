@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -72,14 +72,14 @@ export const MobileSigningModal: React.FC<MobileSigningModalProps> = ({
   officerIndex,
   onSignatureCompleted,
 }) => {
-  const officer = block.officers[officerIndex] || {
-    id: `off-${Date.now()}`,
+  const officer = useMemo(() => block.officers[officerIndex] || {
+    id: `off-officer-${officerIndex}`,
     name: 'Shaun Passley, Ph.D.',
     title: 'Chief Executive Officer',
-    date: new Date().toLocaleDateString(),
+    date: '2026-06-30',
     signed: false,
     signatureText: '',
-  };
+  }, [block.officers, officerIndex]);
 
   const [activeTab, setActiveTab] = useState<'sms_dispatch' | 'phone_canvas' | 'audit_trail' | 'config'>('sms_dispatch');
   const [provider, setProvider] = useState<ESignProvider>(officer.provider || 'docusign');
@@ -95,6 +95,16 @@ export const MobileSigningModal: React.FC<MobileSigningModalProps> = ({
   const [isSending, setIsSending] = useState(false);
   const [dispatchResult, setDispatchResult] = useState<MobileSigningResponse | null>(null);
   const [sessionEnvelopeId, setSessionEnvelopeId] = useState(() => `sec-env-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`);
+
+  // Phone Canvas State
+  const [signMode, setSignMode] = useState<'draw' | 'type'>('draw');
+  const [typedSignature, setTypedSignature] = useState(officer.name ? `/s/ ${officer.name}` : '/s/ Shaun Passley');
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasDrawn, setHasDrawn] = useState(false);
+
+  // Config State
+  const [config, setConfig] = useState<ESignConfig>(() => eSignatureService.getConfig());
 
   // Reset modal state on open so no previous signature or dispatch is retained
   useEffect(() => {
@@ -149,7 +159,9 @@ export const MobileSigningModal: React.FC<MobileSigningModalProps> = ({
           onSignatureCompleted(updatedOfficer);
           onOpenChange(false);
         }
-      } catch (err) {}
+      } catch {
+        // Ignore polling errors
+      }
     }, 2000);
 
     return () => {
@@ -157,16 +169,6 @@ export const MobileSigningModal: React.FC<MobileSigningModalProps> = ({
       clearInterval(interval);
     };
   }, [open, dispatchResult, officer, officerName, officerTitle, countryCode, phoneNumber, provider, deliveryMethod, onSignatureCompleted, onOpenChange]);
-
-  // Phone Canvas State
-  const [signMode, setSignMode] = useState<'draw' | 'type'>('draw');
-  const [typedSignature, setTypedSignature] = useState(officer.name ? `/s/ ${officer.name}` : '/s/ Shaun Passley');
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasDrawn, setHasDrawn] = useState(false);
-
-  // Config State
-  const [config, setConfig] = useState<ESignConfig>(() => eSignatureService.getConfig());
 
   // Dynamic QR Code State
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');

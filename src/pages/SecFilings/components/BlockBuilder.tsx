@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import type { SecBlock, SecBlockType, SecBlockDiff, SecBlockSpacing } from '../../../types/secFiling';
+import type { SecBlock, SecBlockType, SecBlockDiff, SecBlockSpacing, AttachedSpreadsheet } from '../../../types/secFiling';
 import { BlockItem } from './BlockItem';
 import { InlineAddBlock } from './InlineAddBlock';
 import type { FinancialTableTemplate } from '../../../data/financialTableTemplates';
@@ -20,6 +20,7 @@ import {
   Trash2,
   FolderInput,
   X,
+  Search,
   Maximize2
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
@@ -55,6 +56,13 @@ interface BlockBuilderProps {
   diffs?: SecBlockDiff[];
   viewMode?: 'word' | 'blocks';
   onToggleViewMode?: (mode: 'word' | 'blocks') => void;
+  attachedSpreadsheet?: AttachedSpreadsheet | null;
+  onOpenSpreadsheet?: () => void;
+  onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
+  searchQuery?: string;
+  activeMatchBlockId?: string | null;
+  matchingBlockIds?: string[];
+  onClearSearch?: () => void;
 }
 
 export const BlockBuilder: React.FC<BlockBuilderProps> = ({
@@ -80,7 +88,14 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
   documentSections = [],
   diffs = [],
   viewMode = 'word',
-  onToggleViewMode
+  onToggleViewMode,
+  attachedSpreadsheet,
+  onOpenSpreadsheet,
+  onOpenCellPicker,
+  searchQuery,
+  activeMatchBlockId,
+  matchingBlockIds = [],
+  onClearSearch
 }) => {
   const diffMap = useMemo(() => new Map<string, SecBlockDiff>(diffs.map((d) => [d.blockId, d])), [diffs]);
   const blockIndexMap = useMemo(() => new Map<string, number>(blocks.map((b, i) => [b.id, i])), [blocks]);
@@ -492,23 +507,64 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
       >
         {filteredBlocks.length === 0 ? (
           <div className={`${sheetWidthClass} bg-white text-slate-900 shadow-2xl rounded-sm border border-slate-300/80 p-12 text-center space-y-4 min-h-[500px] flex flex-col items-center justify-center`}>
-            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-              <FileText className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold text-slate-700">No matching content found</h4>
-              <p className="text-xs text-slate-500 mt-1">
-                Adjust your search or add a block to begin drafting.
-              </p>
-            </div>
-            <Button
-              type="button"
-              onClick={() => onAddBlock(0, 'heading')}
-              className="text-xs gap-1.5"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Add Heading</span>
-            </Button>
+            {searchQuery?.trim() ? (
+              <>
+                <div className="w-14 h-14 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center mx-auto text-amber-600">
+                  <Search className="w-6 h-6" />
+                </div>
+                <div className="max-w-md">
+                  <h4 className="text-base font-semibold text-slate-800 dark:text-zinc-100">
+                    No blocks match "{searchQuery}"
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1.5 leading-relaxed">
+                    No headings, paragraphs, statement line items, or spreadsheet-linked values match this term. Try typing partial words, or search by account names or numbers.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 pt-2">
+                  {onClearSearch && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={onClearSearch}
+                      className="text-xs gap-1.5 border-slate-300"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Clear Search</span>
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => onAddBlock(0, 'heading')}
+                    className="text-xs gap-1.5"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    <span>Add New Block</span>
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-700">No matching content found</h4>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Adjust your search or add a block to begin drafting.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => onAddBlock(0, 'heading')}
+                  className="text-xs gap-1.5"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Add Heading</span>
+                </Button>
+              </>
+            )}
           </div>
         ) : isMultiPageLayout ? (
           /* Multi-Page Paginated Sheets (Works in both Word Mode and Block Mode) */
@@ -577,6 +633,12 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
                             tableCellDiffs={diffInfo?.tableCellDiffs}
                             viewMode={viewMode}
                             globalSpacing={globalSpacing}
+                            attachedSpreadsheet={attachedSpreadsheet}
+                            onOpenSpreadsheet={onOpenSpreadsheet}
+                            onOpenCellPicker={onOpenCellPicker}
+                            searchQuery={searchQuery}
+                            isActiveSearchMatch={activeMatchBlockId === block.id}
+                            isSearchMatch={matchingBlockIds?.includes(block.id)}
                           />
 
                           {/* Inline Add Bar below each block */}
@@ -665,6 +727,12 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
                       tableCellDiffs={diffInfo?.tableCellDiffs}
                       viewMode={viewMode}
                       globalSpacing={globalSpacing}
+                      attachedSpreadsheet={attachedSpreadsheet}
+                      onOpenSpreadsheet={onOpenSpreadsheet}
+                      onOpenCellPicker={onOpenCellPicker}
+                      searchQuery={searchQuery}
+                      isActiveSearchMatch={activeMatchBlockId === block.id}
+                      isSearchMatch={matchingBlockIds?.includes(block.id)}
                     />
 
                     {/* Inline Add Bar below each block */}

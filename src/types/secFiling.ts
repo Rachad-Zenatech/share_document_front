@@ -210,6 +210,34 @@ export type SecBlock =
   | SecMetadataBlock
   | SecImageBlock;
 
+export interface SpreadsheetTab {
+  id: string;
+  name: string;
+  rowCount: number;
+  colCount: number;
+  maxCol: string; // e.g. "AW"
+  colLetters?: string[];
+  headers?: string[];
+  cells: Record<string, string | number | boolean>;
+}
+
+export interface AttachedSpreadsheet {
+  id: string;
+  fileName: string;
+  sheetName: string;
+  rowCount: number;
+  colCount: number;
+  maxCol: string; // e.g. "AW"
+  colLetters?: string[]; // e.g. ["A", "B", ... "AW"]
+  headers?: string[]; // e.g. Column headers
+  cells: Record<string, string | number | boolean>; // e.g. { "A1": "ZenaTech...", "B8": 639739.32 }
+  tabs?: SpreadsheetTab[];
+  activeTabId?: string;
+  updatedAt?: string;
+  assignedDocIds?: string[]; // IDs of documents linked to this spreadsheet
+  description?: string;
+}
+
 export interface SecFilingDocument {
   id: string;
   title: string;
@@ -225,6 +253,8 @@ export interface SecFilingDocument {
   updatedAt: string;
   lastModifiedBy: string;
   lockedBy?: string | null;
+  attachedSpreadsheetId?: string;
+  attachedSpreadsheet?: AttachedSpreadsheet | null;
 }
 
 export interface SecChangeProposal {

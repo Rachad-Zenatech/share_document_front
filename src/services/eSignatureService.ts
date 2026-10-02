@@ -69,7 +69,9 @@ export const eSignatureService = {
         }
       }
       keysToRemove.forEach((k) => localStorage.removeItem(k));
-    } catch (e) {}
+    } catch {
+      // Ignore localStorage errors
+    }
   },
 
   getConfig(): ESignConfig {
@@ -83,7 +85,9 @@ export const eSignatureService = {
     if (saved) {
       try {
         return JSON.parse(saved);
-      } catch (e) {}
+      } catch {
+        // Ignore parse error and fall back to default
+      }
     }
     return {
       docusign: {

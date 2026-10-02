@@ -10,12 +10,14 @@ import type {
   SecHeadingBlock,
   SecParagraphBlock,
   SecFinancialTableBlock,
-  SecTableRow
+  SecTableRow,
+  AttachedSpreadsheet
 } from '../types/secFiling';
 import { secFilingService, setStorageFailureListener, getProposalInviteUrl } from '../services/secFilingService';
 import { useAuth } from '../lib/AuthContext';
 import { toast } from 'sonner';
 import { ZENATECH_LOGO_DATA_URL } from '../data/zenatechLogoAsset';
+import { blockMatchesQuery } from '../utils/secFilingSearch';
 
 export type UserFilingRole = 'LEAD_CONTROLLER' | 'CONTRIBUTOR';
 
@@ -34,6 +36,7 @@ export function useSecFiling() {
   const [activeProposalId, setActiveProposalId] = useState<string | null>(null);
   const [sectionFilter, setSectionFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchFilterMode, setSearchFilterMode] = useState<'navigate' | 'filter'>('navigate');
   const [contributorSession, setContributorSession] = useState<{
     isContributor: boolean;
     name?: string;
@@ -84,24 +87,31 @@ export function useSecFiling() {
     return counts;
   }, [workingBlocks]);
 
+  const effectiveSpreadsheet = useMemo(() => {
+    return mainDoc.attachedSpreadsheet || null;
+  }, [mainDoc.attachedSpreadsheet]);
+
+  const matchingBlockIds = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return [];
+    }
+    return workingBlocks
+      .filter((b) => blockMatchesQuery(b, searchQuery, effectiveSpreadsheet))
+      .map((b) => b.id);
+  }, [workingBlocks, searchQuery, effectiveSpreadsheet]);
+
   const filteredBlocks = useMemo(() => {
-    const trimmedQuery = searchQuery.trim().toLowerCase();
+    const trimmedQuery = searchQuery.trim();
     if (!trimmedQuery) {
       return workingBlocks;
     }
-    return workingBlocks.filter((b) => {
-      if (b.type === 'heading' && b.text.toLowerCase().includes(trimmedQuery)) return true;
-      if (b.type === 'paragraph' && b.text.toLowerCase().includes(trimmedQuery)) return true;
-      if (b.type === 'callout' && (b.content.toLowerCase().includes(trimmedQuery) || b.title?.toLowerCase().includes(trimmedQuery)))
-        return true;
-      if (b.type === 'financial_table') {
-        if (b.title?.toLowerCase().includes(trimmedQuery)) return true;
-        if (b.headers.some((h) => h.toLowerCase().includes(trimmedQuery))) return true;
-        if (b.rows.some((r) => r.cells.some((c) => c.toLowerCase().includes(trimmedQuery)))) return true;
-      }
-      return false;
-    });
-  }, [workingBlocks, searchQuery]);
+    // If in navigate mode, keep all blocks so the full document can be read/browsed
+    if (searchFilterMode === 'navigate') {
+      return workingBlocks;
+    }
+    // If in filter mode, return only matching blocks
+    return workingBlocks.filter((b) => blockMatchesQuery(b, trimmedQuery, effectiveSpreadsheet));
+  }, [workingBlocks, searchQuery, searchFilterMode, effectiveSpreadsheet]);
 
   // --------------------------------------------------------------------------
   // 3. ALL CALLBACKS
@@ -1019,6 +1029,24 @@ export function useSecFiling() {
     toast.success('Reset filing document to baseline v22 Review Copy');
   }, [refreshAll]);
 
+  const handleUpdateAttachedSpreadsheet = useCallback((sheet: AttachedSpreadsheet) => {
+    const updated = secFilingService.updateAttachedSpreadsheet(sheet, mainDoc.id);
+    setMainDoc({ ...updated });
+  }, [mainDoc.id]);
+
+  const handleUpdateSpreadsheetCell = useCallback((cellRef: string, newValue: any) => {
+    const { updatedDoc, updatedCount } = secFilingService.updateSpreadsheetCellAndSyncDoc(cellRef, newValue, mainDoc.id);
+    setMainDoc({ ...updatedDoc });
+    return updatedCount;
+  }, [mainDoc.id]);
+
+  const handleAssignSpreadsheet = useCallback((sheetId: string | null) => {
+    secFilingService.assignSpreadsheetToDocument(mainDoc.id, sheetId);
+    const updated = secFilingService.getDocumentContent(mainDoc.id);
+    setMainDoc({ ...updated });
+    toast.success(sheetId ? 'Assigned workbook to this document' : 'Unassigned workbook from this document');
+  }, [mainDoc.id]);
+
   // --------------------------------------------------------------------------
   // 4. MEMOIZED DIFFS
   // --------------------------------------------------------------------------
@@ -1182,6 +1210,8 @@ export function useSecFiling() {
     activeDiffs,
     sectionFilter,
     searchQuery,
+    searchFilterMode,
+    matchingBlockIds,
     setSelectedBlockId,
     setSelectedBlockIds,
     toggleBlockSelection,
@@ -1191,6 +1221,7 @@ export function useSecFiling() {
     setActiveRole,
     setSectionFilter,
     setSearchQuery,
+    setSearchFilterMode,
     addBlock,
     updateBlock,
     moveBlock,
@@ -1220,6 +1251,10 @@ export function useSecFiling() {
     handleRestoreVersion,
     handleResetToDefault,
     calculateDiffForProposal,
-    contributorSession
+    contributorSession,
+    attachedSpreadsheet: mainDoc.attachedSpreadsheet || null,
+    updateAttachedSpreadsheet: handleUpdateAttachedSpreadsheet,
+    updateSpreadsheetCell: handleUpdateSpreadsheetCell,
+    assignSpreadsheet: handleAssignSpreadsheet
   };
 }

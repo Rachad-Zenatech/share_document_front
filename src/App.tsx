@@ -23,6 +23,17 @@ const SecFilings = lazy(() => import("./pages/SecFilings/SecFilingsPage"));
 const CreateSecFilingPage = lazy(() => import("./pages/SecFilings/CreateSecFilingPage"));
 const SecFilingContributorPage = lazy(() => import("./pages/SecFilings/SecFilingContributorPage"));
 const MobileSignerPage = lazy(() => import("./pages/SecFilings/MobileSignerPage"));
+const SpreadsheetHubPage = lazy(() => import("./pages/SecFilings/SpreadsheetHubPage").then(m => ({ default: m.SpreadsheetHubPage })));
+
+function SpreadsheetHubRoute() {
+  return (
+    <ProtectedRoute navigationCode="SEC_FILINGS">
+      <AppShell>
+        <SpreadsheetHubPage />
+      </AppShell>
+    </ProtectedRoute>
+  );
+}
 
 function SecFilingsHubRoute() {
   const location = useLocation();
@@ -106,6 +117,8 @@ function App() {
             <Route path="/sec-filings" element={<SecFilingsHubRoute />} />
             <Route path="/sec-filings/new" element={<Navigate to="/sec-filings" replace />} />
             <Route path="/sec-filings/editor" element={<SecFilingsEditorRoute />} />
+            <Route path="/sec-filings/spreadsheets" element={<SpreadsheetHubRoute />} />
+            <Route path="/spreadsheets" element={<Navigate to="/sec-filings/spreadsheets" replace />} />
 
             {/* Main app layout routes */}
             <Route

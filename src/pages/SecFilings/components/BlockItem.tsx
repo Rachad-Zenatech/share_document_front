@@ -31,7 +31,10 @@ import {
   PlusCircle,
   Check,
   Save,
-  Smartphone
+  Smartphone,
+  Table2,
+  ExternalLink,
+  Unlink
 } from 'lucide-react';
 import { MediaBucketModal } from './MediaBucketModal';
 import { TableTemplateModal, findMatchingTemplate, sanitizeTableBlock } from './TableTemplateModal';
@@ -55,8 +58,11 @@ import type {
   SecImageBlock,
   SecTableRow,
   SecBlockSpacing,
-  SecTableCellDiff
+  SecTableCellDiff,
+  AttachedSpreadsheet
 } from '../../../types/secFiling';
+import { interpolateVariables, hasDocumentVariables } from '../../../utils/documentVariables';
+import { DocumentVariableRenderer } from './DocumentVariableRenderer';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import {
@@ -134,6 +140,12 @@ interface BlockItemProps {
   tableCellDiffs?: SecTableCellDiff[];
   viewMode?: 'word' | 'blocks';
   globalSpacing?: SecBlockSpacing;
+  attachedSpreadsheet?: AttachedSpreadsheet | null;
+  onOpenSpreadsheet?: () => void;
+  onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
+  searchQuery?: string;
+  isActiveSearchMatch?: boolean;
+  isSearchMatch?: boolean;
 }
 
 const BlockItemComponent: React.FC<BlockItemProps> = ({
@@ -153,10 +165,17 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
   diffType,
   tableCellDiffs,
   viewMode = 'word',
-  globalSpacing = 'normal'
+  globalSpacing = 'normal',
+  attachedSpreadsheet,
+  onOpenSpreadsheet,
+  onOpenCellPicker,
+  searchQuery,
+  isActiveSearchMatch = false,
+  isSearchMatch = false
 }) => {
   const isWordMode = viewMode === 'word';
   const effectiveSpacing = block.spacing || globalSpacing;
+  const safeSpreadsheet = attachedSpreadsheet || undefined;
   
   // Default natural distance from the above block if not explicitly set
   const defaultSpacingTop =
@@ -215,7 +234,15 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
     ? 'relative py-0 rounded-sm transition-colors hover:bg-slate-50/70 dark:hover:bg-zinc-800/30'
     : 'relative rounded-xl border border-slate-200 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/90 shadow-xs';
 
-  if (isHighlighted) {
+  if (isActiveSearchMatch) {
+    wrapperClass = isWordMode
+      ? 'relative z-30 py-0 rounded-sm ring-3 ring-amber-500 bg-amber-100/30 dark:bg-amber-950/40 shadow-md'
+      : 'relative z-30 rounded-xl border-2 border-amber-500 ring-4 ring-amber-500/30 bg-amber-50/20 shadow-lg';
+  } else if (isSearchMatch) {
+    wrapperClass = isWordMode
+      ? 'relative z-10 py-0 rounded-sm ring-1 ring-amber-400/80 bg-amber-50/15'
+      : 'relative z-10 rounded-xl border border-amber-400/80 ring-2 ring-amber-400/20 bg-amber-50/10 shadow-xs';
+  } else if (isHighlighted) {
     wrapperClass = isWordMode
       ? 'relative z-20 py-0 rounded-sm ring-2 ring-blue-500/70 bg-blue-50/25 dark:bg-blue-950/30'
       : 'relative z-20 rounded-xl border border-blue-500 ring-2 ring-blue-500/30 shadow-md bg-blue-50/10 dark:bg-zinc-900';
@@ -272,7 +299,11 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
       onClick={(e) => {
         e.stopPropagation();
         if (e.shiftKey || e.ctrlKey || e.metaKey) {
-          onToggleSelect ? onToggleSelect(true) : onSelect(e);
+          if (onToggleSelect) {
+            onToggleSelect(true);
+          } else {
+            onSelect(e);
+          }
         } else {
           onSelect(e);
         }
@@ -338,7 +369,11 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onToggleSelect ? onToggleSelect(true) : onSelect(e);
+            if (onToggleSelect) {
+              onToggleSelect(true);
+            } else {
+              onSelect(e);
+            }
           }}
           title={isMultiSelected ? 'Deselect block (Part of Multi-Selection)' : 'Select block (Hold Shift/Ctrl for Multiple)'}
           className={`p-0.5 rounded flex items-center justify-center transition-colors ${
@@ -576,6 +611,34 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
               }`}
             >
               <Underline className="w-3 h-3" />
+            </button>
+
+            <div className="h-3.5 w-px bg-slate-200 dark:bg-zinc-700 mx-0.5" />
+
+            {/* Link Cell from Attached Spreadsheet */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onOpenCellPicker) {
+                  onOpenCellPicker((cellRef, displayVal) => {
+                    const token = `@${cellRef}{${displayVal}}`;
+                    const curText = (block as any).text || (block as any).content || '';
+                    if (block.type === 'heading' || block.type === 'paragraph') {
+                      onUpdate({ text: curText ? `${curText} ${token}` : token } as any);
+                    } else {
+                      onUpdate({ content: curText ? `${curText} ${token}` : token } as any);
+                    }
+                  }, block.type === 'heading' ? (block as any).text : `${String(block.type).toUpperCase()} Block`);
+                } else {
+                  onOpenSpreadsheet?.();
+                }
+              }}
+              title="Link a cell from the attached spreadsheet (e.g. @A1)"
+              className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 flex items-center gap-1 transition-colors border border-emerald-300/80 shadow-2xs"
+            >
+              <Table2 className="w-3 h-3 text-emerald-600" />
+              <span>Link Cell</span>
             </button>
 
             <div className="h-3.5 w-px bg-slate-200 dark:bg-zinc-700 mx-0.5" />
@@ -966,36 +1029,52 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
 
       {/* Block Content Editor */}
       <div className="w-full">
-        {block.type === 'heading' && (
-          <HeadingBlockEditor
-            block={block as SecHeadingBlock}
-            onUpdate={(u) => onUpdate(u)}
-          />
-        )}
+            {block.type === 'heading' && (
+              <HeadingBlockEditor
+                block={block as SecHeadingBlock}
+                onUpdate={(u) => onUpdate(u)}
+                attachedSpreadsheet={safeSpreadsheet}
+                onOpenSpreadsheet={onOpenSpreadsheet}
+                onOpenCellPicker={onOpenCellPicker}
+                searchQuery={searchQuery}
+              />
+            )}
 
-        {block.type === 'paragraph' && (
-          <ParagraphBlockEditor
-            block={block as SecParagraphBlock}
-            onUpdate={(u) => onUpdate(u)}
-          />
-        )}
+            {block.type === 'paragraph' && (
+              <ParagraphBlockEditor
+                block={block as SecParagraphBlock}
+                onUpdate={(u) => onUpdate(u)}
+                attachedSpreadsheet={safeSpreadsheet}
+                onOpenSpreadsheet={onOpenSpreadsheet}
+                onOpenCellPicker={onOpenCellPicker}
+                searchQuery={searchQuery}
+              />
+            )}
 
-        {block.type === 'financial_table' && (
-          <FinancialTableBlockEditor
-            block={block as SecFinancialTableBlock}
-            onUpdate={onUpdate}
-            isSelected={isHighlighted}
-            tableTemplates={tableTemplates}
-            tableCellDiffs={tableCellDiffs}
-          />
-        )}
+            {block.type === 'financial_table' && (
+              <FinancialTableBlockEditor
+                block={block as SecFinancialTableBlock}
+                onUpdate={onUpdate}
+                isSelected={isHighlighted}
+                tableTemplates={tableTemplates}
+                tableCellDiffs={tableCellDiffs}
+                attachedSpreadsheet={safeSpreadsheet}
+                onOpenSpreadsheet={onOpenSpreadsheet}
+                onOpenCellPicker={onOpenCellPicker}
+                searchQuery={searchQuery}
+              />
+            )}
 
-        {block.type === 'callout' && (
-          <CalloutBlockEditor
-            block={block as SecCalloutBlock}
-            onUpdate={onUpdate}
-          />
-        )}
+            {block.type === 'callout' && (
+              <CalloutBlockEditor
+                block={block as SecCalloutBlock}
+                onUpdate={(u) => onUpdate(u)}
+                attachedSpreadsheet={safeSpreadsheet}
+                onOpenSpreadsheet={onOpenSpreadsheet}
+                onOpenCellPicker={onOpenCellPicker}
+                searchQuery={searchQuery}
+              />
+            )}
 
         {block.type === 'signature' && (
           <SignatureBlockEditor
@@ -1041,7 +1120,11 @@ export const BlockItem = React.memo(BlockItemComponent, (prev, next) => {
     prev.viewMode === next.viewMode &&
     prev.globalSpacing === next.globalSpacing &&
     prev.index === next.index &&
-    prev.totalBlocks === next.totalBlocks
+    prev.totalBlocks === next.totalBlocks &&
+    prev.attachedSpreadsheet === next.attachedSpreadsheet &&
+    prev.searchQuery === next.searchQuery &&
+    prev.isActiveSearchMatch === next.isActiveSearchMatch &&
+    prev.isSearchMatch === next.isSearchMatch
   );
 });
 
@@ -1051,14 +1134,54 @@ export const BlockItem = React.memo(BlockItemComponent, (prev, next) => {
 const HeadingBlockEditor: React.FC<{
   block: SecHeadingBlock;
   onUpdate: (u: Partial<SecHeadingBlock>) => void;
-}> = ({ block, onUpdate }) => {
+  attachedSpreadsheet?: AttachedSpreadsheet;
+  onOpenSpreadsheet?: () => void;
+  onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
+  searchQuery?: string;
+}> = ({ block, onUpdate, attachedSpreadsheet, onOpenSpreadsheet, onOpenCellPicker, searchQuery }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [localText, setLocalText] = useState(block.text);
+  const [isFocused, setIsFocused] = useState(false);
   const debounceRef = useRef<any>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     setLocalText(block.text);
   }, [block.text]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, [contextMenu]);
+
+  const handleInsertSpreadsheetCell = () => {
+    if (!onOpenCellPicker) {
+      onOpenSpreadsheet?.();
+      return;
+    }
+    const el = textareaRef.current;
+    const start = el ? el.selectionStart : localText.length;
+    const end = el ? el.selectionEnd : localText.length;
+
+    onOpenCellPicker((cellRef, displayVal) => {
+      const token = `@${cellRef}{${displayVal}}`;
+      const before = localText.substring(0, start);
+      const after = localText.substring(end);
+      const nextText = `${before}${token}${after}`;
+      setLocalText(nextText);
+      onUpdate({ text: nextText });
+
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const nextPos = start + token.length;
+          textareaRef.current.setSelectionRange(nextPos, nextPos);
+        }
+      }, 50);
+    }, block.text || 'Heading Block');
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -1086,28 +1209,107 @@ const HeadingBlockEditor: React.FC<{
   const defaultFontSize =
     block.level === 1 ? 20 : block.level === 2 ? 16 : block.level === 3 ? 14.5 : 13.5;
   const effectiveFontSize = block.fontSize || defaultFontSize;
+  const hasVariables = /@[A-Za-z]{1,3}\d{1,4}/.test(localText);
 
   return (
     <div className="group/head relative m-0 p-0">
-      <textarea
-        ref={textareaRef}
-        rows={1}
-        value={localText}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        placeholder="Section Title..."
-        style={{
-          color: block.color || '#0E2841',
-          fontFamily: block.fontFamily || 'Calibri, "Segoe UI", Arial, sans-serif',
-          fontSize: `${effectiveFontSize}px`,
-          textAlign: block.alignment || 'left',
-          textDecoration: block.underline ? 'underline' : 'none',
-          fontStyle: block.italic ? 'italic' : 'normal',
-          fontWeight: block.bold !== false ? 'bold' : 'normal',
-          lineHeight: block.lineSpacing ? `${block.lineSpacing}` : '1.2'
-        }}
-        className="w-full bg-transparent border-none focus:outline-none focus:bg-blue-50/20 dark:focus:bg-blue-950/20 rounded px-1 py-0 transition-colors resize-none overflow-hidden m-0 p-0"
-      />
+      <div className="relative">
+        {(hasVariables || (searchQuery && searchQuery.trim())) && !isFocused ? (
+          <div
+            onClick={() => {
+              setIsFocused(true);
+              setTimeout(() => {
+                textareaRef.current?.focus();
+              }, 20);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY });
+            }}
+            style={{
+              color: block.color || '#0E2841',
+              fontFamily: block.fontFamily || 'Calibri, "Segoe UI", Arial, sans-serif',
+              fontSize: `${effectiveFontSize}px`,
+              textAlign: block.alignment || 'left',
+              textDecoration: block.underline ? 'underline' : 'none',
+              fontStyle: block.italic ? 'italic' : 'normal',
+              fontWeight: block.bold !== false ? 'bold' : 'normal',
+              lineHeight: block.lineSpacing ? `${block.lineSpacing}` : '1.2'
+            }}
+            className="w-full min-h-[24px] cursor-text rounded px-1 py-0 hover:bg-slate-50/50 dark:hover:bg-zinc-800/30 transition-colors m-0"
+            title="Click to edit heading text"
+          >
+            <DocumentVariableRenderer
+              text={localText}
+              spreadsheet={attachedSpreadsheet}
+              highlightQuery={searchQuery}
+              onInspectCell={onOpenSpreadsheet}
+            />
+          </div>
+        ) : (
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            value={localText}
+            onChange={handleChange}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => {
+              setIsFocused(false);
+              handleBlur();
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY });
+            }}
+            placeholder="Section Title..."
+            style={{
+              color: block.color || '#0E2841',
+              fontFamily: block.fontFamily || 'Calibri, "Segoe UI", Arial, sans-serif',
+              fontSize: `${effectiveFontSize}px`,
+              textAlign: block.alignment || 'left',
+              textDecoration: block.underline ? 'underline' : 'none',
+              fontStyle: block.italic ? 'italic' : 'normal',
+              fontWeight: block.bold !== false ? 'bold' : 'normal',
+              lineHeight: block.lineSpacing ? `${block.lineSpacing}` : '1.2'
+            }}
+            className="w-full bg-transparent border-none focus:outline-none focus:bg-blue-50/20 dark:focus:bg-blue-950/20 rounded px-1 py-0 transition-colors resize-none overflow-hidden m-0 p-0"
+          />
+        )}
+
+        {/* Right-click Floating Context Menu */}
+        {contextMenu && (
+          <div
+            className="fixed z-[9999] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 px-1 min-w-[210px] text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                handleInsertSpreadsheetCell();
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-emerald-50 hover:text-emerald-800 dark:hover:bg-emerald-950/50 text-left font-medium text-slate-800 dark:text-zinc-200 transition-colors"
+            >
+              <Table2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Link Cell from Spreadsheet...</span>
+            </button>
+            {onOpenSpreadsheet && (
+              <button
+                type="button"
+                onClick={() => {
+                  setContextMenu(null);
+                  onOpenSpreadsheet();
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-600 dark:text-zinc-300 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4 text-slate-400 shrink-0" />
+                <span>Open Spreadsheet Editor</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -1118,14 +1320,54 @@ const HeadingBlockEditor: React.FC<{
 const ParagraphBlockEditor: React.FC<{
   block: SecParagraphBlock;
   onUpdate: (u: Partial<SecParagraphBlock>) => void;
-}> = ({ block, onUpdate }) => {
+  attachedSpreadsheet?: AttachedSpreadsheet;
+  onOpenSpreadsheet?: () => void;
+  onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
+  searchQuery?: string;
+}> = ({ block, onUpdate, attachedSpreadsheet, onOpenSpreadsheet, onOpenCellPicker, searchQuery }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [localText, setLocalText] = useState(block.text);
+  const [isFocused, setIsFocused] = useState(false);
   const debounceRef = useRef<any>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     setLocalText(block.text);
   }, [block.text]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, [contextMenu]);
+
+  const handleInsertSpreadsheetCell = () => {
+    if (!onOpenCellPicker) {
+      onOpenSpreadsheet?.();
+      return;
+    }
+    const el = textareaRef.current;
+    const start = el ? el.selectionStart : localText.length;
+    const end = el ? el.selectionEnd : localText.length;
+
+    onOpenCellPicker((cellRef, displayVal) => {
+      const token = `@${cellRef}{${displayVal}}`;
+      const before = localText.substring(0, start);
+      const after = localText.substring(end);
+      const nextText = `${before}${token}${after}`;
+      setLocalText(nextText);
+      onUpdate({ text: nextText });
+
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const nextPos = start + token.length;
+          textareaRef.current.setSelectionRange(nextPos, nextPos);
+        }
+      }, 50);
+    }, 'Paragraph Block');
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -1151,33 +1393,125 @@ const ParagraphBlockEditor: React.FC<{
   }, [localText, block.fontSize, block.fontFamily]);
 
   const effectiveFontSize = block.fontSize || 14;
+  const hasVariables = /@[A-Za-z]{1,3}\d{1,4}/.test(localText);
 
   return (
     <div className="relative group/p m-0 p-0">
-      <textarea
-        ref={textareaRef}
-        rows={1}
-        value={localText}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        placeholder="Enter document paragraph text..."
-        style={{
-          color: block.color || (block.bold ? '#0E2841' : '#111827'),
-          fontFamily: block.fontFamily || 'Calibri, "Segoe UI", Arial, sans-serif',
-          fontSize: `${effectiveFontSize}px`,
-          textAlign: block.alignment || 'left',
-          textDecoration: block.underline ? 'underline' : 'none',
-          fontStyle: block.italic ? 'italic' : 'normal',
-          fontWeight: block.bold ? 'bold' : 'normal',
-          lineHeight: block.lineSpacing ? `${block.lineSpacing}` : '1.3'
-        }}
-        className="w-full bg-transparent border-none focus:outline-none focus:bg-blue-50/15 dark:focus:bg-blue-950/20 rounded px-1 py-0 transition-colors resize-none overflow-hidden m-0 p-0"
-      />
+      <div className="relative">
+        {(hasVariables || (searchQuery && searchQuery.trim())) && !isFocused ? (
+          <div
+            onClick={() => {
+              setIsFocused(true);
+              setTimeout(() => {
+                textareaRef.current?.focus();
+              }, 20);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY });
+            }}
+            style={{
+              color: block.color || (block.bold ? '#0E2841' : '#111827'),
+              fontFamily: block.fontFamily || 'Calibri, "Segoe UI", Arial, sans-serif',
+              fontSize: `${effectiveFontSize}px`,
+              textAlign: block.alignment || 'left',
+              textDecoration: block.underline ? 'underline' : 'none',
+              fontStyle: block.italic ? 'italic' : 'normal',
+              fontWeight: block.bold ? 'bold' : 'normal',
+              lineHeight: block.lineSpacing ? `${block.lineSpacing}` : '1.3'
+            }}
+            className="w-full min-h-[24px] cursor-text rounded px-1 py-0 hover:bg-slate-50/50 dark:hover:bg-zinc-800/30 transition-colors m-0"
+            title="Click to edit paragraph text"
+          >
+            <DocumentVariableRenderer
+              text={localText}
+              spreadsheet={attachedSpreadsheet}
+              highlightQuery={searchQuery}
+              onInspectCell={onOpenSpreadsheet}
+            />
+          </div>
+        ) : (
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            value={localText}
+            onChange={handleChange}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => {
+              setIsFocused(false);
+              handleBlur();
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY });
+            }}
+            placeholder="Enter document paragraph text... (Right-click or use toolbar to link spreadsheet cell)"
+            style={{
+              color: block.color || (block.bold ? '#0E2841' : '#111827'),
+              fontFamily: block.fontFamily || 'Calibri, "Segoe UI", Arial, sans-serif',
+              fontSize: `${effectiveFontSize}px`,
+              textAlign: block.alignment || 'left',
+              textDecoration: block.underline ? 'underline' : 'none',
+              fontStyle: block.italic ? 'italic' : 'normal',
+              fontWeight: block.bold ? 'bold' : 'normal',
+              lineHeight: block.lineSpacing ? `${block.lineSpacing}` : '1.3'
+            }}
+            className="w-full bg-transparent border-none focus:outline-none focus:bg-blue-50/15 dark:focus:bg-blue-950/20 rounded px-1 py-0 transition-colors resize-none overflow-hidden m-0 p-0"
+          />
+        )}
+
+        {/* Floating Quick Action Button on Hover */}
+        <div className="absolute top-0 right-1 opacity-0 group-hover/p:opacity-100 transition-opacity">
+          <button
+            type="button"
+            onClick={handleInsertSpreadsheetCell}
+            title="Right-click anywhere in text or click here to link a cell from the attached spreadsheet"
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 bg-emerald-50/90 hover:bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-950/80 dark:hover:bg-emerald-900/80 rounded border border-emerald-300/80 shadow-2xs transition-all"
+          >
+            <Table2 className="w-3 h-3 text-emerald-600" />
+            <span>Link Cell</span>
+          </button>
+        </div>
+
+        {/* Right-click Floating Context Menu */}
+        {contextMenu && (
+          <div
+            className="fixed z-[9999] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 px-1 min-w-[210px] text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                handleInsertSpreadsheetCell();
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-emerald-50 hover:text-emerald-800 dark:hover:bg-emerald-950/50 text-left font-medium text-slate-800 dark:text-zinc-200 transition-colors"
+            >
+              <Table2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Link Cell from Spreadsheet...</span>
+            </button>
+            {onOpenSpreadsheet && (
+              <button
+                type="button"
+                onClick={() => {
+                  setContextMenu(null);
+                  onOpenSpreadsheet();
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-600 dark:text-zinc-300 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4 text-slate-400 shrink-0" />
+                <span>Open Spreadsheet Editor</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
-/* TableCellInput: renders cell input with local state for instant 0ms typing feedback and debounced commit */
+/* TableCellInput: renders cell input with local state for instant 0ms typing feedback, debounced commit, and spreadsheet linking */
 const TableCellInput: React.FC<{
   initialValue: string;
   onCommit: (val: string) => void;
@@ -1186,13 +1520,44 @@ const TableCellInput: React.FC<{
   className?: string;
   title?: string;
   onFocus?: () => void;
-}> = ({ initialValue, onCommit, placeholder, style, className, title, onFocus }) => {
+  attachedSpreadsheet?: AttachedSpreadsheet;
+  onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
+  onOpenSpreadsheet?: () => void;
+  rowIdx?: number;
+  colIdx?: number;
+  tableName?: string;
+  searchQuery?: string;
+}> = ({
+  initialValue,
+  onCommit,
+  placeholder,
+  style,
+  className,
+  title,
+  onFocus,
+  attachedSpreadsheet,
+  onOpenCellPicker,
+  onOpenSpreadsheet,
+  rowIdx,
+  colIdx,
+  tableName,
+  searchQuery
+}) => {
   const [val, setVal] = useState(initialValue);
+  const [isFocused, setIsFocused] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const debounceRef = useRef<any>(null);
 
   useEffect(() => {
     setVal(initialValue);
   }, [initialValue]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, [contextMenu]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const next = e.target.value;
@@ -1204,6 +1569,7 @@ const TableCellInput: React.FC<{
   };
 
   const handleBlur = () => {
+    setIsFocused(false);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (val !== initialValue) {
       onCommit(val);
@@ -1219,19 +1585,169 @@ const TableCellInput: React.FC<{
     }
   };
 
+  const isVariable = hasDocumentVariables(val);
+  const displayValue = !isFocused && isVariable && attachedSpreadsheet
+    ? interpolateVariables(val, attachedSpreadsheet)
+    : val;
+
+  const handleLinkCell = () => {
+    if (!onOpenCellPicker) {
+      onOpenSpreadsheet?.();
+      return;
+    }
+    const cellLocation = `${tableName ? `"${tableName}" ` : ''}Cell R${(rowIdx ?? 0) + 1}:C${(colIdx ?? 0) + 1}`;
+    onOpenCellPicker((cellRef, displayVal) => {
+      const token = cellRef.startsWith('@')
+        ? cellRef
+        : `@${cellRef}${displayVal ? `{${displayVal}}` : ''}`;
+      setVal(token);
+      onCommit(token);
+      toast.success(`Linked ${token} to ${cellLocation}!`);
+    }, cellLocation);
+  };
+
+  const handleUnlinkCell = () => {
+    const staticVal = attachedSpreadsheet ? interpolateVariables(val, attachedSpreadsheet) : val;
+    setVal(staticVal);
+    onCommit(staticVal);
+    toast.info(`Unlinked formula. Value set to static "${staticVal}".`);
+  };
+
+  // Extract clean cell reference for hover tooltip (e.g. "@'06.30.26 TB'!B8" or "@B8")
+  const cellRefMatch = val.match(/@(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?([A-Za-z]{1,3}\d{1,4})/i);
+  const hoverCellRef = cellRefMatch
+    ? (cellRefMatch[1] || cellRefMatch[2] ? `'${cellRefMatch[1] || cellRefMatch[2]}'!${cellRefMatch[3].toUpperCase()}` : cellRefMatch[3].toUpperCase())
+    : val;
+
+  // Check if cell content matches the active search query
+  const trimmedQ = searchQuery?.trim().toLowerCase();
+  const isCellSearchMatch = Boolean(
+    trimmedQ &&
+    displayValue &&
+    (
+      displayValue.toLowerCase().includes(trimmedQ) ||
+      (val && val.toLowerCase().includes(trimmedQ)) ||
+      (
+        trimmedQ.replace(/[$,\s]/g, '').length >= 2 &&
+        displayValue.replace(/[$,\s]/g, '').includes(trimmedQ.replace(/[$,\s]/g, ''))
+      )
+    )
+  );
+
   return (
-    <input
-      type="text"
-      value={val}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      onFocus={onFocus}
-      onKeyDown={handleKeyDown}
-      placeholder={placeholder}
-      style={style}
-      className={className}
-      title={title}
-    />
+    <div className="relative w-full group/cell">
+      <input
+        type="text"
+        value={displayValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        onFocus={() => {
+          setIsFocused(true);
+          onFocus?.();
+        }}
+        onKeyDown={handleKeyDown}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setContextMenu({ x: e.clientX, y: e.clientY });
+        }}
+        placeholder={placeholder}
+        style={style}
+        className={`${className} ${
+          isCellSearchMatch
+            ? 'ring-2 ring-amber-400 bg-amber-100/80 dark:bg-amber-950/70 text-amber-950 dark:text-amber-100 font-bold'
+            : isVariable && !isFocused
+            ? 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200 border-b border-emerald-500/80 font-semibold'
+            : ''
+        }`}
+        title={
+          isVariable
+            ? `Linked Cell: @${hoverCellRef} (Live Value: ${displayValue})\nClick to edit, right-click to unlink/change`
+            : title || 'Right-click to link a spreadsheet cell'
+        }
+      />
+
+      {/* Interactive FX formula badge when linked */}
+      {isVariable && !isFocused && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleLinkCell();
+          }}
+          title={`Linked Cell: @${hoverCellRef}\nClick to change linked spreadsheet cell\nRight-click to unlink`}
+          className="absolute -top-1.5 right-0 text-[8px] font-mono font-bold px-1 py-0 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-950 dark:hover:bg-emerald-900 dark:text-emerald-300 border border-emerald-300/80 shadow-2xs cursor-pointer z-10"
+        >
+          fx
+        </button>
+      )}
+
+      {/* Quick link button on hover or focus if cell is not yet linked */}
+      {!isVariable && isFocused && onOpenCellPicker && (
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            handleLinkCell();
+          }}
+          title="Link cell from spreadsheet"
+          className="absolute -top-2 right-0 text-[8px] font-mono font-bold px-1 rounded bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-800 dark:bg-zinc-800 dark:text-zinc-300 border border-slate-300 dark:border-zinc-700 shadow-2xs cursor-pointer z-10 flex items-center gap-0.5"
+        >
+          <Table2 className="w-2.5 h-2.5 text-emerald-600" />
+          <span>fx</span>
+        </button>
+      )}
+
+      {/* Right-click Floating Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-[9999] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 px-1 min-w-[220px] text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-zinc-800">
+            Table Cell {rowIdx !== undefined && colIdx !== undefined ? `(Row ${rowIdx + 1}, Col ${colIdx + 1})` : ''}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setContextMenu(null);
+              handleLinkCell();
+            }}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-emerald-50 hover:text-emerald-800 dark:hover:bg-emerald-950/50 text-left font-medium text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer"
+          >
+            <Table2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{isVariable ? 'Change Linked Cell...' : 'Link Cell from Spreadsheet...'}</span>
+          </button>
+          {isVariable && (
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                handleUnlinkCell();
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-amber-50 hover:text-amber-800 dark:hover:bg-amber-950/50 text-left text-slate-700 dark:text-zinc-300 transition-colors cursor-pointer"
+            >
+              <Unlink className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Unlink (Keep as static text)</span>
+            </button>
+          )}
+          {onOpenSpreadsheet && (
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                onOpenSpreadsheet();
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-600 dark:text-zinc-300 transition-colors cursor-pointer"
+            >
+              <ExternalLink className="w-4 h-4 text-slate-400 shrink-0" />
+              <span>Open Spreadsheet Manager</span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -1244,12 +1760,20 @@ const FinancialTableBlockEditor: React.FC<{
   isSelected?: boolean;
   tableTemplates?: FinancialTableTemplate[];
   tableCellDiffs?: SecTableCellDiff[];
+  attachedSpreadsheet?: AttachedSpreadsheet;
+  onOpenSpreadsheet?: () => void;
+  onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
+  searchQuery?: string;
 }> = ({
   block,
   onUpdate,
   isSelected = false,
   tableTemplates = FINANCIAL_TABLE_TEMPLATES,
-  tableCellDiffs = []
+  tableCellDiffs = [],
+  attachedSpreadsheet,
+  onOpenSpreadsheet,
+  onOpenCellPicker,
+  searchQuery
 }) => {
   const updateTemplateMutation = useUpdateFinancialTableTemplate();
   const [draggedRowIdx, setDraggedRowIdx] = useState<number | null>(null);
@@ -1366,7 +1890,7 @@ const FinancialTableBlockEditor: React.FC<{
    * regenerated so a template applied to several tables does not collide, and the
    * block's own id/type/section are left untouched so the block stays in place.
    */
-  const applyTableTemplate = (templateId: string) => {
+  const applyTableTemplate = React.useCallback((templateId: string) => {
     const template = tableTemplates.find((t) => t.id === templateId);
     if (!template) return;
 
@@ -1390,7 +1914,7 @@ const FinancialTableBlockEditor: React.FC<{
       })),
       footnotes: tpl.footnotes ? [...tpl.footnotes] : undefined
     });
-  };
+  }, [tableTemplates, block.title, block.headers, block.columnAlignments, onUpdate]);
 
   const reorderRow = (fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex || toIndex < 0 || toIndex >= block.rows.length) return;
@@ -1901,6 +2425,39 @@ const FinancialTableBlockEditor: React.FC<{
               </button>
             )}
           </div>
+
+          {/* Link Spreadsheet Cell to active focused cell */}
+          <button
+            type="button"
+            disabled={activeCell === null}
+            onClick={() => {
+              if (activeCell !== null && onOpenCellPicker) {
+                const cellLabel = `${block.title || 'Table'} Cell R${activeCell.rowIdx + 1}C${activeCell.colIdx + 1}`;
+                onOpenCellPicker((cellRef, displayVal) => {
+                  const token = cellRef.startsWith('@')
+                    ? cellRef
+                    : `@${cellRef}${displayVal ? `{${displayVal}}` : ''}`;
+                  handleCellChange(activeCell.rowIdx, activeCell.colIdx, token);
+                  toast.success(`Linked ${token} to ${cellLabel}!`);
+                }, cellLabel);
+              } else if (onOpenSpreadsheet) {
+                onOpenSpreadsheet();
+              }
+            }}
+            title={
+              activeCell === null
+                ? 'Click any table cell to link a spreadsheet cell value'
+                : `Link spreadsheet cell into Row ${activeCell.rowIdx + 1}, Col ${activeCell.colIdx + 1}`
+            }
+            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border transition-all cursor-pointer ${
+              activeCell !== null
+                ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 shadow-2xs'
+                : 'opacity-40 cursor-not-allowed border-slate-200 dark:border-zinc-700 text-slate-400'
+            }`}
+          >
+            <Table2 className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{activeCell !== null ? `Link R${activeCell.rowIdx + 1}C${activeCell.colIdx + 1}` : 'Link Cell'}</span>
+          </button>
 
           {/* Column alignment for the column the user is in. */}
           <div
@@ -2490,6 +3047,13 @@ const FinancialTableBlockEditor: React.FC<{
                             setActiveColIdx(colIdx);
                             setActiveCell({ rowIdx, colIdx });
                           }}
+                          attachedSpreadsheet={attachedSpreadsheet}
+                          onOpenCellPicker={onOpenCellPicker}
+                          onOpenSpreadsheet={onOpenSpreadsheet}
+                          rowIdx={rowIdx}
+                          colIdx={colIdx}
+                          tableName={block.title}
+                          searchQuery={searchQuery}
                           // No placeholder: a dash here read as real content in empty cells.
                           style={{ textAlign: align }}
                           className={`w-full bg-transparent hover:bg-white/80 dark:hover:bg-zinc-800/80 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 ${align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"} ${
@@ -2537,31 +3101,155 @@ const FinancialTableBlockEditor: React.FC<{
 const CalloutBlockEditor: React.FC<{
   block: SecCalloutBlock;
   onUpdate: (u: Partial<SecCalloutBlock>) => void;
-}> = ({ block, onUpdate }) => {
+  attachedSpreadsheet?: AttachedSpreadsheet;
+  onOpenSpreadsheet?: () => void;
+  onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
+  searchQuery?: string;
+}> = ({ block, onUpdate, attachedSpreadsheet, onOpenSpreadsheet, onOpenCellPicker, searchQuery }) => {
   const isUnaudited = block.variant === 'unaudited' || block.variant === 'warning';
   const borderColor = isUnaudited ? 'border-l-amber-500' : 'border-l-blue-600';
   const iconColor = isUnaudited ? 'text-amber-600' : 'text-blue-600';
+  const hasVariables = hasDocumentVariables((block.title || '') + (block.content || ''));
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isContentFocused, setIsContentFocused] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, [contextMenu]);
+
+  const handleInsertSpreadsheetCell = () => {
+    if (!onOpenCellPicker) {
+      onOpenSpreadsheet?.();
+      return;
+    }
+    const el = textareaRef.current;
+    const start = el ? el.selectionStart : (block.content || '').length;
+    const end = el ? el.selectionEnd : (block.content || '').length;
+
+    onOpenCellPicker((cellRef, displayVal) => {
+      const token = cellRef.startsWith('@')
+        ? cellRef
+        : `@${cellRef}${displayVal ? `{${displayVal}}` : ''}`;
+      const curContent = block.content || '';
+      const before = curContent.substring(0, start);
+      const after = curContent.substring(end);
+      const nextContent = `${before}${token}${after}`;
+      onUpdate({ content: nextContent });
+
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const nextPos = start + token.length;
+          textareaRef.current.setSelectionRange(nextPos, nextPos);
+        }
+      }, 50);
+    }, block.title || 'Callout Notice');
+  };
 
   return (
-    <div className={`my-3 p-3.5 rounded border border-slate-300 dark:border-zinc-700 border-l-4 ${borderColor} bg-slate-50/90 dark:bg-zinc-900/60 space-y-1.5`}>
-      <div className="flex items-center gap-2">
-        <AlertCircle className={`w-4 h-4 ${iconColor} shrink-0`} />
-        <input
-          type="text"
-          value={block.title || ''}
-          onChange={(e) => onUpdate({ title: e.target.value })}
-          placeholder="Notice / Disclosure Title..."
-          className="font-bold text-xs text-slate-900 dark:text-zinc-100 bg-transparent border-none focus:outline-none w-full"
-        />
+    <div className={`my-3 p-3.5 rounded border border-slate-300 dark:border-zinc-700 border-l-4 ${borderColor} bg-slate-50/90 dark:bg-zinc-900/60 space-y-1.5 relative group/callout`}>
+      <div className="flex items-center gap-2 justify-between">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <AlertCircle className={`w-4 h-4 ${iconColor} shrink-0`} />
+          <input
+            type="text"
+            value={block.title || ''}
+            onChange={(e) => onUpdate({ title: e.target.value })}
+            placeholder="Notice / Disclosure Title..."
+            className="font-bold text-xs text-slate-900 dark:text-zinc-100 bg-transparent border-none focus:outline-none w-full"
+          />
+        </div>
+
+        {/* Link Cell Action button */}
+        <button
+          type="button"
+          onClick={handleInsertSpreadsheetCell}
+          title="Right-click in content or click here to link a cell from attached spreadsheet"
+          className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 bg-emerald-50/90 hover:bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-950/80 dark:hover:bg-emerald-900/80 rounded border border-emerald-300/80 shadow-2xs transition-all opacity-0 group-hover/callout:opacity-100"
+        >
+          <Table2 className="w-3 h-3 text-emerald-600" />
+          <span>Link Cell</span>
+        </button>
       </div>
 
-      <textarea
-        value={block.content}
-        onChange={(e) => onUpdate({ content: e.target.value })}
-        rows={2}
-        placeholder="Enter auditor notice or disclosure details..."
-        className="w-full text-xs bg-transparent border-none focus:outline-none resize-none italic text-slate-800 dark:text-zinc-300 leading-relaxed"
-      />
+      <div className="relative">
+        {(hasVariables || (searchQuery && searchQuery.trim())) && !isContentFocused ? (
+          <div
+            onClick={() => {
+              setIsContentFocused(true);
+              setTimeout(() => {
+                textareaRef.current?.focus();
+              }, 20);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY });
+            }}
+            className="w-full text-xs min-h-[36px] cursor-text italic text-slate-800 dark:text-zinc-300 leading-relaxed hover:bg-slate-100/50 dark:hover:bg-zinc-800/40 rounded p-1 transition-colors"
+            title="Click to edit callout text"
+          >
+            <DocumentVariableRenderer
+              text={block.content}
+              spreadsheet={attachedSpreadsheet}
+              highlightQuery={searchQuery}
+              onInspectCell={onOpenSpreadsheet}
+            />
+          </div>
+        ) : (
+          <textarea
+            ref={textareaRef}
+            value={block.content}
+            onChange={(e) => onUpdate({ content: e.target.value })}
+            onFocus={() => setIsContentFocused(true)}
+            onBlur={() => setIsContentFocused(false)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY });
+            }}
+            rows={2}
+            placeholder="Enter auditor notice or disclosure details... (Right-click or use toolbar to link cell)"
+            className="w-full text-xs bg-transparent border-none focus:outline-none resize-none italic text-slate-800 dark:text-zinc-300 leading-relaxed"
+          />
+        )}
+
+        {/* Right-click Floating Context Menu */}
+        {contextMenu && (
+          <div
+            className="fixed z-[9999] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 px-1 min-w-[210px] text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                handleInsertSpreadsheetCell();
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-emerald-50 hover:text-emerald-800 dark:hover:bg-emerald-950/50 text-left font-medium text-slate-800 dark:text-zinc-200 transition-colors"
+            >
+              <Table2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Link Cell from Spreadsheet...</span>
+            </button>
+            {onOpenSpreadsheet && (
+              <button
+                type="button"
+                onClick={() => {
+                  setContextMenu(null);
+                  onOpenSpreadsheet();
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-600 dark:text-zinc-300 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4 text-slate-400 shrink-0" />
+                <span>Open Spreadsheet Editor</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

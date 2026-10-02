@@ -7,9 +7,12 @@ import type {
   SecTableCellDiff,
   SecChangeCategory,
   SecChangeTag,
-  SecDocumentSummary
+  SecDocumentSummary,
+  AttachedSpreadsheet
 } from '../types/secFiling';
 import { INITIAL_SEC_FILING_DOC, INITIAL_PROPOSALS, INITIAL_VERSION_HISTORY } from '../data/initialSecFilingData';
+import { DEFAULT_TRIAL_BALANCE_SHEET } from '../data/defaultTrialBalanceSheet';
+import { formatCellValue } from '../utils/documentVariables';
 import {
   generateOnboardingChecklistDoc,
   generateOffboardingChecklistDoc,
@@ -19,6 +22,7 @@ import {
   generate8KDoc,
   generateProjectProposalDoc
 } from '../data/secDocumentTemplates';
+import { apiClient } from './apiClient';
 
 
 export function compactFinancialTableBlock(table: SecBlock): SecBlock {
@@ -259,6 +263,7 @@ const STORAGE_KEYS = {
   VERSION_HISTORY: 'sec_filing_versions_v4_compact',
   DOCUMENTS_LIST: 'sec_filing_documents_list_v2',
   ACTIVE_DOC_ID: 'sec_filing_active_doc_id',
+  SPREADSHEETS: 'sec_filing_spreadsheets_registry_v2',
 };
 
 
@@ -570,6 +575,19 @@ export const secFilingService = {
               return JSON.parse(JSON.stringify(INITIAL_SEC_FILING_DOC));
             }
           }
+          const allSheets = this.getAllSpreadsheets();
+          if (parsed.attachedSpreadsheetId) {
+            const match = allSheets.find((s) => s.id === parsed.attachedSpreadsheetId);
+            parsed.attachedSpreadsheet = match || null;
+          } else {
+            const match = allSheets.find((s) => s.assignedDocIds?.includes(parsed.id));
+            if (match) {
+              parsed.attachedSpreadsheetId = match.id;
+              parsed.attachedSpreadsheet = match;
+            } else {
+              parsed.attachedSpreadsheet = null;
+            }
+          }
           parsed.blocks = sanitizeAndCompactBlocks(parsed.blocks);
           return parsed;
         }
@@ -577,8 +595,17 @@ export const secFilingService = {
         console.error('Failed to parse main document from storage', e);
       }
     }
-    safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(INITIAL_SEC_FILING_DOC));
-    return JSON.parse(JSON.stringify(INITIAL_SEC_FILING_DOC));
+    const defaultDoc = JSON.parse(JSON.stringify(INITIAL_SEC_FILING_DOC));
+    const allSheets = this.getAllSpreadsheets();
+    const match = allSheets.find((s) => s.assignedDocIds?.includes(defaultDoc.id) || s.id === defaultDoc.attachedSpreadsheetId);
+    if (match) {
+      defaultDoc.attachedSpreadsheetId = match.id;
+      defaultDoc.attachedSpreadsheet = match;
+    } else {
+      defaultDoc.attachedSpreadsheet = null;
+    }
+    safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(defaultDoc));
+    return defaultDoc;
   },
 
   saveMainDocument(doc: SecFilingDocument, immediate = false): boolean {
@@ -745,7 +772,9 @@ export const secFilingService = {
                     });
                   }
                 }
-              } catch (e) {}
+              } catch {
+                // Ignore parse error on individual item
+              }
             }
           }
         }
@@ -801,7 +830,9 @@ export const secFilingService = {
         if (parsed && Array.isArray(parsed.blocks)) {
           return parsed.blocks.slice(0, 15);
         }
-      } catch (e) {}
+      } catch {
+        // Fallback to defaults
+      }
     }
     if (id === 'sec-doc-zenatech-10q-q2') {
       return generate10QDoc('ZenaTech, Inc. Form 10-Q (Q2 2026 Quarterly Report)').blocks.slice(0, 15);
@@ -830,27 +861,466 @@ export const secFilingService = {
     }
   },
 
+  getAllDocuments(): SecDocumentSummary[] {
+    return this.getDocumentsList();
+  },
+
+  setActiveDocumentId(id: string): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_DOC_ID, id);
+    }
+  },
+
   getDocumentContent(id: string): SecFilingDocument {
     if (id === this.getActiveDocumentId() || id === 'sec-doc-zenatech-2026-q2') {
       return this.getMainDocument();
     }
     const customKey = `sec_doc_content_${id}`;
     const customSaved = typeof localStorage !== 'undefined' ? localStorage.getItem(customKey) : null;
+    let doc: SecFilingDocument | null = null;
     if (customSaved) {
       try {
         const parsed = JSON.parse(customSaved);
         if (parsed && Array.isArray(parsed.blocks)) {
+          doc = parsed;
+        }
+      } catch {
+        // Ignore JSON parse errors from corrupted storage keys
+      }
+    }
+    if (!doc) {
+      if (id === 'sec-doc-zenatech-v24-sarah-jenkins') doc = generateSarahJenkinsMergedDoc();
+      else if (id === 'sec-doc-zenatech-10q-q2') doc = generate10QDoc('ZenaTech, Inc. Form 10-Q');
+      else if (id === 'sec-doc-zenatech-2025-10k') doc = generate10KDoc('ZenaTech, Inc. Form 10-K');
+      else if (id === 'sec-doc-zenatech-8k-acq') doc = generate8KDoc('ZenaTech, Inc. Form 8-K');
+      else if (id === 'doc-onboarding-1') doc = generateOnboardingChecklistDoc('Onboarding');
+      else if (id === 'doc-offboarding-2') doc = generateOffboardingChecklistDoc('Offboarding Checklist');
+      else doc = generateBlankDocument('Untitled Document');
+    }
+    // Resolve attached spreadsheet from central Hub registry
+    const allSheets = this.getAllSpreadsheets();
+    if (doc.attachedSpreadsheetId) {
+      const match = allSheets.find((s) => s.id === doc.attachedSpreadsheetId);
+      if (match) {
+        doc.attachedSpreadsheet = match;
+      }
+    } else {
+      // Check if any sheet in Hub is explicitly assigned to this document ID
+      const match = allSheets.find((s) => s.assignedDocIds?.includes(doc.id));
+      if (match) {
+        doc.attachedSpreadsheetId = match.id;
+        doc.attachedSpreadsheet = match;
+      } else {
+        doc.attachedSpreadsheet = null;
+      }
+    }
+    return doc;
+  },
+
+  getAllSpreadsheets(): AttachedSpreadsheet[] {
+    if (typeof localStorage === 'undefined') {
+      return [{
+        ...DEFAULT_TRIAL_BALANCE_SHEET,
+        id: 'sheet-tb-master-2026',
+        fileName: 'TB_Consolidated_Master_Q2_2026_FINAL.xlsx',
+        assignedDocIds: ['sec-doc-zenatech-2026-q2', 'sec-doc-zenatech-10q-q2'],
+        description: 'Master Consolidated Trial Balance for Q2 2026 reporting.'
+      }];
+    }
+
+    const saved = localStorage.getItem(STORAGE_KEYS.SPREADSHEETS);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
         }
-      } catch (e) {}
+      } catch {
+        // Fallback
+      }
     }
-    if (id === 'sec-doc-zenatech-v24-sarah-jenkins') return generateSarahJenkinsMergedDoc();
-    if (id === 'sec-doc-zenatech-10q-q2') return generate10QDoc('ZenaTech, Inc. Form 10-Q');
-    if (id === 'sec-doc-zenatech-2025-10k') return generate10KDoc('ZenaTech, Inc. Form 10-K');
-    if (id === 'sec-doc-zenatech-8k-acq') return generate8KDoc('ZenaTech, Inc. Form 8-K');
-    if (id === 'doc-onboarding-1') return generateOnboardingChecklistDoc('Onboarding');
-    if (id === 'doc-offboarding-2') return generateOffboardingChecklistDoc('Offboarding Checklist');
-    return generateBlankDocument('Untitled Document');
+
+    const initialList: AttachedSpreadsheet[] = [
+      {
+        ...DEFAULT_TRIAL_BALANCE_SHEET,
+        id: 'sheet-tb-master-2026',
+        fileName: 'TB_Consolidated_Master_Q2_2026_FINAL.xlsx',
+        assignedDocIds: ['sec-doc-zenatech-2026-q2', 'sec-doc-zenatech-10q-q2'],
+        description: 'Master Consolidated Trial Balance for Q2 2026 reporting.'
+      }
+    ];
+
+    try {
+      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(initialList));
+    } catch {
+      // Ignore storage error
+    }
+    return initialList;
+  },
+
+  getSpreadsheetById(id: string): AttachedSpreadsheet | null {
+    const list = this.getAllSpreadsheets();
+    return list.find((s) => s.id === id) || null;
+  },
+
+  saveSpreadsheet(sheet: AttachedSpreadsheet): void {
+    const list = this.getAllSpreadsheets();
+    const existingIdx = list.findIndex((s) => s.id === sheet.id);
+    const updatedSheet: AttachedSpreadsheet = {
+      ...sheet,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (existingIdx >= 0) {
+      list[existingIdx] = updatedSheet;
+    } else {
+      list.unshift(updatedSheet);
+    }
+
+    try {
+      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
+    } catch (e) {
+      console.warn('Could not save spreadsheet registry', e);
+    }
+
+    // Sync to all assigned documents in local storage
+    if (sheet.assignedDocIds && sheet.assignedDocIds.length > 0) {
+      for (const docId of sheet.assignedDocIds) {
+        try {
+          const docKey = `sec_doc_content_${docId}`;
+          const savedDoc = localStorage.getItem(docKey);
+          if (savedDoc) {
+            const parsedDoc = JSON.parse(savedDoc);
+            parsedDoc.attachedSpreadsheet = updatedSheet;
+            parsedDoc.attachedSpreadsheetId = sheet.id;
+            localStorage.setItem(docKey, JSON.stringify(parsedDoc));
+          }
+        } catch {
+          // Ignore
+        }
+      }
+    }
+
+    const mainDoc = this.getMainDocument();
+    if (mainDoc.attachedSpreadsheetId === sheet.id || sheet.assignedDocIds?.includes(mainDoc.id)) {
+      mainDoc.attachedSpreadsheet = updatedSheet;
+      mainDoc.attachedSpreadsheetId = sheet.id;
+      this.saveMainDocument(mainDoc, true);
+    }
+
+    broadcastSync('SPREADSHEET_UPDATED', { sheetId: sheet.id });
+  },
+
+  deleteSpreadsheet(sheetId: string): void {
+    const list = this.getAllSpreadsheets().filter((s) => s.id !== sheetId);
+    try {
+      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
+    } catch (e) {
+      console.warn('Could not update spreadsheet registry', e);
+    }
+
+    // Unassign from all documents
+    const docSummaries = this.getAllDocuments();
+    for (const docSummary of docSummaries) {
+      try {
+        const docKey = `sec_doc_content_${docSummary.id}`;
+        const savedDoc = localStorage.getItem(docKey);
+        if (savedDoc) {
+          const parsedDoc = JSON.parse(savedDoc);
+          if (parsedDoc.attachedSpreadsheetId === sheetId) {
+            parsedDoc.attachedSpreadsheetId = undefined;
+            parsedDoc.attachedSpreadsheet = null;
+            localStorage.setItem(docKey, JSON.stringify(parsedDoc));
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    const mainDoc = this.getMainDocument();
+    if (mainDoc.attachedSpreadsheetId === sheetId) {
+      mainDoc.attachedSpreadsheetId = undefined;
+      mainDoc.attachedSpreadsheet = null;
+      this.saveMainDocument(mainDoc, true);
+    }
+
+    broadcastSync('SPREADSHEET_DELETED', { sheetId });
+  },
+
+  assignSpreadsheetToDocuments(sheetId: string, targetDocIds: string[]): void {
+    const list = this.getAllSpreadsheets();
+    const sheetIdx = list.findIndex((s) => s.id === sheetId);
+    if (sheetIdx < 0) return;
+
+    const sheet = list[sheetIdx];
+    sheet.assignedDocIds = targetDocIds;
+    sheet.updatedAt = new Date().toISOString();
+    list[sheetIdx] = sheet;
+
+    try {
+      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
+    } catch (e) {
+      console.warn('Could not save spreadsheet registry', e);
+    }
+
+    // Update all documents
+    const allDocs = this.getAllDocuments();
+    for (const docSummary of allDocs) {
+      try {
+        const docKey = `sec_doc_content_${docSummary.id}`;
+        const savedDoc = localStorage.getItem(docKey);
+        if (savedDoc) {
+          const parsedDoc = JSON.parse(savedDoc);
+          if (targetDocIds.includes(docSummary.id)) {
+            parsedDoc.attachedSpreadsheetId = sheetId;
+            parsedDoc.attachedSpreadsheet = sheet;
+          } else if (parsedDoc.attachedSpreadsheetId === sheetId) {
+            parsedDoc.attachedSpreadsheetId = undefined;
+            parsedDoc.attachedSpreadsheet = null;
+          }
+          localStorage.setItem(docKey, JSON.stringify(parsedDoc));
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    const mainDoc = this.getMainDocument();
+    if (targetDocIds.includes(mainDoc.id)) {
+      mainDoc.attachedSpreadsheetId = sheetId;
+      mainDoc.attachedSpreadsheet = sheet;
+      this.saveMainDocument(mainDoc, true);
+    } else if (mainDoc.attachedSpreadsheetId === sheetId) {
+      mainDoc.attachedSpreadsheetId = undefined;
+      mainDoc.attachedSpreadsheet = null;
+      this.saveMainDocument(mainDoc, true);
+    }
+
+    broadcastSync('SPREADSHEET_ASSIGNMENT_CHANGED', { sheetId, targetDocIds });
+  },
+
+  assignSpreadsheetToDocument(docId: string, sheetId: string | null): void {
+    const allSheets = this.getAllSpreadsheets();
+    const updatedSheets = allSheets.map((s) => {
+      const assigned = new Set(s.assignedDocIds || []);
+      if (s.id === sheetId) {
+        assigned.add(docId);
+      } else {
+        assigned.delete(docId);
+      }
+      return { ...s, assignedDocIds: Array.from(assigned) };
+    });
+
+    try {
+      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(updatedSheets));
+    } catch (e) {
+      console.warn('Could not save spreadsheet registry', e);
+    }
+
+    const docKey = `sec_doc_content_${docId}`;
+    const savedDoc = typeof localStorage !== 'undefined' ? localStorage.getItem(docKey) : null;
+    if (savedDoc) {
+      try {
+        const parsedDoc = JSON.parse(savedDoc);
+        if (sheetId) {
+          const assignedSheet = updatedSheets.find((s) => s.id === sheetId);
+          parsedDoc.attachedSpreadsheetId = sheetId;
+          parsedDoc.attachedSpreadsheet = assignedSheet || null;
+        } else {
+          parsedDoc.attachedSpreadsheetId = undefined;
+          parsedDoc.attachedSpreadsheet = null;
+        }
+        localStorage.setItem(docKey, JSON.stringify(parsedDoc));
+      } catch {
+        // Ignore
+      }
+    }
+
+    const mainDoc = this.getMainDocument();
+    if (mainDoc.id === docId) {
+      if (sheetId) {
+        const assignedSheet = updatedSheets.find((s) => s.id === sheetId);
+        mainDoc.attachedSpreadsheetId = sheetId;
+        mainDoc.attachedSpreadsheet = assignedSheet || null;
+      } else {
+        mainDoc.attachedSpreadsheetId = undefined;
+        mainDoc.attachedSpreadsheet = null;
+      }
+      this.saveMainDocument(mainDoc, true);
+    }
+
+    broadcastSync('SPREADSHEET_ASSIGNMENT_CHANGED', { docId, sheetId });
+  },
+
+  getAttachedSpreadsheet(docId?: string): AttachedSpreadsheet | null {
+    const doc = docId ? this.getDocumentContent(docId) : this.getMainDocument();
+    return doc.attachedSpreadsheet || null;
+  },
+
+  async fetchAttachedSpreadsheetFromBackend(docId: string): Promise<AttachedSpreadsheet | null> {
+    try {
+      const res = await apiClient.get<any>(`/api/sec-filings/documents/${docId}/spreadsheet`, { skipGlobalLoading: true });
+      if (res && res.spreadsheet) {
+        return {
+          id: res.spreadsheet.id,
+          fileName: res.spreadsheet.name || res.spreadsheet.file_name || 'Attached Spreadsheet',
+          sheetName: res.spreadsheet.sheet_name || res.spreadsheet.sheetName || 'Sheet1',
+          rowCount: res.spreadsheet.total_rows || res.spreadsheet.rowCount || 50,
+          colCount: res.spreadsheet.total_columns || res.spreadsheet.colCount || 10,
+          maxCol: res.spreadsheet.max_col || 'J',
+          colLetters: res.spreadsheet.col_letters,
+          headers: res.spreadsheet.headers,
+          cells: res.spreadsheet.cells || {},
+          tabs: res.spreadsheet.tabs,
+          activeTabId: res.spreadsheet.active_tab_id || res.spreadsheet.activeTabId,
+          updatedAt: res.spreadsheet.updated_at || res.spreadsheet.updatedAt
+        };
+      }
+    } catch {
+      // Offline or fallback to local storage
+    }
+    return null;
+  },
+
+  updateAttachedSpreadsheet(sheet: AttachedSpreadsheet, docId?: string): SecFilingDocument {
+    // Save to central Spreadsheet Hub registry
+    this.saveSpreadsheet(sheet);
+
+    const doc = docId ? this.getDocumentContent(docId) : this.getMainDocument();
+    doc.attachedSpreadsheet = sheet;
+    doc.attachedSpreadsheetId = sheet.id;
+    doc.updatedAt = new Date().toISOString();
+    this.saveMainDocument(doc, true);
+    broadcastSync('SPREADSHEET_UPDATED', { sheetId: sheet.id });
+
+    // Background asynchronous sync to PostgreSQL backend
+    const targetDocId = docId || doc.id || this.getActiveDocumentId();
+    apiClient.put(`/api/sec-filings/documents/${targetDocId}/spreadsheet`, {
+      id: sheet.id,
+      name: sheet.fileName,
+      sheet_name: sheet.sheetName,
+      total_rows: sheet.rowCount,
+      total_columns: sheet.colCount,
+      columns: sheet.headers || sheet.colLetters || [],
+      cells: sheet.cells,
+      tabs: sheet.tabs || [],
+      active_tab_id: sheet.activeTabId
+    }, { skipGlobalLoading: true }).catch((err) => {
+      console.debug('Spreadsheet backend sync notice (cached locally):', err);
+    });
+
+    return doc;
+  },
+
+  updateSpreadsheetCellAndSyncDoc(
+    cellRef: string,
+    newValue: any,
+    docId?: string
+  ): { updatedDoc: SecFilingDocument; updatedCount: number } {
+    const doc = docId ? this.getDocumentContent(docId) : this.getMainDocument();
+    const spreadsheet = doc.attachedSpreadsheet;
+    if (!spreadsheet) {
+      return { updatedDoc: doc, updatedCount: 0 };
+    }
+
+    const cleanRef = cellRef.trim().toUpperCase();
+    spreadsheet.cells[cleanRef] = newValue;
+    spreadsheet.updatedAt = new Date().toISOString();
+
+    // Persist in central Spreadsheet Hub registry
+    this.saveSpreadsheet(spreadsheet);
+
+    // Background asynchronous sync of cell modification to PostgreSQL backend
+    const targetDocId = docId || doc.id || this.getActiveDocumentId();
+    apiClient.patch(`/api/sec-filings/documents/${targetDocId}/spreadsheet/cells`, {
+      cell_ref: cleanRef,
+      value: newValue
+    }, { skipGlobalLoading: true }).catch((err) => {
+      console.debug('Cell backend sync notice (cached locally):', err);
+    });
+
+    const formattedVal = formatCellValue(newValue);
+    let updatedCount = 0;
+
+    // Pattern to match @Cell or @'Sheet'!Cell or @Sheet!Cell with optional {...}
+    let bareCell = cleanRef;
+    let tabPrefixPattern = '(?:(?:\'[^\']+\'|[A-Za-z0-9_.\\- ]+)!)?';
+    const tabMatch = cleanRef.match(/^(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?([A-Za-z]{1,3}\d{1,4})$/i);
+    if (tabMatch) {
+      bareCell = tabMatch[3].toUpperCase();
+      const specificTab = tabMatch[1] || tabMatch[2];
+      if (specificTab) {
+        const escapedTab = specificTab.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        tabPrefixPattern = `(?:'${escapedTab}'|${escapedTab})!`;
+      }
+    }
+    const regex = new RegExp(`@(${tabPrefixPattern}${bareCell})(?:\\{[^}]*\\})?`, 'gi');
+
+    // Update all occurrences across document blocks
+    if (Array.isArray(doc.blocks)) {
+      doc.blocks = doc.blocks.map((block) => {
+        if (block.type === 'paragraph' || block.type === 'heading') {
+          if (regex.test(block.text)) {
+            const matches = block.text.match(regex);
+            updatedCount += matches ? matches.length : 0;
+            return {
+              ...block,
+              text: block.text.replace(regex, `@$1{${formattedVal}}`),
+              updatedAt: new Date().toISOString()
+            };
+          }
+        } else if (block.type === 'callout') {
+          let updated = false;
+          let content = block.content;
+          let title = block.title;
+          if (content && regex.test(content)) {
+            const matches = content.match(regex);
+            updatedCount += matches ? matches.length : 0;
+            content = content.replace(regex, `@$1{${formattedVal}}`);
+            updated = true;
+          }
+          if (title && regex.test(title)) {
+            const matches = title.match(regex);
+            updatedCount += matches ? matches.length : 0;
+            title = title.replace(regex, `@$1{${formattedVal}}`);
+            updated = true;
+          }
+          if (updated) {
+            return { ...block, content, title, updatedAt: new Date().toISOString() };
+          }
+        } else if (block.type === 'financial_table' && Array.isArray(block.rows)) {
+          let tableUpdated = false;
+          const rows = block.rows.map((r) => {
+            if (Array.isArray(r.cells)) {
+              let rowUpdated = false;
+              const cells = r.cells.map((c) => {
+                if (typeof c === 'string' && regex.test(c)) {
+                  const matches = c.match(regex);
+                  updatedCount += matches ? matches.length : 0;
+                  rowUpdated = true;
+                  tableUpdated = true;
+                  return c.replace(regex, `@$1{${formattedVal}}`);
+                }
+                return c;
+              });
+              if (rowUpdated) return { ...r, cells };
+            }
+            return r;
+          });
+          if (tableUpdated) {
+            return { ...block, rows, updatedAt: new Date().toISOString() };
+          }
+        }
+        return block;
+      });
+    }
+
+    doc.updatedAt = new Date().toISOString();
+    this.saveMainDocument(doc, true);
+    broadcastSync('SPREADSHEET_UPDATED', { cellRef: cleanRef, value: newValue });
+
+    return { updatedDoc: doc, updatedCount };
   },
 
   getActiveDocumentId(): string {
