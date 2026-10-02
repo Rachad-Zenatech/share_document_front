@@ -1029,10 +1029,13 @@ export function useSecFiling() {
     toast.success('Reset filing document to baseline v22 Review Copy');
   }, [refreshAll]);
 
-  const handleUpdateAttachedSpreadsheet = useCallback((sheet: AttachedSpreadsheet) => {
-    const updated = secFilingService.updateAttachedSpreadsheet(sheet, mainDoc.id);
+  const handleUpdateAttachedSpreadsheet = useCallback((sheet: AttachedSpreadsheet, shiftedBlocks?: SecBlock[]) => {
+    const updated = secFilingService.updateAttachedSpreadsheet(sheet, mainDoc.id, shiftedBlocks);
     setMainDoc({ ...updated });
-  }, [mainDoc.id]);
+    if (shiftedBlocks && Array.isArray(shiftedBlocks)) {
+      setWorkingBlocks(shiftedBlocks);
+    }
+  }, [mainDoc.id, setWorkingBlocks]);
 
   const handleUpdateSpreadsheetCell = useCallback((cellRef: string, newValue: any) => {
     const { updatedDoc, updatedCount } = secFilingService.updateSpreadsheetCellAndSyncDoc(cellRef, newValue, mainDoc.id);

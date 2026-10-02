@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Dialog,
   DialogContent,
@@ -31,7 +32,8 @@ import {
   CopyPlus,
   Columns,
   Rows,
-  CornerDownLeft
+  CornerDownLeft,
+  X
 } from 'lucide-react';
 import type { AttachedSpreadsheet, SecBlock } from '../../../types/secFiling';
 import {
@@ -60,7 +62,13 @@ import {
   deleteColAtIndex,
   updateTabHeader,
   duplicateTab,
-  pasteDataIntoGrid
+  pasteDataIntoGrid,
+  shiftCellsRight,
+  shiftCellsDown,
+  shiftCellsLeft,
+  shiftCellsUp,
+  type CellShiftOperation,
+  shiftBlocksCellReferences
 } from '../../../utils/documentVariables';
 import { DEFAULT_TRIAL_BALANCE_SHEET } from '../../../data/defaultTrialBalanceSheet';
 import { toast } from 'sonner';
@@ -69,7 +77,7 @@ export interface AttachedSpreadsheetModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   spreadsheet?: AttachedSpreadsheet | null;
-  onUpdateSpreadsheet: (sheet: AttachedSpreadsheet) => void;
+  onUpdateSpreadsheet: (sheet: AttachedSpreadsheet, shiftedBlocks?: SecBlock[]) => void;
   onUpdateCell: (cellRef: string, newValue: any) => number;
   blocks: SecBlock[];
   onSelectBlock?: (blockId: string) => void;
@@ -106,6 +114,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
   const [selectedCellRef, setSelectedCellRef] = useState<string>('A1');
   const [editingValue, setEditingValue] = useState<string>('');
+  const [searchableText, setSearchableText] = useState<string>('');
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isCopiedTag, setIsCopiedTag] = useState<boolean>(false);
 
@@ -140,6 +149,24 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const [jumpRowInput, setJumpRowInput] = useState<string>('');
   const rafIdRef = useRef<number | null>(null);
 
+  // Right-click Context Menu state
+  const [contextMenu, setContextMenu] = useState<{
+    open: boolean;
+    x: number;
+    y: number;
+    cellRef: string;
+    rowIndex: number;
+    colIndex: number;
+  } | null>(null);
+
+  // Excel Style Insert Dialog state (Shift cells right / down / Entire row / Entire col)
+  const [isInsertDialogOpen, setIsInsertDialogOpen] = useState<boolean>(false);
+  const [insertOption, setInsertOption] = useState<'shift_right' | 'shift_down' | 'entire_row' | 'entire_col'>('entire_row');
+
+  // Excel Style Delete Dialog state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
+  const [deleteOption, setDeleteOption] = useState<'shift_left' | 'shift_up' | 'entire_row' | 'entire_col'>('entire_row');
+
   const ROW_HEIGHT = 28; // Exact row height in pixels (h-7 = 1.75rem = 28px)
   const COL_WIDTH = 128; // Standard column width in pixels (w-32 = 8rem = 128px)
   const ROW_OVERSCAN = 6; // Extra buffer rows above and below viewport
@@ -169,6 +196,60 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
       }
     };
   }, []);
+
+  // Update searchable text for browser find (Ctrl+F)
+  useEffect(() => {
+    const lines = Object.entries(currentCells).map(([ref, val]) => {
+      const formatted = formatCellValue(val);
+      return `${ref}: ${formatted}`;
+    });
+    setSearchableText(lines.join('\n'));
+  }, [currentCells]);
+
+  // Dismiss context menu on any click outside.
+  // We defer registering the listener by one tick so the right-click event
+  // that opened the menu doesn't immediately close it.
+  useEffect(() => {
+    if (!contextMenu?.open) return;
+    let timerId: ReturnType<typeof setTimeout>;
+    const handleCloseContextMenu = () => setContextMenu(null);
+    timerId = setTimeout(() => {
+      window.addEventListener('click', handleCloseContextMenu);
+      window.addEventListener('contextmenu', handleCloseContextMenu);
+    }, 0);
+    return () => {
+      clearTimeout(timerId);
+      window.removeEventListener('click', handleCloseContextMenu);
+      window.removeEventListener('contextmenu', handleCloseContextMenu);
+    };
+  }, [contextMenu?.open]);
+
+  // Excel-style Keyboard Shortcuts: Ctrl+Shift+= (Insert), Ctrl+- (Delete), Ctrl+Z (Undo), Ctrl+Y (Redo)
+  // We use refs to avoid referencing handleUndo/handleRedo before they are declared.
+  const undoHandlerRef = useRef<(() => void) | null>(null);
+  const redoHandlerRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    const handleSpreadsheetShortcuts = (e: KeyboardEvent) => {
+      if (inlineEditingCellRef || editingColIdx !== null) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undoHandlerRef.current?.();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        redoHandlerRef.current?.();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        setInsertOption('entire_row');
+        setIsInsertDialogOpen(true);
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
+        e.preventDefault();
+        setDeleteOption('entire_row');
+        setIsDeleteDialogOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleSpreadsheetShortcuts);
+    return () => window.removeEventListener('keydown', handleSpreadsheetShortcuts);
+  }, [inlineEditingCellRef, editingColIdx]);
 
   // Measure container height and width dynamically on resize
   useEffect(() => {
@@ -200,6 +281,49 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const [searchQuery, setSearchQuery] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+
+  // ---------- Version History (Undo / Redo) ----------
+  // Each entry is a snapshot of the full spreadsheet at that point in time.
+  const MAX_HISTORY = 50;
+  const undoStack = useRef<AttachedSpreadsheet[]>([]);
+  const redoStack = useRef<AttachedSpreadsheet[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  /** Push the current spreadsheet onto the undo stack before applying a change. */
+  const pushHistory = useCallback((before: AttachedSpreadsheet) => {
+    undoStack.current = [before, ...undoStack.current].slice(0, MAX_HISTORY);
+    redoStack.current = [];
+    setCanUndo(true);
+    setCanRedo(false);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (!undoStack.current.length) return;
+    const prev = undoStack.current[0];
+    redoStack.current = [spreadsheet, ...redoStack.current].slice(0, MAX_HISTORY);
+    undoStack.current = undoStack.current.slice(1);
+    setCanUndo(undoStack.current.length > 0);
+    setCanRedo(true);
+    onUpdateSpreadsheet(prev, blocks);
+    toast.info('Undo');
+  }, [spreadsheet, blocks, onUpdateSpreadsheet]);
+
+  const handleRedo = useCallback(() => {
+    if (!redoStack.current.length) return;
+    const next = redoStack.current[0];
+    undoStack.current = [spreadsheet, ...undoStack.current].slice(0, MAX_HISTORY);
+    redoStack.current = redoStack.current.slice(1);
+    setCanUndo(true);
+    setCanRedo(redoStack.current.length > 0);
+    onUpdateSpreadsheet(next, blocks);
+    toast.info('Redo');
+  }, [spreadsheet, blocks, onUpdateSpreadsheet]);
+
+  // Wire refs so the keyboard shortcut handler (defined above) can call them
+  undoHandlerRef.current = handleUndo;
+  redoHandlerRef.current = handleRedo;
+
 
   // Dialog states for dynamic sheet creation and resizing
   const [isCreateNewOpen, setIsCreateNewOpen] = useState(false);
@@ -380,6 +504,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     rawVal: string,
     advanceDirection: 'down' | 'right' | 'left' | 'none' = 'none'
   ) => {
+    pushHistory(spreadsheet); // snapshot before cell edit
     const cleanVal = rawVal.trim();
     let parsed: any = cleanVal;
     if (cleanVal !== '' && !isNaN(Number(cleanVal))) {
@@ -431,17 +556,174 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     toast.info(`Cleared cell ${selectedCellRef}`);
   };
 
+  // Helper to apply spreadsheet changes and synchronize all linked document cell references
+  const applySpreadsheetShift = (
+    nextSpreadsheet: AttachedSpreadsheet,
+    op: CellShiftOperation,
+    successMessage: string
+  ) => {
+    pushHistory(spreadsheet); // snapshot before change
+    const { updatedBlocks, shiftedCount } = shiftBlocksCellReferences(
+      blocks,
+      op,
+      currentTab?.name
+    );
+
+    onUpdateSpreadsheet(nextSpreadsheet, updatedBlocks);
+
+    if (shiftedCount > 0) {
+      toast.success(
+        `${successMessage} (Auto-updated ${shiftedCount} linked document reference${shiftedCount > 1 ? 's' : ''})`
+      );
+    } else {
+      toast.success(successMessage);
+    }
+  };
+
+  // -----------------------------------------------------------------------
+  // Lightweight Formula Evaluator (=SUM, =AVERAGE, =MIN, =MAX, =COUNT,
+  //   =IF, =ROUND, arithmetic, cell refs, ranges like A1:A5)
+  // -----------------------------------------------------------------------
+  const evaluateFormula = useCallback((formula: string): string | number => {
+    if (!formula.startsWith('=')) return formula;
+    const expr = formula.slice(1).trim();
+    const cells = currentCells;
+
+    // Resolve a single cell ref like A1 => its value
+    const resolveCell = (ref: string): number => {
+      const v = cells[ref.toUpperCase()];
+      if (v === undefined || v === null || v === '') return 0;
+      if (typeof v === 'number') return v;
+      const n = Number(String(v).replace(/,/g, ''));
+      return isNaN(n) ? 0 : n;
+    };
+
+    // Expand a range like A1:B3 into individual ref values
+    const expandRange = (rangeStr: string): number[] => {
+      const m = rangeStr.match(/^([A-Z]+)([0-9]+):([A-Z]+)([0-9]+)$/i);
+      if (!m) return [resolveCell(rangeStr)];
+      const startCol = m[1].toUpperCase(); const startRow = parseInt(m[2]);
+      const endCol   = m[3].toUpperCase(); const endRow   = parseInt(m[4]);
+      const colToIdx = (c: string) => c.split('').reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0);
+      const idxToCol = (n: number) => { let s = ''; while (n > 0) { s = String.fromCharCode(((n-1)%26)+65)+s; n=Math.floor((n-1)/26); } return s; };
+      const sc = colToIdx(startCol); const ec = colToIdx(endCol);
+      const vals: number[] = [];
+      for (let r = startRow; r <= endRow; r++) for (let c = sc; c <= ec; c++) vals.push(resolveCell(`${idxToCol(c)}${r}`));
+      return vals;
+    };
+
+    // Parse comma-separated args, respecting nested parens
+    const splitArgs = (s: string): string[] => {
+      const args: string[] = []; let depth = 0; let cur = '';
+      for (const ch of s) {
+        if (ch === '(' ) depth++;
+        else if (ch === ')') depth--;
+        if (ch === ',' && depth === 0) { args.push(cur.trim()); cur = ''; }
+        else cur += ch;
+      }
+      if (cur.trim()) args.push(cur.trim());
+      return args;
+    };
+
+    // Recursively evaluate a sub-expression
+    const evalExpr = (e: string): number | string => {
+      e = e.trim();
+      // String literal
+      if ((e.startsWith('"') && e.endsWith('"')) || (e.startsWith("'") && e.endsWith("'"))) return e.slice(1,-1);
+      // Number literal
+      if (/^-?[0-9]+(?:\.[0-9]+)?$/.test(e)) return parseFloat(e);
+      // Cell reference
+      if (/^[A-Z]+[0-9]+$/i.test(e)) return resolveCell(e);
+      // Range (returns first value — use inside function args)
+      if (/^[A-Z]+[0-9]+:[A-Z]+[0-9]+$/i.test(e)) return expandRange(e)[0] ?? 0;
+      // Function call
+      const fnMatch = e.match(/^([A-Z]+)\((.*)\)$/i);
+      if (fnMatch) {
+        const fn = fnMatch[1].toUpperCase();
+        const innerArgs = splitArgs(fnMatch[2]);
+        const numArgs = innerArgs.flatMap(a => /^[A-Z]+[0-9]+:[A-Z]+[0-9]+$/i.test(a.trim()) ? expandRange(a.trim()) : [Number(evalExpr(a))]);
+        switch (fn) {
+          case 'SUM':     return numArgs.reduce((s,v)=>s+v,0);
+          case 'AVERAGE': return numArgs.length ? numArgs.reduce((s,v)=>s+v,0)/numArgs.length : 0;
+          case 'MIN':     return Math.min(...numArgs);
+          case 'MAX':     return Math.max(...numArgs);
+          case 'COUNT':   return numArgs.filter(v=>!isNaN(v)).length;
+          case 'COUNTA':  return innerArgs.flatMap(a => /^[A-Z]+[0-9]+:[A-Z]+[0-9]+$/i.test(a.trim()) ? expandRange(a.trim()) : [evalExpr(a)]).filter(v => v !== '' && v !== 0).length;
+          case 'ROUND':   return Math.round(Number(evalExpr(innerArgs[0])) * Math.pow(10, Number(evalExpr(innerArgs[1] ?? '0')))) / Math.pow(10, Number(evalExpr(innerArgs[1] ?? '0')));
+          case 'ABS':     return Math.abs(Number(evalExpr(innerArgs[0])));
+          case 'SQRT':    return Math.sqrt(Number(evalExpr(innerArgs[0])));
+          case 'INT':     return Math.floor(Number(evalExpr(innerArgs[0])));
+          case 'IF': {
+            const cond = innerArgs[0];
+            const condVal = cond.includes('>=')
+              ? Number(evalExpr(cond.split('>=')[0])) >= Number(evalExpr(cond.split('>=')[1]))
+              : cond.includes('<=')
+              ? Number(evalExpr(cond.split('<=')[0])) <= Number(evalExpr(cond.split('<=')[1]))
+              : cond.includes('>')
+              ? Number(evalExpr(cond.split('>')[0])) > Number(evalExpr(cond.split('>')[1]))
+              : cond.includes('<')
+              ? Number(evalExpr(cond.split('<')[0])) < Number(evalExpr(cond.split('<')[1]))
+              : cond.includes('<>')
+              ? evalExpr(cond.split('<>')[0]) !== evalExpr(cond.split('<>')[1])
+              : cond.includes('=')
+              ? evalExpr(cond.split('=')[0]) === evalExpr(cond.split('=')[1])
+              : Boolean(evalExpr(cond));
+            return condVal ? evalExpr(innerArgs[1] ?? '0') : evalExpr(innerArgs[2] ?? '0');
+          }
+          case 'CONCATENATE': return innerArgs.map(a => String(evalExpr(a))).join('');
+          default: return `#NAME?`;
+        }
+      }
+      // Arithmetic: simple left-to-right with operator precedence via JS eval
+      // Replace cell refs first
+      const withRefs = e.replace(/([A-Z]+[0-9]+)/gi, (_, r) => String(resolveCell(r)));
+      try {
+        // Safe eval: only allow numbers, operators, parens, dots
+        if (/^[0-9+\-*/().\s]+$/.test(withRefs)) {
+          // eslint-disable-next-line no-new-func
+          return Function(`"use strict"; return (${withRefs})`)() as number;
+        }
+      } catch { /**/ }
+      return `#ERROR`;
+    };
+
+    try {
+      const result = evalExpr(expr);
+      if (typeof result === 'number') {
+        if (!isFinite(result)) return '#DIV/0!';
+        // Format: strip unnecessary decimal zeros
+        return parseFloat(result.toFixed(10));
+      }
+      return String(result);
+    } catch {
+      return '#ERROR';
+    }
+  }, [currentCells]);
+
+  // Resolve displayed value for a cell — evaluates formulas on the fly
+  const resolveCellDisplay = useCallback((cellRef: string): { raw: string | number | undefined; display: string; isFormula: boolean } => {
+    const rawAny = currentCells[cellRef];
+    if (rawAny === undefined || rawAny === null) return { raw: undefined, display: '', isFormula: false };
+    const raw = (typeof rawAny === 'boolean' ? (rawAny ? 1 : 0) : rawAny) as string | number;
+    const strVal = String(rawAny);
+    if (strVal.startsWith('=')) {
+      const result = evaluateFormula(strVal);
+      return { raw, display: String(result), isFormula: true };
+    }
+    return { raw, display: formatCellValue(rawAny), isFormula: false };
+  }, [currentCells, evaluateFormula]);
+
   // Contextual Row Insert / Delete
   const handleInsertRowAbove = () => {
     const next = insertRowAtIndex(spreadsheet, selectedRow, 'above');
-    onUpdateSpreadsheet(next);
-    toast.success(`Inserted blank row above row ${selectedRow}`);
+    const op: CellShiftOperation = { type: 'insert_row', targetRow: selectedRow };
+    applySpreadsheetShift(next, op, `Inserted blank row above row ${selectedRow}`);
   };
 
   const handleInsertRowBelow = () => {
     const next = insertRowAtIndex(spreadsheet, selectedRow, 'below');
-    onUpdateSpreadsheet(next);
-    toast.success(`Inserted blank row below row ${selectedRow}`);
+    const op: CellShiftOperation = { type: 'insert_row', targetRow: selectedRow + 1 };
+    applySpreadsheetShift(next, op, `Inserted blank row below row ${selectedRow}`);
   };
 
   const handleDeleteSelectedRow = () => {
@@ -450,21 +732,21 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
       return;
     }
     const next = deleteRowAtIndex(spreadsheet, selectedRow);
-    onUpdateSpreadsheet(next);
-    toast.info(`Deleted row ${selectedRow} (Total: ${next.rowCount})`);
+    const op: CellShiftOperation = { type: 'delete_row', targetRow: selectedRow };
+    applySpreadsheetShift(next, op, `Deleted row ${selectedRow} (Total: ${next.rowCount})`);
   };
 
   // Contextual Column Insert / Delete
   const handleInsertColLeft = () => {
     const next = insertColAtIndex(spreadsheet, selectedCol, 'left');
-    onUpdateSpreadsheet(next);
-    toast.success(`Inserted blank column left of column ${selectedColLetter}`);
+    const op: CellShiftOperation = { type: 'insert_col', targetCol: selectedCol };
+    applySpreadsheetShift(next, op, `Inserted blank column left of column ${selectedColLetter}`);
   };
 
   const handleInsertColRight = () => {
     const next = insertColAtIndex(spreadsheet, selectedCol, 'right');
-    onUpdateSpreadsheet(next);
-    toast.success(`Inserted blank column right of column ${selectedColLetter}`);
+    const op: CellShiftOperation = { type: 'insert_col', targetCol: selectedCol + 1 };
+    applySpreadsheetShift(next, op, `Inserted blank column right of column ${selectedColLetter}`);
   };
 
   const handleDeleteSelectedCol = () => {
@@ -473,8 +755,75 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
       return;
     }
     const next = deleteColAtIndex(spreadsheet, selectedCol);
-    onUpdateSpreadsheet(next);
-    toast.info(`Deleted column ${selectedColLetter} (Total: ${next.colCount})`);
+    const op: CellShiftOperation = { type: 'delete_col', targetCol: selectedCol };
+    applySpreadsheetShift(next, op, `Deleted column ${selectedColLetter} (Total: ${next.colCount})`);
+  };
+
+  // Excel Dialog Execution Handlers
+  const handleExecuteInsert = (
+    option: 'shift_right' | 'shift_down' | 'entire_row' | 'entire_col'
+  ) => {
+    const parsed = parseCellRef(selectedCellRef);
+    const targetCol = parsed?.colIndex || 1;
+    const targetRow = parsed?.rowIndex || 1;
+
+    let next: AttachedSpreadsheet;
+    let op: CellShiftOperation;
+    let msg: string;
+
+    if (option === 'shift_right') {
+      next = shiftCellsRight(spreadsheet, targetCol, targetRow);
+      op = { type: 'shift_right', targetCol, targetRow };
+      msg = `Shifted cells right at ${selectedCellRef}`;
+    } else if (option === 'shift_down') {
+      next = shiftCellsDown(spreadsheet, targetCol, targetRow);
+      op = { type: 'shift_down', targetCol, targetRow };
+      msg = `Shifted cells down at ${selectedCellRef}`;
+    } else if (option === 'entire_row') {
+      next = insertRowAtIndex(spreadsheet, targetRow, 'above');
+      op = { type: 'insert_row', targetRow };
+      msg = `Inserted blank row at row ${targetRow}`;
+    } else {
+      next = insertColAtIndex(spreadsheet, targetCol, 'left');
+      op = { type: 'insert_col', targetCol };
+      msg = `Inserted blank column at column ${colToLetter(targetCol)}`;
+    }
+
+    applySpreadsheetShift(next, op, msg);
+    setIsInsertDialogOpen(false);
+  };
+
+  const handleExecuteDelete = (
+    option: 'shift_left' | 'shift_up' | 'entire_row' | 'entire_col'
+  ) => {
+    const parsed = parseCellRef(selectedCellRef);
+    const targetCol = parsed?.colIndex || 1;
+    const targetRow = parsed?.rowIndex || 1;
+
+    let next: AttachedSpreadsheet;
+    let op: CellShiftOperation;
+    let msg: string;
+
+    if (option === 'shift_left') {
+      next = shiftCellsLeft(spreadsheet, targetCol, targetRow);
+      op = { type: 'shift_left', targetCol, targetRow };
+      msg = `Shifted cells left at ${selectedCellRef}`;
+    } else if (option === 'shift_up') {
+      next = shiftCellsUp(spreadsheet, targetCol, targetRow);
+      op = { type: 'shift_up', targetCol, targetRow };
+      msg = `Shifted cells up at ${selectedCellRef}`;
+    } else if (option === 'entire_row') {
+      next = deleteRowAtIndex(spreadsheet, targetRow);
+      op = { type: 'delete_row', targetRow };
+      msg = `Deleted row ${targetRow}`;
+    } else {
+      next = deleteColAtIndex(spreadsheet, targetCol);
+      op = { type: 'delete_col', targetCol };
+      msg = `Deleted column ${colToLetter(targetCol)}`;
+    }
+
+    applySpreadsheetShift(next, op, msg);
+    setIsDeleteDialogOpen(false);
   };
 
   // Column Header Rename
@@ -779,7 +1128,8 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   );
 
   const selectedVal = currentCells[selectedCellRef];
-  const selectedFormatted = formatCellValue(selectedVal);
+  const { display: selectedFormatted, isFormula: selectedIsFormula } = resolveCellDisplay(selectedCellRef);
+  // Formula bar shows raw formula (e.g. =SUM(A1:A5)); other bars show the resolved value
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -976,6 +1326,47 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               Active Tab ({currentTab?.name}):
             </span>
 
+            {/* Undo / Redo */}
+            <div className="flex items-center bg-white dark:bg-zinc-900 rounded-md border border-slate-300 dark:border-zinc-700 p-0.5 shadow-2xs">
+              <button
+                type="button"
+                disabled={!canUndo}
+                onClick={handleUndo}
+                title="Undo last change (Ctrl+Z)"
+                className="px-2 py-0.5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded font-medium flex items-center gap-0.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M3 13A9 9 0 1 0 5.87 6.04"/></svg>
+                <span>Undo</span>
+              </button>
+              <div className="w-px h-3 bg-slate-200 dark:bg-zinc-700 mx-0.5" />
+              <button
+                type="button"
+                disabled={!canRedo}
+                onClick={handleRedo}
+                title="Redo (Ctrl+Y)"
+                className="px-2 py-0.5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded font-medium flex items-center gap-0.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7v6h-6"/><path d="M21 13A9 9 0 1 1 18.13 6.04"/></svg>
+                <span>Redo</span>
+              </button>
+            </div>
+
+            {/* Excel Insert Dialog Trigger */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setInsertOption('entire_row');
+                setIsInsertDialogOpen(true);
+              }}
+              className="h-7 text-[11px] gap-1 bg-white dark:bg-zinc-900 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 cursor-pointer font-medium"
+              title="Insert cells, row, or column (Right-click cell or Ctrl+Shift+=)"
+            >
+              <Plus className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Insert...</span>
+            </Button>
+
             {/* Add / Remove Rows */}
             <div className="flex items-center bg-white dark:bg-zinc-900 rounded-md border border-slate-300 dark:border-zinc-700 p-0.5 shadow-2xs">
               <button
@@ -1118,17 +1509,19 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               </Badge>
             </div>
 
-            {/* Inline Value Input */}
+            {/* Inline Value Input / Formula Bar */}
             <div className="flex items-center gap-1.5 flex-1 min-w-[240px] max-w-md">
-              <span className="text-xs font-mono text-slate-500">=</span>
+              <span className={`text-xs font-mono font-bold shrink-0 ${selectedIsFormula ? 'text-violet-600' : 'text-slate-500'}`}>
+                {selectedIsFormula ? 'fx' : '='}
+              </span>
               <Input
                 value={editingValue}
                 onChange={(e) => setEditingValue(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSaveCell();
                 }}
-                placeholder="Value (e.g. 500, Cash, 12450.50)..."
-                className="h-7 text-xs bg-white dark:bg-zinc-900 border-slate-300 dark:border-zinc-700"
+                placeholder="Value or formula (e.g. 500, Cash, =SUM(A1:A5))..."
+                className={`h-7 text-xs bg-white dark:bg-zinc-900 border-slate-300 dark:border-zinc-700 font-mono ${selectedIsFormula ? 'text-violet-700 dark:text-violet-300' : ''}`}
               />
               <Button
                 type="button"
@@ -1139,6 +1532,11 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                 <Save className="w-3 h-3" />
                 <span>Save</span>
               </Button>
+              {selectedIsFormula && (
+                <span className="text-[10px] font-mono text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 px-1.5 py-0.5 rounded shrink-0">
+                  = {selectedFormatted}
+                </span>
+              )}
             </div>
 
             {/* Direct In-Cell Edit Trigger */}
@@ -1348,7 +1746,21 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                       {visibleColLetters.map((col) => (
                         <th
                           key={col}
-                          className="w-32 min-w-[128px] max-w-[128px] h-7 px-2 border-r border-b border-slate-300 dark:border-zinc-700 text-center font-mono font-bold text-[11px] text-slate-700 dark:text-zinc-300 bg-slate-100 dark:bg-zinc-900"
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            const ref = `${col}1`;
+                            handleSelectCell(ref);
+                            const parsed = parseCellRef(ref);
+                            setContextMenu({
+                              open: true,
+                              x: Math.min(e.clientX, window.innerWidth - 220),
+                              y: Math.min(e.clientY, window.innerHeight - 260),
+                              cellRef: ref,
+                              rowIndex: 1,
+                              colIndex: parsed?.colIndex || 1
+                            });
+                          }}
+                          className="w-32 min-w-[128px] max-w-[128px] h-7 px-2 border-r border-b border-slate-300 dark:border-zinc-700 text-center font-mono font-bold text-[11px] text-slate-700 dark:text-zinc-300 bg-slate-100 dark:bg-zinc-900 cursor-context-menu"
                         >
                           {col}
                         </th>
@@ -1444,6 +1856,23 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                         handleCellDoubleClick(td.dataset.cellRef);
                       }
                     }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      const td = (e.target as HTMLElement).closest<HTMLTableCellElement>('[data-cell-ref]');
+                      if (td && td.dataset.cellRef) {
+                        const ref = td.dataset.cellRef;
+                        handleSelectCell(ref);
+                        const parsed = parseCellRef(ref);
+                        setContextMenu({
+                          open: true,
+                          x: Math.min(e.clientX, window.innerWidth - 220),
+                          y: Math.min(e.clientY, window.innerHeight - 260),
+                          cellRef: ref,
+                          rowIndex: parsed?.rowIndex || 1,
+                          colIndex: parsed?.colIndex || 1
+                        });
+                      }
+                    }}
                   >
                     {/* Top spacer row preserving scroll height for offscreen rows above */}
                     {topSpacerHeight > 0 && (
@@ -1461,8 +1890,23 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                         className="h-7 hover:bg-blue-50/30 dark:hover:bg-blue-950/20"
                         style={{ height: `${ROW_HEIGHT}px` }}
                       >
-                        {/* Sticky Left: Row Number Header */}
-                        <td className="sticky left-0 z-20 w-14 min-w-[56px] max-w-[56px] h-7 bg-slate-100 dark:bg-zinc-900 border-r border-b border-slate-300 dark:border-zinc-800 text-center font-mono font-semibold text-[11px] text-slate-500">
+                        {/* Sticky Left: Row Number Header with Right-Click Support */}
+                        <td
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            const ref = `A${row}`;
+                            handleSelectCell(ref);
+                            setContextMenu({
+                              open: true,
+                              x: Math.min(e.clientX, window.innerWidth - 220),
+                              y: Math.min(e.clientY, window.innerHeight - 260),
+                              cellRef: ref,
+                              rowIndex: row,
+                              colIndex: 1
+                            });
+                          }}
+                          className="sticky left-0 z-20 w-14 min-w-[56px] max-w-[56px] h-7 bg-slate-100 dark:bg-zinc-900 border-r border-b border-slate-300 dark:border-zinc-800 text-center font-mono font-semibold text-[11px] text-slate-500 cursor-context-menu"
+                        >
                           {row}
                         </td>
 
@@ -1478,11 +1922,11 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                         {/* Visible Columns for this row */}
                         {visibleColLetters.map((col) => {
                           const cellRef = `${col}${row}`;
-                          const val = currentCells[cellRef];
+                          const { raw: val, display, isFormula } = resolveCellDisplay(cellRef);
                           const isSelected = selectedCellRef === cellRef;
                           const isLinked = usedCellSet.has(cellRef);
-                          const isNumeric = typeof val === 'number';
-                          const display = formatCellValue(val);
+                          const resolvedNum = !isFormula ? typeof val === 'number' : !isNaN(Number(display));
+                          const isNumeric = resolvedNum;
 
                           const isSearchHit =
                             searchQuery.trim() !== '' &&
@@ -1505,10 +1949,11 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                                   ? 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-slate-200 dark:border-zinc-800'
                                   : 'bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 border-slate-200 dark:border-zinc-800'
                               } ${isNumeric && !isInlineEditing ? 'text-right font-mono' : 'text-left'}`}
-                              title={`${currentTab?.name ? `${currentTab.name}!` : ''}${cellRef}: ${display || '(empty)'}${
+                              title={`${currentTab?.name ? `${currentTab.name}!` : ''}${cellRef}${isFormula ? ` [Formula: ${val}]` : ''}: ${display || '(empty)'}${
                                 isLinked ? ' (Linked in document)' : ''
                               }${isPickerMode ? ' (Click to select, double-click to link)' : ' (Double-click or Enter to edit directly)'}`}
                             >
+
                               {isInlineEditing ? (
                                 <input
                                   ref={inlineInputRef}
@@ -1545,6 +1990,10 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                                   {/* Green corner triangle for linked cells */}
                                   {isLinked && (
                                     <span className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-emerald-600 border-l-[6px] border-l-transparent" />
+                                  )}
+                                  {/* Purple corner triangle for formula cells */}
+                                  {isFormula && !isLinked && (
+                                    <span className="absolute top-0 left-0 w-0 h-0 border-t-[5px] border-t-violet-500 border-r-[5px] border-r-transparent" />
                                   )}
                                   <span>{display}</span>
                                 </>
@@ -2030,7 +2479,430 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* EXCEL RIGHT-CLICK CONTEXT MENU — rendered via portal to document.body so it is
+             fully outside the Dialog's CSS transform stacking context. This fixes the bug
+             where position:fixed coords (e.clientX/Y) were offset by the dialog's origin. */}
+        {contextMenu?.open && createPortal(
+          <div
+            style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
+            className="fixed z-[9999] w-52 bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-md shadow-2xl p-1 text-xs select-none animate-in fade-in zoom-in-95 duration-75"
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <div className="px-2 py-1 text-[10px] font-mono text-slate-400 font-semibold border-b border-slate-100 dark:border-zinc-800 mb-1 flex items-center justify-between">
+              <span>CELL {contextMenu.cellRef}</span>
+              <span>R{contextMenu.rowIndex} C{contextMenu.colIndex}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                setInsertOption('entire_row');
+                setIsInsertDialogOpen(true);
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-left font-semibold text-emerald-800 dark:text-emerald-300 cursor-pointer group"
+            >
+              <span className="flex items-center gap-2">
+                <Plus className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
+                <span>Insert...</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Ctrl+Shift+=</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                handleExecuteInsert('entire_row');
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
+            >
+              <Rows className="w-3.5 h-3.5 text-slate-400" />
+              <span>Insert Entire Row</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                handleExecuteInsert('entire_col');
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
+            >
+              <Columns className="w-3.5 h-3.5 text-slate-400" />
+              <span>Insert Entire Column</span>
+            </button>
+
+            <div className="h-px bg-slate-200 dark:bg-zinc-800 my-1" />
+
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                setDeleteOption('entire_row');
+                setIsDeleteDialogOpen(true);
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left text-rose-700 dark:text-rose-300 cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Delete...</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Ctrl+-</span>
+            </button>
+
+            <div className="h-px bg-slate-200 dark:bg-zinc-800 my-1" />
+
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                if (navigator?.clipboard) {
+                  navigator.clipboard.writeText(contextMenu.cellRef);
+                  toast.success(`Copied cell reference: ${contextMenu.cellRef}`);
+                }
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
+            >
+              <Copy className="w-3.5 h-3.5 text-slate-400" />
+              <span>Copy Cell Ref ({contextMenu.cellRef})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                handleClearSelectedCell();
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5 text-slate-400" />
+              <span>Clear Contents</span>
+            </button>
+          </div>,
+          document.body
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* EXACT MICROSOFT EXCEL STYLE "INSERT" DIALOG                    */}
+        {/* ------------------------------------------------------------- */}
+        {isInsertDialogOpen && (
+          <div
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/35 backdrop-blur-[0.5px]"
+            onClick={() => setIsInsertDialogOpen(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleExecuteInsert(insertOption);
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setIsInsertDialogOpen(false);
+              } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const order: ('shift_right' | 'shift_down' | 'entire_row' | 'entire_col')[] = [
+                  'shift_right',
+                  'shift_down',
+                  'entire_row',
+                  'entire_col'
+                ];
+                const curr = order.indexOf(insertOption);
+                setInsertOption(order[(curr + 1) % order.length]);
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const order: ('shift_right' | 'shift_down' | 'entire_row' | 'entire_col')[] = [
+                  'shift_right',
+                  'shift_down',
+                  'entire_row',
+                  'entire_col'
+                ];
+                const curr = order.indexOf(insertOption);
+                setInsertOption(order[(curr - 1 + order.length) % order.length]);
+              } else if (e.key === 'r' || e.key === 'R') {
+                setInsertOption('shift_right');
+              } else if (e.key === 'd' || e.key === 'D') {
+                setInsertOption('shift_down');
+              } else if (e.key === 'w' || e.key === 'W') {
+                setInsertOption('entire_row');
+              } else if (e.key === 'c' || e.key === 'C') {
+                setInsertOption('entire_col');
+              }
+            }}
+            tabIndex={-1}
+          >
+            <div
+              className="w-[220px] bg-[#fcfcfc] dark:bg-zinc-800 border border-slate-300 dark:border-zinc-600 rounded-lg shadow-2xl overflow-hidden font-sans select-none animate-in fade-in zoom-in-95 duration-100"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Title Bar */}
+              <div className="flex items-center justify-between px-3 py-1.5 bg-[#f5f5f5] dark:bg-zinc-800/90 border-b border-slate-200/80 dark:border-zinc-700">
+                <span className="text-[13px] font-medium text-slate-800 dark:text-zinc-200">
+                  Insert
+                </span>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      toast.info('Insert cells, rows, or columns at the currently selected cell.')
+                    }
+                    className="w-5 h-5 flex items-center justify-center text-[12px] font-bold text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-slate-200/70 dark:hover:bg-zinc-700 rounded-sm cursor-pointer"
+                    title="Help"
+                  >
+                    ?
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsInsertDialogOpen(false)}
+                    className="w-5 h-5 flex items-center justify-center text-[12px] text-slate-500 hover:text-white dark:text-zinc-400 hover:bg-red-500 dark:hover:bg-red-600 rounded-sm cursor-pointer transition-colors"
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Fieldset Box */}
+              <div className="px-3 pb-2 pt-1.5">
+                <fieldset className="border border-slate-300 dark:border-zinc-600 rounded px-2.5 py-1.5 bg-white dark:bg-zinc-900/60">
+                  <legend className="px-1 text-[11px] text-slate-600 dark:text-zinc-400 font-normal">
+                    Insert
+                  </legend>
+                  <div className="space-y-1.5 py-1">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="radio"
+                        name="insertOption"
+                        checked={insertOption === 'shift_right'}
+                        onChange={() => setInsertOption('shift_right')}
+                        className="w-3.5 h-3.5 accent-[#0067b8] text-[#0067b8]"
+                      />
+                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-blue-600">
+                        Shift cells <span className="underline font-medium">r</span>ight
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="radio"
+                        name="insertOption"
+                        checked={insertOption === 'shift_down'}
+                        onChange={() => setInsertOption('shift_down')}
+                        className="w-3.5 h-3.5 accent-[#0067b8] text-[#0067b8]"
+                      />
+                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-blue-600">
+                        Shift cells <span className="underline font-medium">d</span>own
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="radio"
+                        name="insertOption"
+                        checked={insertOption === 'entire_row'}
+                        onChange={() => setInsertOption('entire_row')}
+                        className="w-3.5 h-3.5 accent-[#0067b8] text-[#0067b8]"
+                      />
+                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-blue-600">
+                        Entire <span className="underline font-medium">r</span>ow
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="radio"
+                        name="insertOption"
+                        checked={insertOption === 'entire_col'}
+                        onChange={() => setInsertOption('entire_col')}
+                        className="w-3.5 h-3.5 accent-[#0067b8] text-[#0067b8]"
+                      />
+                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-blue-600">
+                        Entire <span className="underline font-medium">c</span>olumn
+                      </span>
+                    </label>
+                  </div>
+                </fieldset>
+              </div>
+
+              {/* OK & Cancel Buttons */}
+              <div className="flex items-center justify-center gap-2.5 px-3 pb-3 pt-1">
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => handleExecuteInsert(insertOption)}
+                  className="min-w-[72px] h-[24px] px-2 bg-[#f0f0f0] dark:bg-zinc-700 hover:bg-[#e4e4e4] dark:hover:bg-zinc-600 active:bg-[#d8d8d8] border border-[#707070] dark:border-zinc-500 rounded text-[11px] font-medium text-slate-900 dark:text-zinc-100 shadow-2xs outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                >
+                  OK
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsInsertDialogOpen(false)}
+                  className="min-w-[72px] h-[24px] px-2 bg-[#f0f0f0] dark:bg-zinc-700 hover:bg-[#e4e4e4] dark:hover:bg-zinc-600 active:bg-[#d8d8d8] border border-[#707070] dark:border-zinc-500 rounded text-[11px] font-medium text-slate-900 dark:text-zinc-100 shadow-2xs outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* EXACT MICROSOFT EXCEL STYLE "DELETE" DIALOG                    */}
+        {/* ------------------------------------------------------------- */}
+        {isDeleteDialogOpen && (
+          <div
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/35 backdrop-blur-[0.5px]"
+            onClick={() => setIsDeleteDialogOpen(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleExecuteDelete(deleteOption);
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setIsDeleteDialogOpen(false);
+              } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const order: ('shift_left' | 'shift_up' | 'entire_row' | 'entire_col')[] = [
+                  'shift_left',
+                  'shift_up',
+                  'entire_row',
+                  'entire_col'
+                ];
+                const curr = order.indexOf(deleteOption);
+                setDeleteOption(order[(curr + 1) % order.length]);
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const order: ('shift_left' | 'shift_up' | 'entire_row' | 'entire_col')[] = [
+                  'shift_left',
+                  'shift_up',
+                  'entire_row',
+                  'entire_col'
+                ];
+                const curr = order.indexOf(deleteOption);
+                setDeleteOption(order[(curr - 1 + order.length) % order.length]);
+              }
+            }}
+            tabIndex={-1}
+          >
+            <div
+              className="w-[220px] bg-[#fcfcfc] dark:bg-zinc-800 border border-slate-300 dark:border-zinc-600 rounded-lg shadow-2xl overflow-hidden font-sans select-none animate-in fade-in zoom-in-95 duration-100"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Title Bar */}
+              <div className="flex items-center justify-between px-3 py-1.5 bg-[#f5f5f5] dark:bg-zinc-800/90 border-b border-slate-200/80 dark:border-zinc-700">
+                <span className="text-[13px] font-medium text-slate-800 dark:text-zinc-200">
+                  Delete
+                </span>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      toast.info('Delete cells, rows, or columns at the currently selected cell.')
+                    }
+                    className="w-5 h-5 flex items-center justify-center text-[12px] font-bold text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-slate-200/70 dark:hover:bg-zinc-700 rounded-sm cursor-pointer"
+                    title="Help"
+                  >
+                    ?
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDeleteDialogOpen(false)}
+                    className="w-5 h-5 flex items-center justify-center text-[12px] text-slate-500 hover:text-white dark:text-zinc-400 hover:bg-red-500 dark:hover:bg-red-600 rounded-sm cursor-pointer transition-colors"
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Fieldset Box */}
+              <div className="px-3 pb-2 pt-1.5">
+                <fieldset className="border border-slate-300 dark:border-zinc-600 rounded px-2.5 py-1.5 bg-white dark:bg-zinc-900/60">
+                  <legend className="px-1 text-[11px] text-slate-600 dark:text-zinc-400 font-normal">
+                    Delete
+                  </legend>
+                  <div className="space-y-1.5 py-1">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="radio"
+                        name="deleteOption"
+                        checked={deleteOption === 'shift_left'}
+                        onChange={() => setDeleteOption('shift_left')}
+                        className="w-3.5 h-3.5 accent-[#0067b8] text-[#0067b8]"
+                      />
+                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-blue-600">
+                        Shift cells <span className="underline font-medium">l</span>eft
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="radio"
+                        name="deleteOption"
+                        checked={deleteOption === 'shift_up'}
+                        onChange={() => setDeleteOption('shift_up')}
+                        className="w-3.5 h-3.5 accent-[#0067b8] text-[#0067b8]"
+                      />
+                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-blue-600">
+                        Shift cells <span className="underline font-medium">u</span>p
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="radio"
+                        name="deleteOption"
+                        checked={deleteOption === 'entire_row'}
+                        onChange={() => setDeleteOption('entire_row')}
+                        className="w-3.5 h-3.5 accent-[#0067b8] text-[#0067b8]"
+                      />
+                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-blue-600">
+                        Entire <span className="underline font-medium">r</span>ow
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="radio"
+                        name="deleteOption"
+                        checked={deleteOption === 'entire_col'}
+                        onChange={() => setDeleteOption('entire_col')}
+                        className="w-3.5 h-3.5 accent-[#0067b8] text-[#0067b8]"
+                      />
+                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-blue-600">
+                        Entire <span className="underline font-medium">c</span>olumn
+                      </span>
+                    </label>
+                  </div>
+                </fieldset>
+              </div>
+
+              {/* OK & Cancel Buttons */}
+              <div className="flex items-center justify-center gap-2.5 px-3 pb-3 pt-1">
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => handleExecuteDelete(deleteOption)}
+                  className="min-w-[72px] h-[24px] px-2 bg-[#f0f0f0] dark:bg-zinc-700 hover:bg-[#e4e4e4] dark:hover:bg-zinc-600 active:bg-[#d8d8d8] border border-[#707070] dark:border-zinc-500 rounded text-[11px] font-medium text-slate-900 dark:text-zinc-100 shadow-2xs outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                >
+                  OK
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteDialogOpen(false)}
+                  className="min-w-[72px] h-[24px] px-2 bg-[#f0f0f0] dark:bg-zinc-700 hover:bg-[#e4e4e4] dark:hover:bg-zinc-600 active:bg-[#d8d8d8] border border-[#707070] dark:border-zinc-500 rounded text-[11px] font-medium text-slate-900 dark:text-zinc-100 shadow-2xs outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </DialogContent>
+      {/* Hidden searchable text for browser find (Ctrl+F) */}
+      <div style={{position: 'absolute', left: '-10000px', top: '-10000px', visibility: 'hidden'}}>
+        {searchableText}
+      </div>
     </Dialog>
   );
 };

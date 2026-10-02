@@ -1,4 +1,4 @@
-import type { AttachedSpreadsheet, SpreadsheetTab } from '../types/secFiling';
+import type { AttachedSpreadsheet, SpreadsheetTab, SecBlock } from '../types/secFiling';
 import ExcelJS from 'exceljs';
 
 /**
@@ -761,6 +761,219 @@ export function parseCellRef(ref: string): { colLetter: string; colIndex: number
 }
 
 /**
+ * Specification of a cell grid shifting or row/col insertion/deletion operation.
+ */
+export type CellShiftOperation =
+  | { type: 'insert_row'; targetRow: number }
+  | { type: 'delete_row'; targetRow: number }
+  | { type: 'insert_col'; targetCol: number }
+  | { type: 'delete_col'; targetCol: number }
+  | { type: 'shift_down'; targetCol: number; targetRow: number }
+  | { type: 'shift_up'; targetCol: number; targetRow: number }
+  | { type: 'shift_right'; targetCol: number; targetRow: number }
+  | { type: 'shift_left'; targetCol: number; targetRow: number };
+
+/**
+ * Shifts a single cell coordinate according to the given operation.
+ * Returns the shifted cell ref (e.g. "B9") or "#REF!" if the cell was deleted.
+ */
+export function shiftSingleCellRef(
+  colIndex: number,
+  rowIndex: number,
+  op: CellShiftOperation
+): string {
+  let newCol = colIndex;
+  let newRow = rowIndex;
+
+  switch (op.type) {
+    case 'insert_row': {
+      if (rowIndex >= op.targetRow) {
+        newRow = rowIndex + 1;
+      }
+      break;
+    }
+    case 'delete_row': {
+      if (rowIndex === op.targetRow) {
+        return '#REF!';
+      } else if (rowIndex > op.targetRow) {
+        newRow = rowIndex - 1;
+      }
+      break;
+    }
+    case 'insert_col': {
+      if (colIndex >= op.targetCol) {
+        newCol = colIndex + 1;
+      }
+      break;
+    }
+    case 'delete_col': {
+      if (colIndex === op.targetCol) {
+        return '#REF!';
+      } else if (colIndex > op.targetCol) {
+        newCol = colIndex - 1;
+      }
+      break;
+    }
+    case 'shift_down': {
+      if (colIndex === op.targetCol && rowIndex >= op.targetRow) {
+        newRow = rowIndex + 1;
+      }
+      break;
+    }
+    case 'shift_up': {
+      if (colIndex === op.targetCol && rowIndex === op.targetRow) {
+        return '#REF!';
+      } else if (colIndex === op.targetCol && rowIndex > op.targetRow) {
+        newRow = rowIndex - 1;
+      }
+      break;
+    }
+    case 'shift_right': {
+      if (rowIndex === op.targetRow && colIndex >= op.targetCol) {
+        newCol = colIndex + 1;
+      }
+      break;
+    }
+    case 'shift_left': {
+      if (rowIndex === op.targetRow && colIndex === op.targetCol) {
+        return '#REF!';
+      } else if (rowIndex === op.targetRow && colIndex > op.targetCol) {
+        newCol = colIndex - 1;
+      }
+      break;
+    }
+  }
+
+  return `${colToLetter(newCol)}${newRow}`;
+}
+
+/**
+ * Shifts any cell references inside an Excel formula string (e.g. "=B8*1.1" -> "=B9*1.1").
+ */
+export function shiftFormulaInString(
+  formulaStr: string,
+  op: CellShiftOperation,
+  targetTabName?: string
+): string {
+  if (!formulaStr || typeof formulaStr !== 'string' || !formulaStr.startsWith('=')) {
+    return formulaStr;
+  }
+
+  return formulaStr.replace(
+    /(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?([A-Za-z]{1,3})(\d{1,4})/g,
+    (match, qTab, uTab, colLetters, rowDigits) => {
+      const tab = qTab || uTab;
+      if (tab && targetTabName) {
+        if (tab.trim().toLowerCase() !== targetTabName.trim().toLowerCase()) {
+          return match;
+        }
+      }
+      const col = letterToCol(colLetters);
+      const row = parseInt(rowDigits, 10);
+      const shifted = shiftSingleCellRef(col, row, op);
+      if (shifted === '#REF!') {
+        return tab ? (qTab ? `'${tab}'!#REF!` : `${tab}!#REF!`) : '#REF!';
+      }
+      if (tab) {
+        const formattedTab = qTab ? `'${tab}'` : tab;
+        return `${formattedTab}!${shifted}`;
+      }
+      return shifted;
+    }
+  );
+}
+
+/**
+ * Shifts document block cell variable tokens so document data remains accurately bound
+ * to the exact same cell data when rows or columns are inserted, deleted, or shifted.
+ */
+export function shiftBlocksCellReferences(
+  blocks: SecBlock[],
+  op: CellShiftOperation,
+  targetTabName?: string
+): { updatedBlocks: SecBlock[]; shiftedCount: number } {
+  if (!blocks || !Array.isArray(blocks) || blocks.length === 0) {
+    return { updatedBlocks: blocks || [], shiftedCount: 0 };
+  }
+
+  let shiftedCount = 0;
+
+  const transformText = (text: string): string => {
+    if (!text || typeof text !== 'string') return text;
+
+    return text.replace(CELL_VARIABLE_REGEX, (match, qTab, uTab, cellRef, fallback) => {
+      const tab = qTab || uTab;
+      if (tab && targetTabName) {
+        if (tab.trim().toLowerCase() !== targetTabName.trim().toLowerCase()) {
+          return match;
+        }
+      }
+
+      const parsed = parseCellRef(cellRef);
+      if (!parsed) return match;
+
+      const shifted = shiftSingleCellRef(parsed.colIndex, parsed.rowIndex, op);
+
+      if (shifted === '#REF!') {
+        shiftedCount++;
+        const tabPrefix = tab ? (qTab ? `'${tab}'!` : `${tab}!`) : '';
+        return `@${tabPrefix}#REF!{#REF!}`;
+      }
+
+      if (shifted !== cellRef.toUpperCase()) {
+        shiftedCount++;
+        const tabPrefix = tab ? (qTab ? `'${tab}'!` : `${tab}!`) : '';
+        const fallbackPart = fallback !== undefined && fallback !== '' ? `{${fallback}}` : '';
+        return `@${tabPrefix}${shifted}${fallbackPart}`;
+      }
+
+      return match;
+    });
+  };
+
+  const updatedBlocks = blocks.map((b) => {
+    if (b.type === 'paragraph' || b.type === 'heading') {
+      const newText = transformText(b.text);
+      if (newText !== b.text) {
+        return { ...b, text: newText, updatedAt: new Date().toISOString() };
+      }
+    } else if (b.type === 'callout') {
+      const newContent = transformText(b.content);
+      const newTitle = b.title ? transformText(b.title) : b.title;
+      if (newContent !== b.content || newTitle !== b.title) {
+        return { ...b, content: newContent, title: newTitle, updatedAt: new Date().toISOString() };
+      }
+    } else if (b.type === 'financial_table' && Array.isArray(b.rows)) {
+      let rowChanged = false;
+      const newRows = b.rows.map((r) => {
+        if (Array.isArray(r.cells)) {
+          let cellChanged = false;
+          const newCells = r.cells.map((c) => {
+            if (typeof c === 'string') {
+              const updated = transformText(c);
+              if (updated !== c) {
+                cellChanged = true;
+                rowChanged = true;
+                return updated;
+              }
+            }
+            return c;
+          });
+          if (cellChanged) return { ...r, cells: newCells };
+        }
+        return r;
+      });
+      if (rowChanged) {
+        return { ...b, rows: newRows, updatedAt: new Date().toISOString() };
+      }
+    }
+    return b;
+  });
+
+  return { updatedBlocks, shiftedCount };
+}
+
+/**
  * Inserts a blank row at the specified 1-based row index in the active tab,
  * shifting all existing cells at or below that row down by 1.
  */
@@ -772,6 +985,7 @@ export function insertRowAtIndex(
   const withTabs = ensureSpreadsheetTabs(sheet);
   const activeId = withTabs.activeTabId;
   const actualRow = position === 'below' ? targetRow + 1 : targetRow;
+  const op: CellShiftOperation = { type: 'insert_row', targetRow: actualRow };
 
   const updatedTabs = (withTabs.tabs || []).map((t) => {
     if (t.id === activeId) {
@@ -782,10 +996,14 @@ export function insertRowAtIndex(
           newCells[cellRef] = val;
           continue;
         }
+        let cellVal = val;
+        if (typeof cellVal === 'string' && cellVal.startsWith('=')) {
+          cellVal = shiftFormulaInString(cellVal, op, t.name);
+        }
         if (parsed.rowIndex >= actualRow) {
-          newCells[`${parsed.colLetter}${parsed.rowIndex + 1}`] = val;
+          newCells[`${parsed.colLetter}${parsed.rowIndex + 1}`] = cellVal;
         } else {
-          newCells[cellRef] = val;
+          newCells[cellRef] = cellVal;
         }
       }
       return {
@@ -817,6 +1035,7 @@ export function deleteRowAtIndex(
 ): AttachedSpreadsheet {
   const withTabs = ensureSpreadsheetTabs(sheet);
   const activeId = withTabs.activeTabId;
+  const op: CellShiftOperation = { type: 'delete_row', targetRow };
 
   const updatedTabs = (withTabs.tabs || []).map((t) => {
     if (t.id === activeId) {
@@ -828,12 +1047,16 @@ export function deleteRowAtIndex(
           newCells[cellRef] = val;
           continue;
         }
+        let cellVal = val;
+        if (typeof cellVal === 'string' && cellVal.startsWith('=')) {
+          cellVal = shiftFormulaInString(cellVal, op, t.name);
+        }
         if (parsed.rowIndex === targetRow) {
           continue;
         } else if (parsed.rowIndex > targetRow) {
-          newCells[`${parsed.colLetter}${parsed.rowIndex - 1}`] = val;
+          newCells[`${parsed.colLetter}${parsed.rowIndex - 1}`] = cellVal;
         } else {
-          newCells[cellRef] = val;
+          newCells[cellRef] = cellVal;
         }
       }
       return {
@@ -867,6 +1090,7 @@ export function insertColAtIndex(
   const withTabs = ensureSpreadsheetTabs(sheet);
   const activeId = withTabs.activeTabId;
   const actualCol = position === 'right' ? targetCol + 1 : targetCol;
+  const op: CellShiftOperation = { type: 'insert_col', targetCol: actualCol };
 
   const updatedTabs = (withTabs.tabs || []).map((t) => {
     if (t.id === activeId) {
@@ -878,11 +1102,15 @@ export function insertColAtIndex(
           newCells[cellRef] = val;
           continue;
         }
+        let cellVal = val;
+        if (typeof cellVal === 'string' && cellVal.startsWith('=')) {
+          cellVal = shiftFormulaInString(cellVal, op, t.name);
+        }
         if (parsed.colIndex >= actualCol) {
           const shiftedColLetter = colToLetter(parsed.colIndex + 1);
-          newCells[`${shiftedColLetter}${parsed.rowIndex}`] = val;
+          newCells[`${shiftedColLetter}${parsed.rowIndex}`] = cellVal;
         } else {
-          newCells[cellRef] = val;
+          newCells[cellRef] = cellVal;
         }
       }
 
@@ -927,6 +1155,7 @@ export function deleteColAtIndex(
 ): AttachedSpreadsheet {
   const withTabs = ensureSpreadsheetTabs(sheet);
   const activeId = withTabs.activeTabId;
+  const op: CellShiftOperation = { type: 'delete_col', targetCol };
 
   const updatedTabs = (withTabs.tabs || []).map((t) => {
     if (t.id === activeId) {
@@ -939,13 +1168,17 @@ export function deleteColAtIndex(
           newCells[cellRef] = val;
           continue;
         }
+        let cellVal = val;
+        if (typeof cellVal === 'string' && cellVal.startsWith('=')) {
+          cellVal = shiftFormulaInString(cellVal, op, t.name);
+        }
         if (parsed.colIndex === targetCol) {
           continue;
         } else if (parsed.colIndex > targetCol) {
           const shiftedColLetter = colToLetter(parsed.colIndex - 1);
-          newCells[`${shiftedColLetter}${parsed.rowIndex}`] = val;
+          newCells[`${shiftedColLetter}${parsed.rowIndex}`] = cellVal;
         } else {
-          newCells[cellRef] = val;
+          newCells[cellRef] = cellVal;
         }
       }
 
@@ -1142,3 +1375,245 @@ export function pasteDataIntoGrid(
 
   return { spreadsheet: nextSheet, cellsUpdated };
 }
+
+/**
+ * Shifts cells in targetRow at and to the right of targetCol to the right by 1 column.
+ * The cell at (targetCol, targetRow) becomes empty.
+ */
+export function shiftCellsRight(
+  sheet: AttachedSpreadsheet,
+  targetCol: number,
+  targetRow: number
+): AttachedSpreadsheet {
+  const withTabs = ensureSpreadsheetTabs(sheet);
+  const activeId = withTabs.activeTabId;
+  const op: CellShiftOperation = { type: 'shift_right', targetCol, targetRow };
+
+  const updatedTabs = (withTabs.tabs || []).map((t) => {
+    if (t.id === activeId) {
+      let maxColUsed = t.colCount || 10;
+      const newCells: Record<string, string | number | boolean> = {};
+
+      for (const [cellRef, val] of Object.entries(t.cells || {})) {
+        const parsed = parseCellRef(cellRef);
+        if (!parsed) {
+          newCells[cellRef] = val;
+          continue;
+        }
+
+        let cellVal = val;
+        if (typeof cellVal === 'string' && cellVal.startsWith('=')) {
+          cellVal = shiftFormulaInString(cellVal, op, t.name);
+        }
+
+        if (parsed.rowIndex === targetRow && parsed.colIndex >= targetCol) {
+          const nextCol = parsed.colIndex + 1;
+          if (nextCol > maxColUsed) maxColUsed = nextCol;
+          newCells[`${colToLetter(nextCol)}${parsed.rowIndex}`] = cellVal;
+        } else {
+          newCells[cellRef] = cellVal;
+        }
+      }
+
+      const nextColCount = Math.max(t.colCount || 10, maxColUsed);
+      const colLetters: string[] = [];
+      const headers = t.headers ? [...t.headers] : [];
+      while (headers.length < nextColCount) {
+        headers.push(`Column ${colToLetter(headers.length + 1)}`);
+      }
+      for (let c = 1; c <= nextColCount; c++) {
+        colLetters.push(colToLetter(c));
+      }
+
+      return {
+        ...t,
+        colCount: nextColCount,
+        maxCol: colToLetter(nextColCount),
+        colLetters,
+        headers,
+        cells: newCells
+      };
+    }
+    return t;
+  });
+
+  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
+  return {
+    ...withTabs,
+    tabs: updatedTabs,
+    colCount: activeTab.colCount,
+    maxCol: activeTab.maxCol,
+    colLetters: activeTab.colLetters,
+    headers: activeTab.headers,
+    cells: activeTab.cells,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Shifts cells in targetCol at and below targetRow down by 1 row.
+ * The cell at (targetCol, targetRow) becomes empty.
+ */
+export function shiftCellsDown(
+  sheet: AttachedSpreadsheet,
+  targetCol: number,
+  targetRow: number
+): AttachedSpreadsheet {
+  const withTabs = ensureSpreadsheetTabs(sheet);
+  const activeId = withTabs.activeTabId;
+  const op: CellShiftOperation = { type: 'shift_down', targetCol, targetRow };
+
+  const updatedTabs = (withTabs.tabs || []).map((t) => {
+    if (t.id === activeId) {
+      let maxRowUsed = t.rowCount || 30;
+      const newCells: Record<string, string | number | boolean> = {};
+
+      for (const [cellRef, val] of Object.entries(t.cells || {})) {
+        const parsed = parseCellRef(cellRef);
+        if (!parsed) {
+          newCells[cellRef] = val;
+          continue;
+        }
+
+        let cellVal = val;
+        if (typeof cellVal === 'string' && cellVal.startsWith('=')) {
+          cellVal = shiftFormulaInString(cellVal, op, t.name);
+        }
+
+        if (parsed.colIndex === targetCol && parsed.rowIndex >= targetRow) {
+          const nextRow = parsed.rowIndex + 1;
+          if (nextRow > maxRowUsed) maxRowUsed = nextRow;
+          newCells[`${parsed.colLetter}${nextRow}`] = cellVal;
+        } else {
+          newCells[cellRef] = cellVal;
+        }
+      }
+
+      const nextRowCount = Math.max(t.rowCount || 30, maxRowUsed);
+      return {
+        ...t,
+        rowCount: nextRowCount,
+        cells: newCells
+      };
+    }
+    return t;
+  });
+
+  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
+  return {
+    ...withTabs,
+    tabs: updatedTabs,
+    rowCount: activeTab.rowCount,
+    cells: activeTab.cells,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Shifts cells in targetRow to the left starting after targetCol.
+ */
+export function shiftCellsLeft(
+  sheet: AttachedSpreadsheet,
+  targetCol: number,
+  targetRow: number
+): AttachedSpreadsheet {
+  const withTabs = ensureSpreadsheetTabs(sheet);
+  const activeId = withTabs.activeTabId;
+  const op: CellShiftOperation = { type: 'shift_left', targetCol, targetRow };
+
+  const updatedTabs = (withTabs.tabs || []).map((t) => {
+    if (t.id === activeId) {
+      const newCells: Record<string, string | number | boolean> = {};
+
+      for (const [cellRef, val] of Object.entries(t.cells || {})) {
+        const parsed = parseCellRef(cellRef);
+        if (!parsed) {
+          newCells[cellRef] = val;
+          continue;
+        }
+
+        let cellVal = val;
+        if (typeof cellVal === 'string' && cellVal.startsWith('=')) {
+          cellVal = shiftFormulaInString(cellVal, op, t.name);
+        }
+
+        if (parsed.rowIndex === targetRow && parsed.colIndex === targetCol) {
+          continue;
+        } else if (parsed.rowIndex === targetRow && parsed.colIndex > targetCol) {
+          newCells[`${colToLetter(parsed.colIndex - 1)}${parsed.rowIndex}`] = cellVal;
+        } else {
+          newCells[cellRef] = cellVal;
+        }
+      }
+
+      return {
+        ...t,
+        cells: newCells
+      };
+    }
+    return t;
+  });
+
+  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
+  return {
+    ...withTabs,
+    tabs: updatedTabs,
+    cells: activeTab.cells,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Shifts cells in targetCol up starting after targetRow.
+ */
+export function shiftCellsUp(
+  sheet: AttachedSpreadsheet,
+  targetCol: number,
+  targetRow: number
+): AttachedSpreadsheet {
+  const withTabs = ensureSpreadsheetTabs(sheet);
+  const activeId = withTabs.activeTabId;
+  const op: CellShiftOperation = { type: 'shift_up', targetCol, targetRow };
+
+  const updatedTabs = (withTabs.tabs || []).map((t) => {
+    if (t.id === activeId) {
+      const newCells: Record<string, string | number | boolean> = {};
+
+      for (const [cellRef, val] of Object.entries(t.cells || {})) {
+        const parsed = parseCellRef(cellRef);
+        if (!parsed) {
+          newCells[cellRef] = val;
+          continue;
+        }
+
+        let cellVal = val;
+        if (typeof cellVal === 'string' && cellVal.startsWith('=')) {
+          cellVal = shiftFormulaInString(cellVal, op, t.name);
+        }
+
+        if (parsed.colIndex === targetCol && parsed.rowIndex === targetRow) {
+          continue;
+        } else if (parsed.colIndex === targetCol && parsed.rowIndex > targetRow) {
+          newCells[`${parsed.colLetter}${parsed.rowIndex - 1}`] = cellVal;
+        } else {
+          newCells[cellRef] = cellVal;
+        }
+      }
+
+      return {
+        ...t,
+        cells: newCells
+      };
+    }
+    return t;
+  });
+
+  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
+  return {
+    ...withTabs,
+    tabs: updatedTabs,
+    cells: activeTab.cells,
+    updatedAt: new Date().toISOString()
+  };
+}
+

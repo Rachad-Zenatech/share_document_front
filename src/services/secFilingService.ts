@@ -1183,13 +1183,20 @@ export const secFilingService = {
     return null;
   },
 
-  updateAttachedSpreadsheet(sheet: AttachedSpreadsheet, docId?: string): SecFilingDocument {
+  updateAttachedSpreadsheet(
+    sheet: AttachedSpreadsheet,
+    docId?: string,
+    shiftedBlocks?: SecBlock[]
+  ): SecFilingDocument {
     // Save to central Spreadsheet Hub registry
     this.saveSpreadsheet(sheet);
 
     const doc = docId ? this.getDocumentContent(docId) : this.getMainDocument();
     doc.attachedSpreadsheet = sheet;
     doc.attachedSpreadsheetId = sheet.id;
+    if (shiftedBlocks && Array.isArray(shiftedBlocks)) {
+      doc.blocks = shiftedBlocks;
+    }
     doc.updatedAt = new Date().toISOString();
     this.saveMainDocument(doc, true);
     broadcastSync('SPREADSHEET_UPDATED', { sheetId: sheet.id });
