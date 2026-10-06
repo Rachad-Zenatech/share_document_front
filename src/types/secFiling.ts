@@ -1,3 +1,5 @@
+import type { ContributorPermissions } from './collaborator';
+
 export type SecBlockType =
   | 'heading'
   | 'paragraph'
@@ -238,6 +240,49 @@ export interface AttachedSpreadsheet {
   description?: string;
 }
 
+/** Column descriptor stored with a document's spreadsheet in the backend. */
+export interface AttachedSpreadsheetColumnRecord {
+  key: string;
+  title: string;
+  width?: number;
+  type?: string;
+}
+
+/** Row of `sec_attached_spreadsheets` as returned by the backend. */
+export interface AttachedSpreadsheetRecord {
+  id: string;
+  documentId: string;
+  name: string;
+  sheetName: string;
+  totalRows: number;
+  totalColumns: number;
+  columns: AttachedSpreadsheetColumnRecord[];
+  cells: Record<string, string | number | boolean>;
+  tabs: SpreadsheetTab[];
+  activeTabId?: string | null;
+  sourceSheetId?: string | null;
+  updatedAt?: string | null;
+}
+
+/** GET /api/sec-filings/documents/{id}/spreadsheet; `spreadsheet` is null when nothing is linked. */
+export interface AttachedSpreadsheetResponse {
+  documentId: string;
+  spreadsheet: AttachedSpreadsheetRecord | null;
+}
+
+/** PUT /api/sec-filings/documents/{id}/spreadsheet body. */
+export interface AttachedSpreadsheetPayload {
+  name: string;
+  sheetName: string;
+  totalRows: number;
+  totalColumns: number;
+  columns: AttachedSpreadsheetColumnRecord[];
+  cells: Record<string, string | number | boolean>;
+  tabs: SpreadsheetTab[];
+  activeTabId?: string;
+  sourceSheetId: string;
+}
+
 export interface SecFilingDocument {
   id: string;
   title: string;
@@ -280,6 +325,7 @@ export interface SecChangeProposal {
   };
   assignedSection?: string;
   inviteToken?: string;
+  permissions?: ContributorPermissions;
   submissionNotes?: string;
   submittedAt?: string;
   reviewNotes?: string;

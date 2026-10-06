@@ -122,6 +122,12 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const [inlineEditingCellRef, setInlineEditingCellRef] = useState<string | null>(null);
   const [inlineEditingValue, setInlineEditingValue] = useState<string>('');
   const inlineInputRef = useRef<HTMLInputElement>(null);
+  const formulaCacheRef = useRef<Map<string, number | string>>(new Map());
+
+  // Invalidate formula cache when cell values change
+  useEffect(() => {
+    formulaCacheRef.current.clear();
+  }, [currentCells]);
 
   // Column header editing state
   const [editingColIdx, setEditingColIdx] = useState<number | null>(null);
@@ -197,13 +203,16 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     };
   }, []);
 
-  // Update searchable text for browser find (Ctrl+F)
+  // Update searchable text for browser find (Ctrl+F) debounced so it does not block modal open or rendering
   useEffect(() => {
-    const lines = Object.entries(currentCells).map(([ref, val]) => {
-      const formatted = formatCellValue(val);
-      return `${ref}: ${formatted}`;
-    });
-    setSearchableText(lines.join('\n'));
+    const timer = setTimeout(() => {
+      const lines = Object.entries(currentCells).map(([ref, val]) => {
+        const formatted = formatCellValue(val);
+        return `${ref}: ${formatted}`;
+      });
+      setSearchableText(lines.join('\n'));
+    }, 1200);
+    return () => clearTimeout(timer);
   }, [currentCells]);
 
   // Dismiss context menu on any click outside.
@@ -211,9 +220,8 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   // that opened the menu doesn't immediately close it.
   useEffect(() => {
     if (!contextMenu?.open) return;
-    let timerId: ReturnType<typeof setTimeout>;
     const handleCloseContextMenu = () => setContextMenu(null);
-    timerId = setTimeout(() => {
+    const timerId = setTimeout(() => {
       window.addEventListener('click', handleCloseContextMenu);
       window.addEventListener('contextmenu', handleCloseContextMenu);
     }, 0);
@@ -586,6 +594,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   // -----------------------------------------------------------------------
   const evaluateFormula = useCallback((formula: string): string | number => {
     if (!formula.startsWith('=')) return formula;
+    const cached = formulaCacheRef.current.get(formula);
+    if (cached !== undefined) return cached;
+
     const expr = formula.slice(1).trim();
     const cells = currentCells;
 
@@ -689,13 +700,18 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
     try {
       const result = evalExpr(expr);
+      let finalResult: number | string;
       if (typeof result === 'number') {
-        if (!isFinite(result)) return '#DIV/0!';
+        if (!isFinite(result)) finalResult = '#DIV/0!';
         // Format: strip unnecessary decimal zeros
-        return parseFloat(result.toFixed(10));
+        else finalResult = parseFloat(result.toFixed(10));
+      } else {
+        finalResult = String(result);
       }
-      return String(result);
+      formulaCacheRef.current.set(formula, finalResult);
+      return finalResult;
     } catch {
+      formulaCacheRef.current.set(formula, '#ERROR');
       return '#ERROR';
     }
   }, [currentCells]);
@@ -1133,7 +1149,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[96vw] xl:max-w-[1440px] h-[92vh] p-0 gap-0 overflow-hidden flex flex-col bg-white dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 shadow-2xl">
+      <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[96vw] xl:max-w-[1440px] h-[92vh] p-0 gap-0 overflow-hidden flex flex-col bg-white dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 shadow-2xl">
         {/* Interactive Cell Picker Banner */}
         {isPickerMode && (
           <div className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white flex items-center justify-between text-xs shadow-inner">

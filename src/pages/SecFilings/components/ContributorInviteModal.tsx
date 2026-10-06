@@ -12,25 +12,14 @@ import {
   GitBranch
 } from 'lucide-react';
 import type { SecFilingDocument, SecChangeProposal } from '../../../types/secFiling';
+import type { ContributorPermissions } from '../../../types/collaborator';
+import { getProposalInviteUrl } from '../../../services/secFilingService';
 import { Dialog, DialogContent, DialogTitle } from '../../../components/ui/dialog';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Badge } from '../../../components/ui/badge';
+import { Checkbox } from '../../../components/ui/checkbox';
 import { toast } from 'sonner';
-
-export function getProposalInviteUrl(proposal: SecChangeProposal): string {
-  const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}/sec-filings/contribute` : '/sec-filings/contribute';
-  const queryParams = new URLSearchParams({
-    contributor: 'true',
-    proposalId: proposal.id,
-    name: proposal.author.name,
-    role: proposal.author.role,
-    section: proposal.assignedSection || 'ALL',
-    title: proposal.title,
-    ...(proposal.changeSummary.description ? { desc: proposal.changeSummary.description } : {})
-  });
-  return `${baseUrl}?${queryParams.toString()}`;
-}
 
 interface ContributorInviteModalProps {
   open: boolean;
@@ -45,6 +34,7 @@ interface ContributorInviteModalProps {
     contributorEmail?: string;
     assignedSection?: string;
     description?: string;
+    permissions: ContributorPermissions;
   }) => { proposal: SecChangeProposal; inviteUrl: string };
   onOpenProposal: (proposalId: string) => void;
   onForkProposal?: (sourceProposalId: string) => SecChangeProposal | null;
@@ -67,6 +57,10 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
   const [taskTitle, setTaskTitle] = useState('Note 7 Debt Covenants & Legal Disclosures');
   const [assignedSection, setAssignedSection] = useState('ALL');
   const [description, setDescription] = useState('Please review and insert the finalized Q2 debenture terms.');
+  const [permissions, setPermissions] = useState<ContributorPermissions>({
+    canEditDocument: true,
+    canEditSpreadsheet: false
+  });
 
   const [generatedInvite, setGeneratedInvite] = useState<{
     proposal: SecChangeProposal;
@@ -87,7 +81,8 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
       contributorRole: contributorRole.trim(),
       contributorEmail: contributorEmail.trim(),
       assignedSection: assignedSection === 'ALL' ? undefined : assignedSection,
-      description: description.trim()
+      description: description.trim(),
+      permissions
     });
 
     setGeneratedInvite(res);
@@ -315,6 +310,39 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
                 />
               </div>
 
+              {/* Access Permissions */}
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 block mb-1">
+                  Access Permissions
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {(
+                    [
+                      { key: 'canEditDocument', label: 'Can edit document', hint: 'Edit blocks in the SEC filing draft' },
+                      { key: 'canEditSpreadsheet', label: 'Can edit spreadsheet', hint: 'Change cells in the attached spreadsheet' }
+                    ] as const
+                  ).map((opt) => (
+                    <label
+                      key={opt.key}
+                      className="flex items-start gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/70 dark:bg-zinc-800/40 cursor-pointer hover:border-blue-500 transition-all"
+                    >
+                      <Checkbox
+                        checked={permissions[opt.key]}
+                        onCheckedChange={(checked) => {
+                          setPermissions((prev) => ({ ...prev, [opt.key]: checked === true }));
+                          setGeneratedInvite(null);
+                        }}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        <span className="block font-semibold text-slate-800 dark:text-zinc-200">{opt.label}</span>
+                        <span className="block text-[10px] text-slate-400">{opt.hint}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               {/* Generate Link Button */}
               {!generatedInvite ? (
                 <Button
@@ -419,15 +447,25 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
                               Scope: {p.assignedSection}
                             </Badge>
                           )}
+                          {p.permissions && (
+                            <>
+                              <Badge variant="outline" className="text-[9px]">
+                                Document: {p.permissions.canEditDocument ? 'Edit' : 'View only'}
+                              </Badge>
+                              <Badge variant="outline" className="text-[9px]">
+                                Spreadsheet: {p.permissions.canEditSpreadsheet ? 'Edit' : 'View only'}
+                              </Badge>
+                            </>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-zinc-400">
                           <span className="font-semibold text-slate-700 dark:text-zinc-300">
                             {p.author.name}
                           </span>
-                          <span>â€¢</span>
+                          <span>•</span>
                           <span>{p.author.role}</span>
-                          <span>â€¢</span>
+                          <span>•</span>
                           <span className="flex items-center gap-0.5">
                             <Clock className="w-3 h-3 text-slate-400" />
                             {new Date(p.updatedAt).toLocaleDateString()}

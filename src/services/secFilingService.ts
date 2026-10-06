@@ -8,11 +8,14 @@ import type {
   SecChangeCategory,
   SecChangeTag,
   SecDocumentSummary,
-  AttachedSpreadsheet
+  AttachedSpreadsheet,
+  AttachedSpreadsheetPayload,
+  AttachedSpreadsheetRecord,
+  AttachedSpreadsheetResponse
 } from '../types/secFiling';
 import { INITIAL_SEC_FILING_DOC, INITIAL_PROPOSALS, INITIAL_VERSION_HISTORY } from '../data/initialSecFilingData';
 import { DEFAULT_TRIAL_BALANCE_SHEET } from '../data/defaultTrialBalanceSheet';
-import { formatCellValue } from '../utils/documentVariables';
+import { colToLetter, formatCellValue } from '../utils/documentVariables';
 import {
   generateOnboardingChecklistDoc,
   generateOffboardingChecklistDoc,
@@ -22,6 +25,7 @@ import {
   generate8KDoc,
   generateProjectProposalDoc
 } from '../data/secDocumentTemplates';
+import type { ContributorPermissions } from '../types/collaborator';
 import { apiClient } from './apiClient';
 
 
@@ -265,6 +269,21 @@ const STORAGE_KEYS = {
   ACTIVE_DOC_ID: 'sec_filing_active_doc_id',
   SPREADSHEETS: 'sec_filing_spreadsheets_registry_v2',
 };
+
+// In-memory caches to avoid blocking the main thread with repetitive 2MB JSON.parse/stringify
+let cachedSpreadsheetsList: AttachedSpreadsheet[] | null = null;
+let cachedDocumentsList: SecDocumentSummary[] | null = null;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEYS.SPREADSHEETS) {
+      cachedSpreadsheetsList = null;
+    }
+    if (e.key === STORAGE_KEYS.DOCUMENTS_LIST || (e.key && e.key.startsWith('sec_doc_content_'))) {
+      cachedDocumentsList = null;
+    }
+  });
+}
 
 
 // Cross-tab synchronization via BroadcastChannel (single reused instance)
@@ -552,7 +571,114 @@ export function getProposalInviteUrl(proposal: SecChangeProposal): string {
   if (proposal.inviteToken) {
     queryParams.set('token', proposal.inviteToken);
   }
+  if (proposal.permissions) {
+    queryParams.set('docEdit', String(proposal.permissions.canEditDocument));
+    queryParams.set('sheetEdit', String(proposal.permissions.canEditSpreadsheet));
+  }
   return `${baseUrl}?${queryParams.toString()}`;
+}
+
+// ---------------------------------------------------------------------------
+// Backend persistence of document <-> spreadsheet links (sec_attached_spreadsheets)
+// ---------------------------------------------------------------------------
+
+const SPREADSHEET_SYNC_DEBOUNCE_MS = 800;
+const pendingSpreadsheetPushes = new Map<
+  string,
+  { timer: ReturnType<typeof setTimeout>; payload: AttachedSpreadsheetPayload }
+>();
+// Last write (PUT/DELETE) issued per document, so reads can wait for it to land.
+const inFlightSpreadsheetWrites = new Map<string, Promise<unknown>>();
+
+function trackSpreadsheetWrite(docId: string, write: Promise<unknown>, failureMessage: string): void {
+  const tracked = write.catch((err) => console.warn(failureMessage, err));
+  inFlightSpreadsheetWrites.set(docId, tracked);
+  tracked.finally(() => {
+    if (inFlightSpreadsheetWrites.get(docId) === tracked) inFlightSpreadsheetWrites.delete(docId);
+  });
+}
+
+function sendSpreadsheetPush(docId: string, payload: AttachedSpreadsheetPayload): void {
+  trackSpreadsheetWrite(
+    docId,
+    apiClient.put(spreadsheetEndpoint(docId), payload, { skipGlobalLoading: true }),
+    `Failed to save spreadsheet link for ${docId} to backend`
+  );
+}
+
+/** Sends any debounced push now and waits for outstanding writes for this document. */
+async function settleSpreadsheetWrites(docId: string): Promise<void> {
+  const pending = pendingSpreadsheetPushes.get(docId);
+  if (pending) {
+    clearTimeout(pending.timer);
+    pendingSpreadsheetPushes.delete(docId);
+    sendSpreadsheetPush(docId, pending.payload);
+  }
+  await inFlightSpreadsheetWrites.get(docId);
+}
+
+function spreadsheetEndpoint(docId: string): string {
+  return `/api/sec-filings/documents/${encodeURIComponent(docId)}/spreadsheet`;
+}
+
+function toSpreadsheetPayload(sheet: AttachedSpreadsheet): AttachedSpreadsheetPayload {
+  const letters = sheet.colLetters?.length
+    ? sheet.colLetters
+    : Array.from({ length: sheet.colCount || 0 }, (_, i) => colToLetter(i + 1));
+  return {
+    name: sheet.fileName,
+    sheetName: sheet.sheetName,
+    totalRows: sheet.rowCount,
+    totalColumns: sheet.colCount,
+    columns: letters.map((key, i) => ({ key, title: String(sheet.headers?.[i] ?? key) })),
+    cells: sheet.cells || {},
+    tabs: sheet.tabs || [],
+    activeTabId: sheet.activeTabId,
+    sourceSheetId: sheet.id
+  };
+}
+
+function fromSpreadsheetRecord(record: AttachedSpreadsheetRecord): AttachedSpreadsheet {
+  const colLetters = (record.columns || []).map((c) => c.key);
+  return {
+    id: record.sourceSheetId || record.id,
+    fileName: record.name,
+    sheetName: record.sheetName,
+    rowCount: record.totalRows,
+    colCount: record.totalColumns,
+    maxCol: colLetters[colLetters.length - 1] || colToLetter(record.totalColumns || 1),
+    colLetters: colLetters.length ? colLetters : undefined,
+    headers: colLetters.length ? record.columns.map((c) => c.title) : undefined,
+    cells: record.cells || {},
+    tabs: record.tabs?.length ? record.tabs : undefined,
+    activeTabId: record.activeTabId || undefined,
+    updatedAt: record.updatedAt || undefined
+  };
+}
+
+/** Debounced upsert so rapid cell edits collapse into one PUT per document. */
+function queueSpreadsheetPush(docId: string, sheet: AttachedSpreadsheet): void {
+  const existing = pendingSpreadsheetPushes.get(docId);
+  if (existing) clearTimeout(existing.timer);
+  const payload = toSpreadsheetPayload(sheet);
+  const timer = setTimeout(() => {
+    pendingSpreadsheetPushes.delete(docId);
+    sendSpreadsheetPush(docId, payload);
+  }, SPREADSHEET_SYNC_DEBOUNCE_MS);
+  pendingSpreadsheetPushes.set(docId, { timer, payload });
+}
+
+function removeSpreadsheetFromBackend(docId: string): void {
+  const existing = pendingSpreadsheetPushes.get(docId);
+  if (existing) {
+    clearTimeout(existing.timer);
+    pendingSpreadsheetPushes.delete(docId);
+  }
+  trackSpreadsheetWrite(
+    docId,
+    apiClient.delete(spreadsheetEndpoint(docId), { skipGlobalLoading: true }),
+    `Failed to remove spreadsheet link for ${docId} from backend`
+  );
 }
 
 export const secFilingService = {
@@ -560,6 +686,14 @@ export const secFilingService = {
 
   getMainDocument(): SecFilingDocument {
     if (pendingMainDocToSave) {
+      const allSheets = this.getAllSpreadsheets();
+      const match = allSheets.find((s) => s.id === pendingMainDocToSave!.attachedSpreadsheetId || s.assignedDocIds?.includes(pendingMainDocToSave!.id));
+      if (match) {
+        pendingMainDocToSave.attachedSpreadsheetId = match.id;
+        pendingMainDocToSave.attachedSpreadsheet = match;
+      } else if (!pendingMainDocToSave.attachedSpreadsheetId) {
+        pendingMainDocToSave.attachedSpreadsheet = null;
+      }
       return pendingMainDocToSave;
     }
     const saved = localStorage.getItem(STORAGE_KEYS.MAIN_DOC) || localStorage.getItem('sec_filing_main_doc_v2_full') || localStorage.getItem('sec_filing_main_doc');
@@ -637,6 +771,9 @@ export const secFilingService = {
   },
 
   getDocumentsList(): SecDocumentSummary[] {
+    if (cachedDocumentsList) {
+      return cachedDocumentsList;
+    }
     const mainDoc = this.getMainDocument();
     const saved = localStorage.getItem(STORAGE_KEYS.DOCUMENTS_LIST);
     let list: SecDocumentSummary[] = [];
@@ -811,6 +948,7 @@ export const secFilingService = {
     } catch (e) {
       console.warn('Could not save documents list', e);
     }
+    cachedDocumentsList = deduplicatedList;
     return deduplicatedList;
   },
 
@@ -853,6 +991,7 @@ export const secFilingService = {
   },
 
   saveDocumentsList(list: SecDocumentSummary[]): void {
+    cachedDocumentsList = list;
     try {
       localStorage.setItem(STORAGE_KEYS.DOCUMENTS_LIST, JSON.stringify(list));
       broadcastSync('DOCUMENTS_LIST_UPDATED', { count: list.length });
@@ -873,7 +1012,10 @@ export const secFilingService = {
 
   getDocumentContent(id: string): SecFilingDocument {
     if (id === this.getActiveDocumentId() || id === 'sec-doc-zenatech-2026-q2') {
-      return this.getMainDocument();
+      // Only short-circuit when the main doc really is this document; otherwise
+      // fall through so we don't hand back another doc (and its spreadsheet link).
+      const main = this.getMainDocument();
+      if (main.id === id) return main;
     }
     const customKey = `sec_doc_content_${id}`;
     const customSaved = typeof localStorage !== 'undefined' ? localStorage.getItem(customKey) : null;
@@ -918,6 +1060,9 @@ export const secFilingService = {
   },
 
   getAllSpreadsheets(): AttachedSpreadsheet[] {
+    if (cachedSpreadsheetsList) {
+      return cachedSpreadsheetsList;
+    }
     if (typeof localStorage === 'undefined') {
       return [{
         ...DEFAULT_TRIAL_BALANCE_SHEET,
@@ -933,6 +1078,7 @@ export const secFilingService = {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          cachedSpreadsheetsList = parsed;
           return parsed;
         }
       } catch {
@@ -955,6 +1101,7 @@ export const secFilingService = {
     } catch {
       // Ignore storage error
     }
+    cachedSpreadsheetsList = initialList;
     return initialList;
   },
 
@@ -977,15 +1124,17 @@ export const secFilingService = {
       list.unshift(updatedSheet);
     }
 
+    cachedSpreadsheetsList = list;
     try {
       localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
     } catch (e) {
       console.warn('Could not save spreadsheet registry', e);
     }
 
-    // Sync to all assigned documents in local storage
+    // Sync to all assigned documents in local storage and the backend
     if (sheet.assignedDocIds && sheet.assignedDocIds.length > 0) {
       for (const docId of sheet.assignedDocIds) {
+        queueSpreadsheetPush(docId, updatedSheet);
         try {
           const docKey = `sec_doc_content_${docId}`;
           const savedDoc = localStorage.getItem(docKey);
@@ -1012,7 +1161,12 @@ export const secFilingService = {
   },
 
   deleteSpreadsheet(sheetId: string): void {
-    const list = this.getAllSpreadsheets().filter((s) => s.id !== sheetId);
+    const allSheets = this.getAllSpreadsheets();
+    for (const docId of allSheets.find((s) => s.id === sheetId)?.assignedDocIds || []) {
+      removeSpreadsheetFromBackend(docId);
+    }
+    const list = allSheets.filter((s) => s.id !== sheetId);
+    cachedSpreadsheetsList = list;
     try {
       localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
     } catch (e) {
@@ -1054,9 +1208,11 @@ export const secFilingService = {
     if (sheetIdx < 0) return;
 
     const sheet = list[sheetIdx];
+    const previousDocIds = sheet.assignedDocIds || [];
     sheet.assignedDocIds = targetDocIds;
     sheet.updatedAt = new Date().toISOString();
     list[sheetIdx] = sheet;
+    cachedSpreadsheetsList = list;
 
     try {
       localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
@@ -1097,11 +1253,24 @@ export const secFilingService = {
       this.saveMainDocument(mainDoc, true);
     }
 
+    for (const docId of targetDocIds) {
+      queueSpreadsheetPush(docId, sheet);
+    }
+    for (const docId of previousDocIds) {
+      if (!targetDocIds.includes(docId)) removeSpreadsheetFromBackend(docId);
+    }
+
     broadcastSync('SPREADSHEET_ASSIGNMENT_CHANGED', { sheetId, targetDocIds });
   },
 
-  assignSpreadsheetToDocument(docId: string, sheetId: string | null): void {
+  assignSpreadsheetToDocument(
+    docId: string,
+    sheetId: string | null,
+    options: { syncBackend?: boolean } = {}
+  ): void {
+    const { syncBackend = true } = options;
     const allSheets = this.getAllSpreadsheets();
+    const assignedSheet = sheetId ? allSheets.find((s) => s.id === sheetId) || null : null;
     const updatedSheets = allSheets.map((s) => {
       const assigned = new Set(s.assignedDocIds || []);
       if (s.id === sheetId) {
@@ -1112,6 +1281,7 @@ export const secFilingService = {
       return { ...s, assignedDocIds: Array.from(assigned) };
     });
 
+    cachedSpreadsheetsList = updatedSheets;
     try {
       localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(updatedSheets));
     } catch (e) {
@@ -1119,68 +1289,141 @@ export const secFilingService = {
     }
 
     const docKey = `sec_doc_content_${docId}`;
+    let targetDoc: SecFilingDocument | null = null;
     const savedDoc = typeof localStorage !== 'undefined' ? localStorage.getItem(docKey) : null;
     if (savedDoc) {
       try {
-        const parsedDoc = JSON.parse(savedDoc);
-        if (sheetId) {
-          const assignedSheet = updatedSheets.find((s) => s.id === sheetId);
-          parsedDoc.attachedSpreadsheetId = sheetId;
-          parsedDoc.attachedSpreadsheet = assignedSheet || null;
-        } else {
-          parsedDoc.attachedSpreadsheetId = undefined;
-          parsedDoc.attachedSpreadsheet = null;
-        }
-        localStorage.setItem(docKey, JSON.stringify(parsedDoc));
+        targetDoc = JSON.parse(savedDoc);
       } catch {
-        // Ignore
+        targetDoc = null;
+      }
+    }
+    if (!targetDoc) {
+      if (docId === 'sec-doc-zenatech-v24-sarah-jenkins') {
+        targetDoc = generateSarahJenkinsMergedDoc();
+      } else if (docId === 'sec-doc-zenatech-10q-q2') {
+        targetDoc = generate10QDoc('ZenaTech, Inc. Form 10-Q (Q2 2026 Quarterly Report)');
+        targetDoc.id = docId;
+      } else if (docId === 'sec-doc-zenatech-2025-10k') {
+        targetDoc = generate10KDoc('ZenaTech, Inc. Form 10-K (Annual Comprehensive Audited Filing)');
+        targetDoc.id = docId;
+      } else if (docId === 'sec-doc-zenatech-8k-acq') {
+        targetDoc = generate8KDoc('ZenaTech, Inc. Form 8-K (Current Report — Strategic Acquisition)');
+        targetDoc.id = docId;
+      } else if (docId === 'doc-onboarding-1') {
+        targetDoc = generateOnboardingChecklistDoc('Onboarding');
+        targetDoc.id = docId;
+      } else if (docId === 'doc-offboarding-2') {
+        targetDoc = generateOffboardingChecklistDoc('Offboarding Checklist');
+        targetDoc.id = docId;
+      } else if (docId === 'sec-doc-zenatech-2026-q2') {
+        targetDoc = JSON.parse(JSON.stringify(INITIAL_SEC_FILING_DOC));
+      } else {
+        targetDoc = generateBlankDocument('Untitled Document');
+        targetDoc.id = docId;
+      }
+    }
+    const finalTargetDoc: SecFilingDocument = targetDoc || generateBlankDocument('Untitled Document');
+    finalTargetDoc.id = docId;
+
+    if (sheetId && assignedSheet) {
+      finalTargetDoc.attachedSpreadsheetId = sheetId;
+      finalTargetDoc.attachedSpreadsheet = assignedSheet;
+    } else {
+      finalTargetDoc.attachedSpreadsheetId = undefined;
+      finalTargetDoc.attachedSpreadsheet = null;
+    }
+    safeSetItem(docKey, JSON.stringify(finalTargetDoc));
+
+    const activeDocId = this.getActiveDocumentId();
+    const currentMain = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.MAIN_DOC) : null;
+    let mainObj: any = null;
+    if (currentMain) {
+      try {
+        mainObj = JSON.parse(currentMain);
+      } catch {
+        mainObj = null;
       }
     }
 
-    const mainDoc = this.getMainDocument();
-    if (mainDoc.id === docId) {
-      if (sheetId) {
-        const assignedSheet = updatedSheets.find((s) => s.id === sheetId);
-        mainDoc.attachedSpreadsheetId = sheetId;
-        mainDoc.attachedSpreadsheet = assignedSheet || null;
+    if (docId === activeDocId || (mainObj && mainObj.id === docId) || (pendingMainDocToSave && pendingMainDocToSave.id === docId)) {
+      safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(finalTargetDoc));
+      pendingMainDocToSave = finalTargetDoc;
+    }
+
+    if (syncBackend) {
+      if (sheetId && assignedSheet) {
+        queueSpreadsheetPush(docId, assignedSheet);
       } else {
-        mainDoc.attachedSpreadsheetId = undefined;
-        mainDoc.attachedSpreadsheet = null;
+        removeSpreadsheetFromBackend(docId);
       }
-      this.saveMainDocument(mainDoc, true);
     }
 
     broadcastSync('SPREADSHEET_ASSIGNMENT_CHANGED', { docId, sheetId });
   },
 
   getAttachedSpreadsheet(docId?: string): AttachedSpreadsheet | null {
-    const doc = docId ? this.getDocumentContent(docId) : this.getMainDocument();
-    return doc.attachedSpreadsheet || null;
-  },
+    const allSheets = this.getAllSpreadsheets();
+    const targetId = docId || this.getActiveDocumentId();
 
-  async fetchAttachedSpreadsheetFromBackend(docId: string): Promise<AttachedSpreadsheet | null> {
-    try {
-      const res = await apiClient.get<any>(`/api/sec-filings/documents/${docId}/spreadsheet`, { skipGlobalLoading: true });
-      if (res && res.spreadsheet) {
-        return {
-          id: res.spreadsheet.id,
-          fileName: res.spreadsheet.name || res.spreadsheet.file_name || 'Attached Spreadsheet',
-          sheetName: res.spreadsheet.sheet_name || res.spreadsheet.sheetName || 'Sheet1',
-          rowCount: res.spreadsheet.total_rows || res.spreadsheet.rowCount || 50,
-          colCount: res.spreadsheet.total_columns || res.spreadsheet.colCount || 10,
-          maxCol: res.spreadsheet.max_col || 'J',
-          colLetters: res.spreadsheet.col_letters,
-          headers: res.spreadsheet.headers,
-          cells: res.spreadsheet.cells || {},
-          tabs: res.spreadsheet.tabs,
-          activeTabId: res.spreadsheet.active_tab_id || res.spreadsheet.activeTabId,
-          updatedAt: res.spreadsheet.updated_at || res.spreadsheet.updatedAt
-        };
-      }
-    } catch {
-      // Offline or fallback to local storage
+    const matchByDoc = allSheets.find((s) => s.assignedDocIds?.includes(targetId));
+    if (matchByDoc) return matchByDoc;
+
+    const doc = docId ? this.getDocumentContent(docId) : this.getMainDocument();
+    if (doc.attachedSpreadsheet) return doc.attachedSpreadsheet;
+    if (doc.attachedSpreadsheetId) {
+      const match = allSheets.find((s) => s.id === doc.attachedSpreadsheetId);
+      if (match) return match;
     }
     return null;
+  },
+
+  /**
+   * Reads the document's linked spreadsheet from the backend.
+   * Resolves null when nothing is linked; rejects when the backend is unreachable.
+   */
+  async fetchAttachedSpreadsheetFromBackend(docId: string): Promise<AttachedSpreadsheet | null> {
+    await settleSpreadsheetWrites(docId);
+    const res = await apiClient.get<AttachedSpreadsheetResponse>(spreadsheetEndpoint(docId), {
+      skipGlobalLoading: true
+    });
+    return res?.spreadsheet ? fromSpreadsheetRecord(res.spreadsheet) : null;
+  },
+
+  /** Pushes the locally linked sheet for a document to the backend (used to backfill old links). */
+  pushAttachedSpreadsheetToBackend(docId: string, sheet: AttachedSpreadsheet): void {
+    queueSpreadsheetPush(docId, sheet);
+  },
+
+  /**
+   * Makes the backend's link the local one: upserts the sheet into the Hub registry
+   * and attaches it to the document. Returns the sheet that is now attached.
+   */
+  applyBackendSpreadsheet(docId: string, remote: AttachedSpreadsheet): AttachedSpreadsheet {
+    const list = this.getAllSpreadsheets();
+    const idx = list.findIndex((s) => s.id === remote.id);
+    const local = idx >= 0 ? list[idx] : null;
+
+    // Keep a newer local copy (e.g. edits made while offline) and push it up instead.
+    const localIsNewer =
+      !!local?.updatedAt && !!remote.updatedAt && new Date(local.updatedAt) > new Date(remote.updatedAt);
+    const merged: AttachedSpreadsheet = localIsNewer
+      ? { ...local! }
+      : { ...local, ...remote, description: local?.description };
+    merged.assignedDocIds = Array.from(new Set([...(local?.assignedDocIds || []), docId]));
+
+    if (idx >= 0) list[idx] = merged;
+    else list.unshift(merged);
+    cachedSpreadsheetsList = list;
+    try {
+      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
+    } catch (e) {
+      console.warn('Could not save spreadsheet registry', e);
+    }
+
+    this.assignSpreadsheetToDocument(docId, merged.id, { syncBackend: false });
+    if (localIsNewer) queueSpreadsheetPush(docId, merged);
+    return merged;
   },
 
   updateAttachedSpreadsheet(
@@ -1201,21 +1444,8 @@ export const secFilingService = {
     this.saveMainDocument(doc, true);
     broadcastSync('SPREADSHEET_UPDATED', { sheetId: sheet.id });
 
-    // Background asynchronous sync to PostgreSQL backend
-    const targetDocId = docId || doc.id || this.getActiveDocumentId();
-    apiClient.put(`/api/sec-filings/documents/${targetDocId}/spreadsheet`, {
-      id: sheet.id,
-      name: sheet.fileName,
-      sheet_name: sheet.sheetName,
-      total_rows: sheet.rowCount,
-      total_columns: sheet.colCount,
-      columns: sheet.headers || sheet.colLetters || [],
-      cells: sheet.cells,
-      tabs: sheet.tabs || [],
-      active_tab_id: sheet.activeTabId
-    }, { skipGlobalLoading: true }).catch((err) => {
-      console.debug('Spreadsheet backend sync notice (cached locally):', err);
-    });
+    // Background sync to PostgreSQL backend (debounced; deduped with saveSpreadsheet's push)
+    queueSpreadsheetPush(docId || doc.id || this.getActiveDocumentId(), sheet);
 
     return doc;
   },
@@ -1238,14 +1468,9 @@ export const secFilingService = {
     // Persist in central Spreadsheet Hub registry
     this.saveSpreadsheet(spreadsheet);
 
-    // Background asynchronous sync of cell modification to PostgreSQL backend
-    const targetDocId = docId || doc.id || this.getActiveDocumentId();
-    apiClient.patch(`/api/sec-filings/documents/${targetDocId}/spreadsheet/cells`, {
-      cell_ref: cleanRef,
-      value: newValue
-    }, { skipGlobalLoading: true }).catch((err) => {
-      console.debug('Cell backend sync notice (cached locally):', err);
-    });
+    // Background sync to PostgreSQL backend. A full (debounced) upsert rather than the
+    // cells PATCH, which would create a blank placeholder row when none exists yet.
+    queueSpreadsheetPush(docId || doc.id || this.getActiveDocumentId(), spreadsheet);
 
     const formattedVal = formatCellValue(newValue);
     let updatedCount = 0;
@@ -1335,66 +1560,98 @@ export const secFilingService = {
   },
 
   openDocument(id: string): SecFilingDocument {
-    localStorage.setItem(STORAGE_KEYS.ACTIVE_DOC_ID, id);
+    pendingMainDocToSave = null;
+    this.setActiveDocumentId(id);
 
-    // If it is the default main document:
-    if (id === 'sec-doc-zenatech-2026-q2' || id === this.getMainDocument().id) {
-      const doc = this.getMainDocument();
-      return doc;
-    }
-
-    if (id === 'sec-doc-zenatech-v24-sarah-jenkins') {
-      const doc = generateSarahJenkinsMergedDoc();
-      safeSetItem(`sec_doc_content_${id}`, JSON.stringify(doc));
-      safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(doc));
-      pendingMainDocToSave = doc;
-      return doc;
-    }
-
-    // Check if doc is in custom storage
     const customKey = `sec_doc_content_${id}`;
-    const customSaved = localStorage.getItem(customKey);
+    let doc: SecFilingDocument | null = null;
+    const customSaved = typeof localStorage !== 'undefined' ? localStorage.getItem(customKey) : null;
     if (customSaved) {
       try {
         const parsed = JSON.parse(customSaved);
         if (parsed && Array.isArray(parsed.blocks)) {
           parsed.blocks = sanitizeAndCompactBlocks(parsed.blocks);
-          // Set as active main doc
-          safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(parsed));
-          pendingMainDocToSave = parsed;
-          return parsed;
+          doc = parsed;
         }
       } catch (e) {
         console.error('Failed to parse doc', e);
       }
     }
 
-    // If not stored yet, generate from template type
-    let generated: SecFilingDocument;
-    if (id === 'sec-doc-zenatech-10q-q2') {
-      generated = generate10QDoc('ZenaTech, Inc. Form 10-Q (Q2 2026 Quarterly Report)');
-      generated.id = id;
-    } else if (id === 'sec-doc-zenatech-2025-10k') {
-      generated = generate10KDoc('ZenaTech, Inc. Form 10-K (Annual Comprehensive Audited Filing)');
-      generated.id = id;
-    } else if (id === 'sec-doc-zenatech-8k-acq') {
-      generated = generate8KDoc('ZenaTech, Inc. Form 8-K (Current Report — Strategic Acquisition)');
-      generated.id = id;
-    } else if (id === 'doc-onboarding-1') {
-      generated = generateOnboardingChecklistDoc('Onboarding');
-      generated.id = id;
-    } else if (id === 'doc-offboarding-2') {
-      generated = generateOffboardingChecklistDoc('Offboarding Checklist');
-      generated.id = id;
-    } else {
-      generated = generateBlankDocument('Untitled Document');
-      generated.id = id;
+    if (!doc) {
+      const savedMain = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.MAIN_DOC) : null;
+      if (savedMain) {
+        try {
+          const parsed = JSON.parse(savedMain);
+          if (parsed && parsed.id === id && Array.isArray(parsed.blocks)) {
+            parsed.blocks = sanitizeAndCompactBlocks(parsed.blocks);
+            doc = parsed;
+          }
+        } catch {
+          // Ignore
+        }
+      }
     }
 
-    safeSetItem(customKey, JSON.stringify(generated));
-    safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(generated));
-    pendingMainDocToSave = generated;
-    return generated;
+    if (!doc) {
+      if (id === 'sec-doc-zenatech-v24-sarah-jenkins') {
+        doc = generateSarahJenkinsMergedDoc();
+      } else if (id === 'sec-doc-zenatech-10q-q2') {
+        doc = generate10QDoc('ZenaTech, Inc. Form 10-Q (Q2 2026 Quarterly Report)');
+        doc.id = id;
+      } else if (id === 'sec-doc-zenatech-2025-10k') {
+        doc = generate10KDoc('ZenaTech, Inc. Form 10-K (Annual Comprehensive Audited Filing)');
+        doc.id = id;
+      } else if (id === 'sec-doc-zenatech-8k-acq') {
+        doc = generate8KDoc('ZenaTech, Inc. Form 8-K (Current Report — Strategic Acquisition)');
+        doc.id = id;
+      } else if (id === 'doc-onboarding-1') {
+        doc = generateOnboardingChecklistDoc('Onboarding');
+        doc.id = id;
+      } else if (id === 'doc-offboarding-2') {
+        doc = generateOffboardingChecklistDoc('Offboarding Checklist');
+        doc.id = id;
+      } else if (id === 'sec-doc-zenatech-2026-q2') {
+        doc = JSON.parse(JSON.stringify(INITIAL_SEC_FILING_DOC));
+      } else {
+        doc = generateBlankDocument('Untitled Document');
+        doc.id = id;
+      }
+    }
+
+    const finalDoc: SecFilingDocument = doc || generateBlankDocument('Untitled Document');
+    finalDoc.id = id;
+
+    // Resolve attached spreadsheet from central Hub registry
+    const allSheets = this.getAllSpreadsheets();
+    if (finalDoc.attachedSpreadsheetId) {
+      const match = allSheets.find((s) => s.id === finalDoc.attachedSpreadsheetId);
+      if (match) {
+        finalDoc.attachedSpreadsheet = match;
+      } else {
+        const fallbackMatch = allSheets.find((s) => s.assignedDocIds?.includes(finalDoc.id));
+        if (fallbackMatch) {
+          finalDoc.attachedSpreadsheetId = fallbackMatch.id;
+          finalDoc.attachedSpreadsheet = fallbackMatch;
+        } else {
+          finalDoc.attachedSpreadsheetId = undefined;
+          finalDoc.attachedSpreadsheet = null;
+        }
+      }
+    } else {
+      const match = allSheets.find((s) => s.assignedDocIds?.includes(finalDoc.id));
+      if (match) {
+        finalDoc.attachedSpreadsheetId = match.id;
+        finalDoc.attachedSpreadsheet = match;
+      } else {
+        finalDoc.attachedSpreadsheet = null;
+      }
+    }
+
+    safeSetItem(customKey, JSON.stringify(finalDoc));
+    safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(finalDoc));
+    pendingMainDocToSave = finalDoc;
+    return finalDoc;
   },
 
 
@@ -1621,6 +1878,7 @@ export const secFilingService = {
     contributorEmail?: string;
     assignedSection?: string;
     description?: string;
+    permissions?: ContributorPermissions;
     baseDoc: SecFilingDocument;
   }): { proposal: SecChangeProposal; inviteUrl: string } {
     const proposals = this.getProposals();
@@ -1646,6 +1904,7 @@ export const secFilingService = {
       blocks: JSON.parse(JSON.stringify(params.baseDoc.blocks)),
       assignedSection: params.assignedSection && params.assignedSection !== 'ALL' ? params.assignedSection : undefined,
       inviteToken: token,
+      permissions: params.permissions,
       changeSummary: {
         addedCount: 0,
         modifiedCount: 0,
@@ -1671,6 +1930,7 @@ export const secFilingService = {
     email?: string;
     section?: string;
     description?: string;
+    permissions?: ContributorPermissions;
   }): SecChangeProposal {
     const proposals = this.getProposals();
     const existing = proposals.find((p) => p.id === params.id);
@@ -1698,6 +1958,7 @@ export const secFilingService = {
       blocks: JSON.parse(JSON.stringify(mainDoc.blocks)),
       assignedSection: params.section && params.section !== 'ALL' ? params.section : undefined,
       inviteToken: `inv-${Date.now().toString(36)}`,
+      permissions: params.permissions,
       changeSummary: {
         addedCount: 0,
         modifiedCount: 0,

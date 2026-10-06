@@ -93,16 +93,22 @@ export const SpreadsheetSelectorModal: React.FC<SpreadsheetSelectorModalProps> =
   };
 
   const handleSelectSheet = (sheetId: string) => {
-    secFilingService.assignSpreadsheetToDocument(documentId, sheetId);
-    toast.success(`Assigned workbook to "${documentTitle}"`);
-    onSpreadsheetAssigned?.(sheetId);
+    if (onSpreadsheetAssigned) {
+      onSpreadsheetAssigned(sheetId);
+    } else {
+      secFilingService.assignSpreadsheetToDocument(documentId, sheetId);
+      toast.success(`Assigned workbook to "${documentTitle}"`);
+    }
     onOpenChange(false);
   };
 
   const handleUnassignCurrent = () => {
-    secFilingService.assignSpreadsheetToDocument(documentId, null);
-    toast.info(`Unlinked workbook from "${documentTitle}"`);
-    onSpreadsheetAssigned?.(null);
+    if (onSpreadsheetAssigned) {
+      onSpreadsheetAssigned(null);
+    } else {
+      secFilingService.assignSpreadsheetToDocument(documentId, null);
+      toast.info(`Unlinked workbook from "${documentTitle}"`);
+    }
     onOpenChange(false);
   };
 
@@ -118,11 +124,15 @@ export const SpreadsheetSelectorModal: React.FC<SpreadsheetSelectorModalProps> =
       parsedSheet.description = `Imported from ${file.name} for ${documentTitle}`;
 
       secFilingService.saveSpreadsheet(parsedSheet);
-      secFilingService.assignSpreadsheetToDocument(documentId, parsedSheet.id);
 
-      toast.success(`Uploaded and linked "${parsedSheet.fileName}"!`);
+      if (onSpreadsheetAssigned) {
+        onSpreadsheetAssigned(parsedSheet.id);
+      } else {
+        secFilingService.assignSpreadsheetToDocument(documentId, parsedSheet.id);
+        toast.success(`Uploaded and linked "${parsedSheet.fileName}"!`);
+      }
+
       loadData();
-      onSpreadsheetAssigned?.(parsedSheet.id);
       onOpenChange(false);
     } catch (err: any) {
       console.error(err);
@@ -146,17 +156,21 @@ export const SpreadsheetSelectorModal: React.FC<SpreadsheetSelectorModalProps> =
     sheet.description = `Created custom workbook for ${documentTitle}`;
 
     secFilingService.saveSpreadsheet(sheet);
-    secFilingService.assignSpreadsheetToDocument(documentId, sheet.id);
 
-    toast.success(`Created & linked "${sheet.fileName}"!`);
+    if (onSpreadsheetAssigned) {
+      onSpreadsheetAssigned(sheet.id);
+    } else {
+      secFilingService.assignSpreadsheetToDocument(documentId, sheet.id);
+      toast.success(`Created & linked "${sheet.fileName}"!`);
+    }
+
     loadData();
-    onSpreadsheetAssigned?.(sheet.id);
     onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent className="w-[94vw] max-w-3xl sm:max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
         {/* Header */}
         <div className="p-5 border-b bg-gradient-to-r from-emerald-50/50 via-teal-50/20 to-transparent dark:from-emerald-950/20 dark:via-zinc-900 dark:to-transparent">
           <div className="flex items-center justify-between">

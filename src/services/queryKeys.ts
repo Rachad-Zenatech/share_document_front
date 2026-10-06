@@ -24,4 +24,5 @@ export const queryKeys = {
 
   // SEC Filings
   secFilingTableTemplates: () => ["sec-filing-table-templates"] as const,
+  secFilingDocumentSpreadsheet: (docId: string) => ["sec-filing-document-spreadsheet", docId] as const,
 };

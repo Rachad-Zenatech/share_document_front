@@ -250,7 +250,8 @@ export default function SecFilingsPage() {
   const [pickerBlockTitle, setPickerBlockTitle] = useState<string>('');
 
   const handleOpenCellPicker = (onPick: (cellRef: string, displayVal: string) => void, blockTitle = 'Block') => {
-    if (!attachedSpreadsheet) {
+    const currentSheet = attachedSpreadsheet || secFilingService.getAttachedSpreadsheet(mainDoc.id);
+    if (!currentSheet) {
       toast.warning('No spreadsheet linked to this document', {
         description: 'Please select a workbook from the Spreadsheet Hub first.',
         action: {

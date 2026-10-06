@@ -265,7 +265,9 @@ export const SpreadsheetHubPage: React.FC = () => {
 
   // Navigate to Document Editor with Document
   const handleOpenDocumentInEditor = (docId: string) => {
-    secFilingService.setActiveDocumentId(docId);
+    // openDocument (not just setActiveDocumentId) so the editor's main doc is
+    // actually swapped to this document along with its linked workbook.
+    secFilingService.openDocument(docId);
     navigate('/sec-filings/editor');
   };
 

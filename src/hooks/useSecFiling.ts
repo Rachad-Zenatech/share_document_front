@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   SecFilingDocument,
   SecChangeProposal,
@@ -14,6 +15,7 @@ import type {
   AttachedSpreadsheet
 } from '../types/secFiling';
 import { secFilingService, setStorageFailureListener, getProposalInviteUrl } from '../services/secFilingService';
+import { queryKeys } from '../services/queryKeys';
 import { useAuth } from '../lib/AuthContext';
 import { toast } from 'sonner';
 import { ZENATECH_LOGO_DATA_URL } from '../data/zenatechLogoAsset';
@@ -23,6 +25,7 @@ export type UserFilingRole = 'LEAD_CONTROLLER' | 'CONTRIBUTOR';
 
 export function useSecFiling() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   // --------------------------------------------------------------------------
   // 1. ALL STATE & REFS (Strictly ordered at the top)
@@ -88,8 +91,9 @@ export function useSecFiling() {
   }, [workingBlocks]);
 
   const effectiveSpreadsheet = useMemo(() => {
-    return mainDoc.attachedSpreadsheet || null;
-  }, [mainDoc.attachedSpreadsheet]);
+    if (mainDoc.attachedSpreadsheet) return mainDoc.attachedSpreadsheet;
+    return secFilingService.getAttachedSpreadsheet(mainDoc.id);
+  }, [mainDoc.attachedSpreadsheet, mainDoc.attachedSpreadsheetId, mainDoc.id]);
 
   const matchingBlockIds = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -1046,9 +1050,12 @@ export function useSecFiling() {
   const handleAssignSpreadsheet = useCallback((sheetId: string | null) => {
     secFilingService.assignSpreadsheetToDocument(mainDoc.id, sheetId);
     const updated = secFilingService.getDocumentContent(mainDoc.id);
-    setMainDoc({ ...updated });
+    const effectiveSheet = secFilingService.getAttachedSpreadsheet(mainDoc.id);
+    setMainDoc({ ...updated, attachedSpreadsheet: effectiveSheet, attachedSpreadsheetId: effectiveSheet?.id });
+    // Keep the cached backend link in step so a stale fetch can't undo this change.
+    queryClient.setQueryData(queryKeys.secFilingDocumentSpreadsheet(mainDoc.id), effectiveSheet);
     toast.success(sheetId ? 'Assigned workbook to this document' : 'Unassigned workbook from this document');
-  }, [mainDoc.id]);
+  }, [mainDoc.id, queryClient]);
 
   // --------------------------------------------------------------------------
   // 4. MEMOIZED DIFFS
@@ -1123,6 +1130,37 @@ export function useSecFiling() {
       toast.info(`Welcome ${name || 'Contributor'}! You are editing in Contributor Draft mode.`);
     }
   }, []);
+
+  // The backend (sec_attached_spreadsheets) is the source of truth for which workbook
+  // is linked to a document; localStorage is only a cache of it.
+  const mainDocId = mainDoc.id;
+  const { data: backendSpreadsheet, dataUpdatedAt: backendSpreadsheetUpdatedAt } = useQuery({
+    queryKey: queryKeys.secFilingDocumentSpreadsheet(mainDocId),
+    queryFn: () => secFilingService.fetchAttachedSpreadsheetFromBackend(mainDocId),
+    enabled: !!mainDocId,
+    gcTime: 1000 * 60 * 5,
+    staleTime: 1000 * 30,
+    refetchOnWindowFocus: false,
+    retry: 1
+  });
+
+  useEffect(() => {
+    // undefined = still loading or backend unreachable: keep the local link as-is.
+    if (backendSpreadsheet === undefined || !mainDocId) return;
+
+    if (backendSpreadsheet === null) {
+      // Linked locally but never saved to the backend (pre-fix links): backfill it.
+      const localSheet = secFilingService.getAttachedSpreadsheet(mainDocId);
+      if (localSheet) secFilingService.pushAttachedSpreadsheetToBackend(mainDocId, localSheet);
+      return;
+    }
+
+    const sheet = secFilingService.applyBackendSpreadsheet(mainDocId, backendSpreadsheet);
+    const updated = secFilingService.getDocumentContent(mainDocId);
+    setMainDoc({ ...updated, attachedSpreadsheet: sheet, attachedSpreadsheetId: sheet.id });
+    // Re-run only when a fetch lands, not on every local document edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendSpreadsheetUpdatedAt, mainDocId]);
 
   // Real-time cross-tab synchronization (BroadcastChannel + StorageEvent)
   useEffect(() => {
@@ -1255,7 +1293,7 @@ export function useSecFiling() {
     handleResetToDefault,
     calculateDiffForProposal,
     contributorSession,
-    attachedSpreadsheet: mainDoc.attachedSpreadsheet || null,
+    attachedSpreadsheet: effectiveSpreadsheet,
     updateAttachedSpreadsheet: handleUpdateAttachedSpreadsheet,
     updateSpreadsheetCell: handleUpdateSpreadsheetCell,
     assignSpreadsheet: handleAssignSpreadsheet
