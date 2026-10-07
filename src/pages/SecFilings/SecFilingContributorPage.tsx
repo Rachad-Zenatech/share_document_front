@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useTheme } from 'next-themes';
 import {
   FileText,
+  FileSpreadsheet,
   Send,
   CheckCircle2,
   Download,
@@ -29,6 +30,7 @@ import { BlockBuilder } from './components/BlockBuilder';
 import { BlockInspector } from './components/BlockInspector';
 import { DocumentOutline } from './components/DocumentOutline';
 import { SubmitProposalModal } from './components/SubmitProposalModal';
+import { AttachedSpreadsheetModal } from './components/AttachedSpreadsheetModal';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import {
@@ -123,7 +125,10 @@ export default function SecFilingContributorPage() {
     canUndo,
     canRedo,
     handleForkProposal,
-    handleSubmitForReview
+    handleSubmitForReview,
+    attachedSpreadsheet,
+    updateAttachedSpreadsheet,
+    updateSpreadsheetCell
   } = useSecFiling();
 
   // Statement templates come from the database; the bundled set is the fallback
@@ -141,6 +146,25 @@ export default function SecFilingContributorPage() {
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState<boolean>(false);
   const [isExportingDocx, setIsExportingDocx] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
+
+  // Attached Spreadsheet Modal & Cell Variable Picker States
+  const [isSpreadsheetOpen, setIsSpreadsheetOpen] = useState<boolean>(false);
+  const [spreadsheetModalMode, setSpreadsheetModalMode] = useState<'manage' | 'picker'>('manage');
+  const [pickerCallback, setPickerCallback] = useState<((cellRef: string, displayVal: string) => void) | null>(null);
+  const [pickerBlockTitle, setPickerBlockTitle] = useState<string>('');
+
+  const handleOpenCellPicker = (onPick: (cellRef: string, displayVal: string) => void, blockTitle = 'Block') => {
+    if (!attachedSpreadsheet) {
+      toast.warning('No spreadsheet linked to this document', {
+        description: 'A spreadsheet must be linked by the document lead first.'
+      });
+      return;
+    }
+    setPickerCallback(() => onPick);
+    setPickerBlockTitle(blockTitle);
+    setSpreadsheetModalMode('picker');
+    setIsSpreadsheetOpen(true);
+  };
 
   // Selected block for inspector
   const selectedBlock = workingBlocks.find((b) => b.id === selectedBlockId) || null;
@@ -336,6 +360,27 @@ export default function SecFilingContributorPage() {
                 Blocks Flow
               </button>
             </div>
+
+            {/* Attached Spreadsheet / Dynamic Variable Button */}
+            {attachedSpreadsheet && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSpreadsheetModalMode('manage');
+                  setIsSpreadsheetOpen(true);
+                }}
+                className="h-8 text-xs gap-1.5 text-emerald-700 bg-emerald-50 border-emerald-300 font-medium hover:bg-emerald-100 cursor-pointer"
+                title="Attached Spreadsheet - View workbook and dynamic cell variables"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden md:inline">Spreadsheet</span>
+                <span className="px-1.5 py-0.2 text-[10px] rounded font-mono bg-emerald-200 text-emerald-900 truncate max-w-[110px]">
+                  {attachedSpreadsheet?.sheetName || attachedSpreadsheet?.fileName || 'Sheet'}
+                </span>
+              </Button>
+            )}
 
             {/* Export Dropdown */}
             <DropdownMenu>
@@ -610,6 +655,12 @@ export default function SecFilingContributorPage() {
             diffs={activeDiffs}
             viewMode={viewMode}
             onToggleViewMode={setViewMode}
+            attachedSpreadsheet={attachedSpreadsheet}
+            onOpenSpreadsheet={() => {
+              setSpreadsheetModalMode('manage');
+              setIsSpreadsheetOpen(true);
+            }}
+            onOpenCellPicker={handleOpenCellPicker}
           />
         </div>
 
@@ -635,6 +686,23 @@ export default function SecFilingContributorPage() {
         proposal={activeProposal}
         diffs={activeDiffs}
         onSubmit={handleSubmitForReview}
+      />
+
+      <AttachedSpreadsheetModal
+        open={isSpreadsheetOpen}
+        onOpenChange={setIsSpreadsheetOpen}
+        spreadsheet={attachedSpreadsheet}
+        onUpdateSpreadsheet={updateAttachedSpreadsheet}
+        onUpdateCell={updateSpreadsheetCell}
+        blocks={workingBlocks}
+        mode={spreadsheetModalMode}
+        onInsertVariable={pickerCallback || undefined}
+        targetBlockTitle={pickerBlockTitle}
+        onSelectBlock={(blockId) => {
+          setSelectedBlockId(blockId);
+          const el = document.getElementById(blockId);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }}
       />
 
       {/* Standalone Application Footer */}

@@ -29,7 +29,7 @@ import {
   setSaveProposalsTimer,
   setPendingProposals
 } from './secFilingStorage';
-import { sanitizeAndCompactBlocks, generateSarahJenkinsMergedDoc } from './secFilingMockDocs';
+import { sanitizeAndCompactBlocks } from './secFilingSanitizer';
 import { getAllSpreadsheets } from './secFilingSpreadsheet';
 
 export function getMainDocument(): SecFilingDocument {
@@ -139,19 +139,6 @@ export function getDocumentsList(): SecDocumentSummary[] {
     if (list.length === 0) {
       list = [
         {
-          id: 'sec-doc-zenatech-v24-sarah-jenkins',
-          title: 'ZenaTech_SEC_Filing_v24_(Merged_Sarah_Jenkins)',
-          formType: 'Form 10-Q / Interim Consolidated',
-          period: 'For the Six Months Ended June 30, 2026 and June 30, 2025',
-          updatedAt: new Date().toISOString(),
-          createdAt: '2026-08-15T11:45:00.000Z',
-          owner: 'Sarah Jenkins, CPA',
-          isShared: true,
-          version: 'v24 (Merged Sarah Jenkins)',
-          blocksCount: 42,
-          templateType: '10-q',
-        },
-        {
           id: mainDoc.id || 'sec-doc-zenatech-2026-q2',
           title: mainDoc.title || 'ZenaTech, Inc. Consolidated Financial Statements — June 30, 2026 (v22 REVIEW COPY)',
           formType: mainDoc.formType || 'Form 6-K / Interim Consolidated',
@@ -184,7 +171,7 @@ export function getDocumentsList(): SecDocumentSummary[] {
           period: 'FY 2025',
           updatedAt: '2026-09-28T14:30:00.000Z',
           createdAt: '2026-09-15T09:00:00.000Z',
-          owner: 'Ali Hassan Sharif',
+          owner: 'me',
           isShared: true,
           version: 'v1.2',
           blocksCount: 64,
@@ -205,23 +192,7 @@ export function getDocumentsList(): SecDocumentSummary[] {
         },
       ];
     } else {
-      // Ensure the Sarah Jenkins v24 document is registered in the list if not already present
-      const hasSarahV24 = list.some((d) => d.id === 'sec-doc-zenatech-v24-sarah-jenkins' || d.title.includes('Sarah_Jenkins') || d.title.includes('v24'));
-      if (!hasSarahV24) {
-        list.splice(1, 0, {
-          id: 'sec-doc-zenatech-v24-sarah-jenkins',
-          title: 'ZenaTech_SEC_Filing_v24_(Merged_Sarah_Jenkins)',
-          formType: 'Form 10-Q / Interim Consolidated',
-          period: 'For the Six Months Ended June 30, 2026 and June 30, 2025',
-          updatedAt: new Date().toISOString(),
-          createdAt: '2026-08-15T11:45:00.000Z',
-          owner: 'Sarah Jenkins, CPA',
-          isShared: true,
-          version: 'v24 (Merged Sarah Jenkins)',
-          blocksCount: 42,
-          templateType: '10-q',
-        });
-      }
+      list = list.filter((d) => d.id !== 'sec-doc-zenatech-v24-sarah-jenkins' && !d.title?.includes('Sarah_Jenkins'));
     }
 
     // Scan localStorage for any custom doc keys: sec_doc_content_*
@@ -304,9 +275,6 @@ export function getDocumentPreview(id: string): SecBlock[] {
     if (id === mainDoc.id || id === 'sec-doc-zenatech-2026-q2') {
       return mainDoc.blocks.slice(0, 15);
     }
-    if (id === 'sec-doc-zenatech-v24-sarah-jenkins') {
-      return generateSarahJenkinsMergedDoc().blocks.slice(0, 15);
-    }
     const customKey = `sec_doc_content_${id}`;
     const customSaved = localStorage.getItem(customKey);
     if (customSaved) {
@@ -382,8 +350,7 @@ export function getDocumentContent(id: string): SecFilingDocument {
       }
     }
     if (!doc) {
-      if (id === 'sec-doc-zenatech-v24-sarah-jenkins') doc = generateSarahJenkinsMergedDoc();
-      else if (id === 'sec-doc-zenatech-10q-q2') doc = generate10QDoc('ZenaTech, Inc. Form 10-Q');
+      if (id === 'sec-doc-zenatech-10q-q2') doc = generate10QDoc('ZenaTech, Inc. Form 10-Q');
       else if (id === 'sec-doc-zenatech-2025-10k') doc = generate10KDoc('ZenaTech, Inc. Form 10-K');
       else if (id === 'sec-doc-zenatech-8k-acq') doc = generate8KDoc('ZenaTech, Inc. Form 8-K');
       else if (id === 'doc-onboarding-1') doc = generateOnboardingChecklistDoc('Onboarding');
@@ -449,9 +416,7 @@ export function openDocument(id: string): SecFilingDocument {
     }
 
     if (!doc) {
-      if (id === 'sec-doc-zenatech-v24-sarah-jenkins') {
-        doc = generateSarahJenkinsMergedDoc();
-      } else if (id === 'sec-doc-zenatech-10q-q2') {
+      if (id === 'sec-doc-zenatech-10q-q2') {
         doc = generate10QDoc('ZenaTech, Inc. Form 10-Q (Q2 2026 Quarterly Report)');
         doc.id = id;
       } else if (id === 'sec-doc-zenatech-2025-10k') {

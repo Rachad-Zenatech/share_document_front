@@ -30,11 +30,10 @@ export {
 
 import { calculateDiffs } from './secFiling/secFilingDiff';
 
-// 3. Mock & Seed Document Helpers
+// 3. Document Sanitization & Compaction Helpers
 export {
-  sanitizeAndCompactBlocks,
-  generateSarahJenkinsMergedDoc
-} from './secFiling/secFilingMockDocs';
+  sanitizeAndCompactBlocks
+} from './secFiling/secFilingSanitizer';
 
 // 4. Proposals & Contributor URLs
 export {

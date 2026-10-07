@@ -51,12 +51,12 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
   onForkProposal
 }) => {
   const [activeTab, setActiveTab] = useState<'create' | 'existing'>('create');
-  const [contributorName, setContributorName] = useState('Sarah Jenkins');
-  const [contributorRole, setContributorRole] = useState('External Legal Counsel');
-  const [contributorEmail, setContributorEmail] = useState('sarah.jenkins@lawcorp.com');
-  const [taskTitle, setTaskTitle] = useState('Note 7 Debt Covenants & Legal Disclosures');
+  const [contributorName, setContributorName] = useState('');
+  const [contributorRole, setContributorRole] = useState('');
+  const [contributorEmail, setContributorEmail] = useState('');
+  const [taskTitle, setTaskTitle] = useState('');
   const [assignedSection, setAssignedSection] = useState('ALL');
-  const [description, setDescription] = useState('Please review and insert the finalized Q2 debenture terms.');
+  const [description, setDescription] = useState('');
   const [permissions, setPermissions] = useState<ContributorPermissions>({
     canEditDocument: true,
     canEditSpreadsheet: false

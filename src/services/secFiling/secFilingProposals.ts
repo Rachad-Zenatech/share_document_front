@@ -16,7 +16,7 @@ import {
   getSaveProposalsTimer,
   setSaveProposalsTimer
 } from './secFilingStorage';
-import { sanitizeAndCompactBlocks } from './secFilingMockDocs';
+import { sanitizeAndCompactBlocks } from './secFilingSanitizer';
 import { calculateDiffs } from './secFilingDiff';
 import {
   getMainDocument,

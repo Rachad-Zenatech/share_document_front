@@ -16011,73 +16011,7 @@ export const INITIAL_SEC_FILING_DOC: SecFilingDocument = {
   "lockedBy": null
 };
 
-export const INITIAL_PROPOSALS: SecChangeProposal[] = [
-  {
-    id: 'prop-2026-01',
-    title: 'Update Note 7 Loans Payable terms & Q2 Interest Accrual',
-    author: {
-      id: 'usr-analyst-1',
-      name: 'Sarah Jenkins',
-      email: 'sarah.jenkins@zenatech.com',
-      role: 'Senior Financial Analyst'
-    },
-    createdAt: '2026-08-15T09:30:00Z',
-    updatedAt: '2026-08-15T11:45:00Z',
-    status: 'pending_review',
-    baseVersion: 'v22 Review Copy',
-    baseVersionNumber: 22,
-    blocks: JSON.parse(JSON.stringify(INITIAL_SEC_FILING_DOC.blocks)).map((b: any) => {
-      if (b.text && b.text.includes('The Company maintains term loan facilities')) {
-        return {
-          ...b,
-          text: b.text + ' During Q2 2026, additional loan borrowings of $3,300,000 were drawn down to support specialized aerial hardware manufacturing equipment. All financial covenants remained in full compliance as of June 30, 2026.',
-          updatedAt: '2026-08-15T11:45:00Z',
-          modifiedBy: 'Sarah Jenkins'
-        };
-      }
-      return b;
-    }),
-    changeSummary: {
-      addedCount: 0,
-      modifiedCount: 1,
-      deletedCount: 0,
-      description: 'Added detailed disclosure regarding the $3.3M Q2 borrowing purpose and covenant compliance.'
-    },
-    reviewNotes: 'Please review the covenant wording against the final credit facility amendment from BMO.'
-  },
-  {
-    id: 'prop-2026-02',
-    title: 'Add Subsequent Event: US DoD Drone Pilot Qualification',
-    author: {
-      id: 'usr-counsel-1',
-      name: 'Michael Vance, Esq.',
-      email: 'm.vance@zenatech.com',
-      role: 'Legal & Regulatory Counsel'
-    },
-    createdAt: '2026-08-16T14:10:00Z',
-    updatedAt: '2026-08-16T14:20:00Z',
-    status: 'pending_review',
-    baseVersion: 'v22 Review Copy',
-    baseVersionNumber: 22,
-    blocks: JSON.parse(JSON.stringify(INITIAL_SEC_FILING_DOC.blocks)).map((b: any) => {
-      if (b.section && b.section.includes('SUBSEQUENT') && b.type === 'paragraph') {
-        return {
-          ...b,
-          text: b.text + ' The Company also secured qualification for the US Defense Logistics Agency autonomous inspection pilot program.',
-          updatedAt: '2026-08-16T14:20:00Z',
-          modifiedBy: 'Michael Vance'
-        };
-      }
-      return b;
-    }),
-    changeSummary: {
-      addedCount: 0,
-      modifiedCount: 1,
-      deletedCount: 0,
-      description: 'Updated Subsequent Events note with US Defense qualification announcement.'
-    }
-  }
-];
+export const INITIAL_PROPOSALS: SecChangeProposal[] = [];
 
 export const INITIAL_VERSION_HISTORY: SecVersionSnapshot[] = [
   {
