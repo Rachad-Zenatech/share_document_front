@@ -394,7 +394,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
     return unifiedDocBlocks.filter((item) => item.block.section === selectedSectionFilter);
   }, [unifiedDocBlocks, selectedSectionFilter, sectionStats]);
 
-  // Paginated Word Document Pages (so every page has a full white sheet background)
+  // Paginated Document Pages (full white sheet background)
   const paginatedPages = useMemo(() => {
     if (!filteredUnifiedBlocks || filteredUnifiedBlocks.length === 0) return [];
     const blockList = filteredUnifiedBlocks.map((item) => item.block);
@@ -707,7 +707,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
 
           {/* Right: Rich Colorized Section Filter, Width Switcher, View Mode Switcher */}
           <div className="flex items-center gap-2">
-            {/* Word Document Live Mode vs Track Changes Sub-Mode Switcher */}
+            {/* Document Live Mode vs Track Changes Sub-Mode Switcher */}
             {viewMode === 'doc-track-changes' && (
               <div className="flex items-center bg-slate-100 dark:bg-zinc-800 rounded-lg p-0.5 border border-slate-200 dark:border-zinc-700 text-xs">
                 <button
@@ -937,7 +937,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* View Mode Toggle (Word View vs Side-by-Side vs Block Mode) */}
+            {/* View Mode Toggle (Document View vs Side-by-Side vs Block Mode) */}
             <div className="flex items-center bg-slate-100 dark:bg-zinc-800 rounded-lg p-0.5 border border-slate-200 dark:border-zinc-700">
               <button
                 type="button"
@@ -996,7 +996,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
             </div>
           ) : viewMode === 'doc-track-changes' ? (
             /* ========================================================================= */
-            /* 1. PAGINATED WORD DOCUMENT VIEW (EACH PAGE IS A FULL WHITE WORD SHEET)   */
+            /* 1. PAGINATED DOCUMENT VIEW   */
             /* ========================================================================= */
             <div className="w-full flex flex-col items-center space-y-8">
               {/* Preview Live Banner if in Merged Preview or Original Mode */}
@@ -1166,7 +1166,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                         const isAccepted = acceptedBlockIds.includes(blockId);
 
                         if (!isChanged) {
-                          /* Unchanged Block: Rendered cleanly as standard Word document content */
+                          /* Unchanged Block: Rendered cleanly as standard document content */
                           return (
                             <div key={blockId || idx} className="relative py-0 hover:bg-slate-50/40 rounded transition-colors">
                               <SecDocBlockRenderer block={block} />
@@ -1247,7 +1247,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                               </span>
                             </div>
 
-                            {/* Content Stream with Native Word Track Changes Highlighting */}
+                            {/* Content Stream with Native Track Changes Highlighting */}
                             {diff.status === 'added' ? (
                               <div className={!isAccepted ? 'opacity-50 line-through' : ''}>
                                 <SecDocBlockRenderer block={diff.proposedBlock!} />
@@ -1716,7 +1716,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
 };
 
 /* ------------------------------------------------------------------------- */
-/* SEC DOCUMENT BLOCK RENDERER FOR AUTHENTIC WORD SHEET PRESENTATION         */
+/* SEC DOCUMENT BLOCK RENDERER FOR AUTHENTIC SHEET PRESENTATION         */
 /* ------------------------------------------------------------------------- */
 const SecDocBlockRenderer: React.FC<{
   block: SecBlock;

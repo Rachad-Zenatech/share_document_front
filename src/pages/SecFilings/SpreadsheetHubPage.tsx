@@ -840,15 +840,19 @@ export const SpreadsheetHubPage: React.FC = () => {
       {editingSheet && (
         <AttachedSpreadsheetModal
           open={editingSheet !== null}
-          onOpenChange={(open) => !open && setEditingSheet(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditingSheet(null);
+              refreshHub();
+            }
+          }}
           spreadsheet={editingSheet}
           onUpdateSpreadsheet={(updated) => {
             secFilingService.saveSpreadsheet(updated);
             setEditingSheet(updated);
-            refreshHub();
           }}
-          onUpdateCell={(cellRef, val) => {
-            const updated = {
+          onUpdateCell={(cellRef, val, updatedSheet) => {
+            const updated = updatedSheet || {
               ...editingSheet,
               cells: {
                 ...editingSheet.cells,
@@ -857,7 +861,6 @@ export const SpreadsheetHubPage: React.FC = () => {
             };
             secFilingService.saveSpreadsheet(updated);
             setEditingSheet(updated);
-            refreshHub();
             return 1;
           }}
           blocks={[]}

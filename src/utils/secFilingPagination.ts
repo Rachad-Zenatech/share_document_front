@@ -16,7 +16,7 @@ const SPACING_MULTIPLIERS: Record<SecBlockSpacing, number> = {
 };
 
 /**
- * Estimates the pixel height of a block in the Word document canvas
+ * Estimates the pixel height of a block in the document canvas
  */
 export function estimateBlockHeight(block: SecBlock, globalSpacing: SecBlockSpacing = 'normal'): number {
   const spacing = block.spacing || globalSpacing;

@@ -610,7 +610,7 @@ export default function CreateSecFilingPage() {
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 flex flex-col font-sans">
       {/* ------------------------------------------------------------- */}
-      {/* 1. GOOGLE DOCS STYLE TOP SEARCH BAR                           */}
+      {/* 1. DOCUMENT TOP SEARCH BAR                           */}
       {/* ------------------------------------------------------------- */}
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-xs border-b border-border/60 px-4 sm:px-8 py-2.5 flex items-center justify-between gap-4">
         {/* Left: ZenaTech SEC Docs Brand */}
@@ -724,7 +724,7 @@ export default function CreateSecFilingPage() {
               className="flex flex-col items-start cursor-pointer group shrink-0"
             >
               <div className="w-[124px] h-[162px] sm:w-[136px] sm:h-[178px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xs shadow-2xs group-hover:border-blue-500 group-hover:shadow-md transition-all flex items-center justify-center relative overflow-hidden">
-                {/* Google Colored Plus Sign */}
+                {/* Colored Plus Sign */}
                 <svg className="w-10 h-10 transform group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="none">
                   {/* Top: Red */}
                   <rect x="10.5" y="3" width="3" height="7.5" rx="1.5" fill="#EA4335" />
@@ -1014,7 +1014,7 @@ export default function CreateSecFilingPage() {
         </div>
 
         {/* ----------------------------------------------------------- */}
-        {/* DOCUMENTS GRID VIEW (Google Docs Exact Style)               */}
+        {/* DOCUMENTS GRID VIEW (Clean Document Style)               */}
         {/* ----------------------------------------------------------- */}
         {viewMode === 'grid' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">

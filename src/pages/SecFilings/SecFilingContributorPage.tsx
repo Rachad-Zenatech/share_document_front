@@ -549,7 +549,7 @@ export default function SecFilingContributorPage() {
           </aside>
         )}
 
-        {/* Center Column: The Prominent Word Document Sheet */}
+        {/* Center Column: The Prominent Document Sheet */}
         <div className="flex-1 w-full min-w-0">
           {isMerged && (
             <div className="mb-4 p-4 rounded-xl bg-purple-50/90 border border-purple-200 text-purple-900 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">

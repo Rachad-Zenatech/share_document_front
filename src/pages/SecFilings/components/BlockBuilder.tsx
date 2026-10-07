@@ -193,10 +193,10 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
 
   return (
     <div className="w-full flex flex-col items-center space-y-3">
-      {/* Microsoft Word Document Canvas Header & Ribbon Strip */}
+      {/* Document Canvas Header & Ribbon Strip */}
       <div className={`${sheetWidthClass} flex items-center justify-between px-4 py-2 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-xl border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-300 shadow-sm sticky top-[108px] z-20 transition-all duration-150`}>
         <div className="flex items-center gap-3">
-          {/* Word / Block Mode Indicator & Page Count */}
+          {/* Document / Block Mode Indicator & Page Count */}
           <div className="flex items-center gap-1.5 font-bold text-[#0E2841] dark:text-blue-400">
             {viewMode === 'word' ? (
               <FileText className="w-4 h-4 text-blue-600" />
@@ -437,7 +437,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
             )}
           </div>
 
-          {/* View Mode Toggle (Word vs Block Grid) */}
+          {/* View Mode Toggle (Document vs Block Grid) */}
           <div className="flex items-center bg-slate-100 dark:bg-zinc-800 rounded-lg p-0.5 border border-slate-200 dark:border-zinc-700">
             <button
               type="button"
@@ -468,7 +468,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
         </div>
       </div>
 
-      {/* Realistic Word Horizontal Ruler */}
+      {/* Document Horizontal Ruler */}
       {showRuler && viewMode === 'word' && (
         <div className={`${sheetWidthClass} bg-slate-200 dark:bg-zinc-800 rounded-t-sm border-x border-t border-slate-300 dark:border-zinc-700 select-none overflow-hidden transition-all duration-150`}>
           <div className="flex items-center h-5 text-[9px] font-mono text-slate-600 dark:text-zinc-400">
@@ -497,7 +497,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
         </div>
       )}
 
-      {/* Word Page Simulation Sheets */}
+      {/* Document Page Simulation Sheets */}
       <div
         className="w-full flex flex-col items-center transition-all duration-200"
         style={{
@@ -567,7 +567,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
             )}
           </div>
         ) : isMultiPageLayout ? (
-          /* Multi-Page Paginated Sheets (Works in both Word Mode and Block Mode) */
+          /* Multi-Page Paginated Sheets */
           pages.map((page, pageIdx) => (
             <React.Fragment key={page.pageNumber}>
               <div

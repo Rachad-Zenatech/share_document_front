@@ -78,7 +78,7 @@ export interface AttachedSpreadsheetModalProps {
   onOpenChange: (open: boolean) => void;
   spreadsheet?: AttachedSpreadsheet | null;
   onUpdateSpreadsheet: (sheet: AttachedSpreadsheet, shiftedBlocks?: SecBlock[]) => void;
-  onUpdateCell: (cellRef: string, newValue: any) => number;
+  onUpdateCell: (cellRef: string, newValue: any, updatedSheet?: AttachedSpreadsheet) => number;
   blocks: SecBlock[];
   onSelectBlock?: (blockId: string) => void;
   mode?: 'manage' | 'picker';
@@ -165,11 +165,11 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     colIndex: number;
   } | null>(null);
 
-  // Excel Style Insert Dialog state (Shift cells right / down / Entire row / Entire col)
+  // Spreadsheet Insert Dialog state (Shift cells right / down / Entire row / Entire col)
   const [isInsertDialogOpen, setIsInsertDialogOpen] = useState<boolean>(false);
   const [insertOption, setInsertOption] = useState<'shift_right' | 'shift_down' | 'entire_row' | 'entire_col'>('entire_row');
 
-  // Excel Style Delete Dialog state
+  // Spreadsheet Delete Dialog state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
   const [deleteOption, setDeleteOption] = useState<'shift_left' | 'shift_up' | 'entire_row' | 'entire_col'>('entire_row');
 
@@ -232,7 +232,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     };
   }, [contextMenu?.open]);
 
-  // Excel-style Keyboard Shortcuts: Ctrl+Shift+= (Insert), Ctrl+- (Delete), Ctrl+Z (Undo), Ctrl+Y (Redo)
+  // Spreadsheet Keyboard Shortcuts: Ctrl+Shift+= (Insert), Ctrl+- (Delete), Ctrl+Z (Undo), Ctrl+Y (Redo)
   // We use refs to avoid referencing handleUndo/handleRedo before they are declared.
   const undoHandlerRef = useRef<(() => void) | null>(null);
   const redoHandlerRef = useRef<(() => void) | null>(null);
@@ -344,7 +344,42 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const [resizeRows, setResizeRows] = useState(String(totalRows));
   const [resizeCols, setResizeCols] = useState(String(totalCols));
 
-  // 1. Scan document for referenced variable tokens (only changes when blocks change)
+  // Only re-scan document variable tokens when the actual set of referenced cell tokens in blocks changes
+  const tokensSignature = useMemo(() => {
+    let sig = '';
+    const regex = new RegExp(CELL_VARIABLE_REGEX);
+    for (const b of blocks) {
+      sig += b.id + ':';
+      const scan = (str: string | undefined) => {
+        if (!str || !str.includes('@')) return;
+        regex.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = regex.exec(str)) !== null) {
+          const tab = m[1] || m[2];
+          const cell = m[3].toUpperCase();
+          sig += (tab ? `${tab}!${cell}` : cell) + ',';
+        }
+      };
+      if (b.type === 'paragraph' || b.type === 'heading') {
+        scan(b.text);
+      } else if (b.type === 'callout') {
+        scan(b.content);
+        scan(b.title);
+      } else if (b.type === 'financial_table' && Array.isArray(b.rows)) {
+        for (const r of b.rows) {
+          if (Array.isArray(r.cells)) {
+            for (const c of r.cells) {
+              if (typeof c === 'string') scan(c);
+            }
+          }
+        }
+      }
+      sig += ';';
+    }
+    return sig;
+  }, [blocks]);
+
+  // 1. Scan document for referenced variable tokens (only changes when tokensSignature changes)
   const usedVariableTokens = useMemo(() => {
     const map = new Map<
       string,
@@ -357,8 +392,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     >();
 
     const checkText = (text: string, b: SecBlock) => {
-      if (!text || typeof text !== 'string') return;
+      if (!text || typeof text !== 'string' || !text.includes('@')) return;
       const regex = new RegExp(CELL_VARIABLE_REGEX);
+      regex.lastIndex = 0;
       let match: RegExpExecArray | null;
       while ((match = regex.exec(text)) !== null) {
         const tab = match[1] || match[2];
@@ -399,15 +435,16 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     });
 
     return Array.from(map.values());
-  }, [blocks]);
+  }, [tokensSignature, blocks]);
 
   // Set of cell references used in document (fast lookup for green triangle corner)
   const usedCellSet = useMemo(() => {
     return new Set(usedVariableTokens.map((v) => v.cellRef));
   }, [usedVariableTokens]);
 
-  // Full used variables with live values for the Variables tab
+  // Full used variables with live values for the Variables tab (only calculated when Variables tab is active)
   const usedVariables = useMemo(() => {
+    if (activeTab !== 'variables') return [];
     return usedVariableTokens
       .map((token) => {
         let cellVal: any;
@@ -424,7 +461,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
         };
       })
       .sort((a, b) => a.fullRef.localeCompare(b.fullRef, undefined, { numeric: true }));
-  }, [usedVariableTokens, safeSheet.tabs, safeSheet.cells, currentCells]);
+  }, [activeTab, usedVariableTokens, safeSheet.tabs, safeSheet.cells, currentCells]);
 
   // Tab Switching
   const handleSwitchTab = (tabId: string) => {
@@ -521,9 +558,18 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     const cleanRef = ref.toUpperCase();
     const nextCells = { ...currentCells, [cleanRef]: parsed };
     const next = updateActiveTabCells(spreadsheet, nextCells);
-    onUpdateSpreadsheet(next);
 
-    const count = onUpdateCell(cleanRef, parsed);
+    // Invalidate formula cache on cell edit
+    formulaCacheRef.current.clear();
+
+    // Unified single update: updates the sheet AND synchronizes document blocks without duplicate saves
+    let count = 0;
+    if (onUpdateCell) {
+      count = onUpdateCell(cleanRef, parsed, next);
+    } else {
+      onUpdateSpreadsheet(next);
+    }
+
     if (count > 0) {
       toast.success(`Updated ${count} linked document value${count > 1 ? 's' : ''}`);
     }
@@ -775,7 +821,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     applySpreadsheetShift(next, op, `Deleted column ${selectedColLetter} (Total: ${next.colCount})`);
   };
 
-  // Excel Dialog Execution Handlers
+  // Spreadsheet Dialog Execution Handlers
   const handleExecuteInsert = (
     option: 'shift_right' | 'shift_down' | 'entire_row' | 'entire_col'
   ) => {
@@ -905,7 +951,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
       e.preventDefault();
       handleClearSelectedCell();
     } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      // Start typing directly into cell like Excel
+      // Start typing directly into active cell
       setSelectedCellRef(selectedCellRef);
       setEditingValue(e.key);
       setInlineEditingValue(e.key);
@@ -1050,7 +1096,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     }
   };
 
-  // Upload Excel file handler
+  // Upload spreadsheet file handler
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1079,7 +1125,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     }
   };
 
-  // Export current spreadsheet to Excel
+  // Export current spreadsheet (.xlsx)
   const handleExport = async () => {
     try {
       const blob = await exportSpreadsheetToExcel(spreadsheet);
@@ -1269,7 +1315,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               <span>New Sheet</span>
             </Button>
 
-            {/* Upload Excel Button */}
+            {/* Upload Spreadsheet Button */}
             <input
               ref={fileInputRef}
               type="file"
@@ -1290,7 +1336,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               <span>{isUploading ? 'Parsing...' : 'Upload .xlsx'}</span>
             </Button>
 
-            {/* Export Excel Button */}
+            {/* Export Spreadsheet Button */}
             <Button
               type="button"
               variant="outline"
@@ -1367,7 +1413,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               </button>
             </div>
 
-            {/* Excel Insert Dialog Trigger */}
+            {/* Spreadsheet Insert Dialog Trigger */}
             <Button
               type="button"
               variant="outline"
@@ -2042,7 +2088,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                 </table>
               </div>
 
-              {/* Excel-Style Multi-Tab Strip at the bottom of the grid */}
+              {/* Multi-Tab Strip at the bottom of the grid */}
               <div className="flex items-center justify-between border-t border-slate-300 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-950 px-3 py-1 overflow-x-auto select-none gap-2">
                 <div className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0 py-0.5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase font-mono mr-1 shrink-0">
@@ -2496,7 +2542,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
           </DialogContent>
         </Dialog>
 
-        {/* EXCEL RIGHT-CLICK CONTEXT MENU — rendered via portal to document.body so it is
+        {/* SPREADSHEET RIGHT-CLICK CONTEXT MENU — rendered via portal to document.body so it is
              fully outside the Dialog's CSS transform stacking context. This fixes the bug
              where position:fixed coords (e.clientX/Y) were offset by the dialog's origin. */}
         {contextMenu?.open && createPortal(
@@ -2602,7 +2648,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* EXACT MICROSOFT EXCEL STYLE "INSERT" DIALOG                    */}
+        {/* SPREADSHEET INSERT DIALOG                    */}
         {/* ------------------------------------------------------------- */}
         {isInsertDialogOpen && (
           <div
@@ -2763,7 +2809,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* EXACT MICROSOFT EXCEL STYLE "DELETE" DIALOG                    */}
+        {/* SPREADSHEET DELETE DIALOG                    */}
         {/* ------------------------------------------------------------- */}
         {isDeleteDialogOpen && (
           <div

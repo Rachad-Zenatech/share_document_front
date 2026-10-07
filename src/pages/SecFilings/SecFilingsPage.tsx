@@ -996,7 +996,7 @@ export default function SecFilingsPage() {
 
       {/* Expansive Center Workspace */}
       <main className="w-full max-w-full mx-auto px-2 sm:px-4 md:px-6 py-4 flex gap-4 lg:gap-6 items-start justify-center">
-        {/* Left Column: Word Headings Outline Pane (Collapsible, Full Height) */}
+        {/* Left Column: Headings Outline Pane (Collapsible, Full Height) */}
         {showOutline && (
           <div className="w-64 shrink-0 sticky top-28 h-[calc(100vh-16rem)] max-h-[calc(100vh-16rem)] min-h-[340px] flex flex-col">
             <DocumentOutline
@@ -1013,7 +1013,7 @@ export default function SecFilingsPage() {
           </div>
         )}
 
-        {/* Center Column: Prominent Word Document Sheet */}
+        {/* Center Column: Prominent Document Sheet */}
         <div className="flex-1 w-full min-w-0">
           <BlockBuilder
             tableTemplates={tableTemplates}

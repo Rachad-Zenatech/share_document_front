@@ -2,7 +2,7 @@ import type { AttachedSpreadsheet, SpreadsheetTab, SecBlock } from '../types/sec
 import ExcelJS from 'exceljs';
 
 /**
- * Regex to match Excel cell variables in document text.
+ * Regex to match spreadsheet cell variables in document text.
  * Matches:
  *   - @A1
  *   - @A1{500}
@@ -26,7 +26,7 @@ export function hasDocumentVariables(text: string): boolean {
 }
 
 /**
- * Converts a column number (1-based) to Excel column letters (A, B, ... Z, AA ... AW).
+ * Converts a column number (1-based) to column letters (A, B, ... Z, AA ... AW).
  */
 export function colToLetter(col: number): string {
   let letter = '';
@@ -475,7 +475,7 @@ export async function parseExcelFileToSpreadsheet(file: File): Promise<AttachedS
 }
 
 /**
- * Exports an AttachedSpreadsheet (including ALL tabs) back to an Excel (.xlsx) Blob.
+ * Exports an AttachedSpreadsheet (including ALL tabs) back to an .xlsx Blob.
  */
 export async function exportSpreadsheetToExcel(sheet: AttachedSpreadsheet): Promise<Blob> {
   const wb = new ExcelJS.Workbook();
@@ -848,7 +848,7 @@ export function shiftSingleCellRef(
 }
 
 /**
- * Shifts any cell references inside an Excel formula string (e.g. "=B8*1.1" -> "=B9*1.1").
+ * Shifts any cell references inside a formula string (e.g. "=B8*1.1" -> "=B9*1.1").
  */
 export function shiftFormulaInString(
   formulaStr: string,

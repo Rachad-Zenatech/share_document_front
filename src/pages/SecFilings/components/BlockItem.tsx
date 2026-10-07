@@ -1315,7 +1315,7 @@ const HeadingBlockEditor: React.FC<{
 };
 
 /* ------------------------------------------------------------------------- */
-/* 2. PARAGRAPH BLOCK EDITOR (Word Body Text)                                */
+/* 2. PARAGRAPH BLOCK EDITOR (Body Text)                                */
 /* ------------------------------------------------------------------------- */
 const ParagraphBlockEditor: React.FC<{
   block: SecParagraphBlock;
@@ -1752,7 +1752,7 @@ const TableCellInput: React.FC<{
 };
 
 /* ------------------------------------------------------------------------- */
-/* 3. FINANCIAL STATEMENT TABLE EDITOR (Authentic Word Financial Table)       */
+/* 3. FINANCIAL STATEMENT TABLE EDITOR (Financial Statement Table)       */
 /* ------------------------------------------------------------------------- */
 const FinancialTableBlockEditor: React.FC<{
   block: SecFinancialTableBlock;
@@ -2539,7 +2539,7 @@ const FinancialTableBlockEditor: React.FC<{
         </div>
       )}
 
-      {/* Authentic Word Financial Table Grid */}
+      {/* Financial Statement Table Grid */}
       <div className="overflow-x-auto w-full my-1">
         <table className="w-full text-[13px] border-collapse">
           <thead>

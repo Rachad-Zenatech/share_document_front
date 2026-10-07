@@ -1041,8 +1041,8 @@ export function useSecFiling() {
     }
   }, [mainDoc.id, setWorkingBlocks]);
 
-  const handleUpdateSpreadsheetCell = useCallback((cellRef: string, newValue: any) => {
-    const { updatedDoc, updatedCount } = secFilingService.updateSpreadsheetCellAndSyncDoc(cellRef, newValue, mainDoc.id);
+  const handleUpdateSpreadsheetCell = useCallback((cellRef: string, newValue: any, updatedSheet?: AttachedSpreadsheet) => {
+    const { updatedDoc, updatedCount } = secFilingService.updateSpreadsheetCellAndSyncDoc(cellRef, newValue, mainDoc.id, updatedSheet);
     setMainDoc({ ...updatedDoc });
     return updatedCount;
   }, [mainDoc.id]);
