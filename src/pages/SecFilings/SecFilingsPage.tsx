@@ -246,6 +246,8 @@ export default function SecFilingsPage() {
   const [isSpreadsheetOpen, setIsSpreadsheetOpen] = useState(false);
   const [isSpreadsheetPickerOpen, setIsSpreadsheetPickerOpen] = useState(false);
   const [spreadsheetModalMode, setSpreadsheetModalMode] = useState<'manage' | 'picker'>('manage');
+  const [targetSpreadsheetCell, setTargetSpreadsheetCell] = useState<string | undefined>(undefined);
+  const [targetSpreadsheetTab, setTargetSpreadsheetTab] = useState<string | undefined>(undefined);
   const [pickerCallback, setPickerCallback] = useState<((cellRef: string, displayVal: string) => void) | null>(null);
   const [pickerBlockTitle, setPickerBlockTitle] = useState<string>('');
 
@@ -270,6 +272,16 @@ export default function SecFilingsPage() {
 
   const [selectedProposalForReview, setSelectedProposalForReview] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'word' | 'blocks'>('word');
+
+  const reviewProposal = selectedProposalForReview || activeProposal;
+
+  const reviewDiffs = useMemo(() => {
+    if (!isMergeModalOpen || !reviewProposal) return [];
+    if (selectedProposalForReview) {
+      return calculateDiffForProposal(selectedProposalForReview);
+    }
+    return activeDiffs;
+  }, [isMergeModalOpen, reviewProposal, selectedProposalForReview, calculateDiffForProposal, activeDiffs]);
 
   const navigate = useNavigate();
   const [isExportingDocx, setIsExportingDocx] = useState(false);
@@ -1044,8 +1056,10 @@ export default function SecFilingsPage() {
             viewMode={viewMode}
             onToggleViewMode={setViewMode}
             attachedSpreadsheet={attachedSpreadsheet}
-            onOpenSpreadsheet={() => {
+            onOpenSpreadsheet={(cellRef, tabName) => {
               setSpreadsheetModalMode('manage');
+              setTargetSpreadsheetCell(cellRef);
+              setTargetSpreadsheetTab(tabName);
               setIsSpreadsheetOpen(true);
             }}
             onOpenCellPicker={handleOpenCellPicker}
@@ -1080,6 +1094,8 @@ export default function SecFilingsPage() {
         mode={spreadsheetModalMode}
         onInsertVariable={pickerCallback || undefined}
         targetBlockTitle={pickerBlockTitle}
+        initialCellRef={targetSpreadsheetCell}
+        initialTabName={targetSpreadsheetTab}
         onSelectBlock={(blockId) => {
           setSelectedBlockId(blockId);
           const el = document.getElementById(blockId);
@@ -1100,21 +1116,22 @@ export default function SecFilingsPage() {
         }}
       />
 
-      <MergeReviewModal
-        open={isMergeModalOpen}
-        onOpenChange={setIsMergeModalOpen}
-        proposal={selectedProposalForReview || activeProposal}
-        mainDoc={mainDoc}
-        diffs={
-          selectedProposalForReview
-            ? calculateDiffForProposal(selectedProposalForReview)
-            : activeDiffs
-        }
-        isLeadController={activeRole === 'LEAD_CONTROLLER'}
-        onMerge={handleMergeProposal}
-        onMergeSelective={handleSelectiveMerge}
-        onReject={handleRejectProposal}
-      />
+      {isMergeModalOpen && reviewProposal && (
+        <MergeReviewModal
+          open={isMergeModalOpen}
+          onOpenChange={setIsMergeModalOpen}
+          proposal={reviewProposal}
+          mainDoc={{
+            ...mainDoc,
+            attachedSpreadsheet: mainDoc.attachedSpreadsheet || attachedSpreadsheet || secFilingService.getAttachedSpreadsheet(mainDoc.id)
+          }}
+          diffs={reviewDiffs}
+          isLeadController={activeRole === 'LEAD_CONTROLLER'}
+          onMerge={handleMergeProposal}
+          onMergeSelective={handleSelectiveMerge}
+          onReject={handleRejectProposal}
+        />
+      )}
 
       <VersionHistoryModal
         open={isHistoryModalOpen}

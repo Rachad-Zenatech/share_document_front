@@ -39,7 +39,8 @@ import type {
   SecSignatureBlock,
   SecDividerBlock,
   SecMetadataBlock,
-  SecImageBlock
+  SecImageBlock,
+  AttachedSpreadsheet
 } from '../../../types/secFiling';
 import { ZENATECH_LOGO_DATA_URL } from '../../../data/zenatechLogoAsset';
 import { paginateBlocks } from '../../../utils/secFilingPagination';
@@ -54,6 +55,11 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from '../../../components/ui/dropdown-menu';
+import { computeSpreadsheetDiffs } from '../../../utils/documentVariables';
+import { AttachedSpreadsheetModal } from './AttachedSpreadsheetModal';
+import { DocumentVariableRenderer } from './DocumentVariableRenderer';
+import { EmbeddedSpreadsheetDiffViewer } from './EmbeddedSpreadsheetDiffViewer';
+import { secFilingService } from '../../../services/secFilingService';
 
 function formatSubmissionTime(dateString?: string): string {
   if (!dateString) return '';
@@ -236,14 +242,60 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
   onReject
 }) => {
   const [reviewNotes, setReviewNotes] = useState('');
-  const [viewMode, setViewMode] = useState<'doc-track-changes' | 'side-by-side-sheets' | 'summary-cards'>('doc-track-changes');
+  const [viewMode, setViewMode] = useState<
+    'doc-track-changes' | 'side-by-side-sheets' | 'summary-cards' | 'spreadsheet-diffs'
+  >('doc-track-changes');
   const [docWidth, setDocWidth] = useState<'wide' | 'full' | 'standard'>('wide');
   const [wordDisplayMode, setWordDisplayMode] = useState<'markup' | 'merged-preview' | 'live-original'>('markup');
   const [acceptedBlockIds, setAcceptedBlockIds] = useState<string[]>([]);
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
   const [activeDiffIndex, setActiveDiffIndex] = useState<number>(0);
+  const [isSpreadsheetPreviewOpen, setIsSpreadsheetPreviewOpen] = useState<boolean>(false);
+  const [targetSpreadsheetCell, setTargetSpreadsheetCell] = useState<string | undefined>(undefined);
+  const [targetSpreadsheetTab, setTargetSpreadsheetTab] = useState<string | undefined>(undefined);
 
-    const changedDiffs = useMemo(() => diffs.filter((d) => d.status !== 'unchanged'), [diffs]);
+  const proposalSpreadsheet = proposal?.attachedSpreadsheet || mainDoc.attachedSpreadsheet;
+  const mainSpreadsheet = mainDoc.attachedSpreadsheet;
+
+  const handleOpenSpreadsheetToCell = (cellRef?: string, tabName?: string) => {
+    setTargetSpreadsheetCell(cellRef);
+    setTargetSpreadsheetTab(tabName);
+    setIsSpreadsheetPreviewOpen(true);
+  };
+
+  const changedDiffs = useMemo(() => diffs.filter((d) => d.status !== 'unchanged'), [diffs]);
+
+  const spreadsheetDiffs = useMemo(() => {
+    if (!proposal) return [];
+    const effectiveBase =
+      mainDoc.attachedSpreadsheet ||
+      secFilingService.getAttachedSpreadsheet(mainDoc.id);
+
+    const effectiveProp =
+      proposal.attachedSpreadsheet ||
+      (proposal.id ? secFilingService.getProposals().find((p) => p.id === proposal.id)?.attachedSpreadsheet : null) ||
+      effectiveBase;
+
+    return computeSpreadsheetDiffs(
+      effectiveBase,
+      effectiveProp,
+      proposal.blocks || []
+    );
+  }, [mainDoc, proposal]);
+
+  // If there are spreadsheet changes and no document text changes, default to spreadsheet diffs view
+  useEffect(() => {
+    if (open) {
+      if (changedDiffs.length === 0 && spreadsheetDiffs.length > 0) {
+        setViewMode('spreadsheet-diffs');
+      } else {
+        setViewMode('doc-track-changes');
+      }
+    }
+  }, [open, changedDiffs.length, spreadsheetDiffs.length]);
+
+  const totalChangesCount = changedDiffs.length + spreadsheetDiffs.length;
+  const totalSelectedCount = acceptedBlockIds.length + (spreadsheetDiffs.length > 0 ? spreadsheetDiffs.length : 0);
 
   const spacingChangeCount = useMemo(
     () => changedDiffs.filter((d) => d.changeCategories?.includes('spacing')).length,
@@ -517,7 +569,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
   };
 
   const handleConfirmMergeSelected = () => {
-    if (acceptedBlockIds.length === 0) {
+    if (acceptedBlockIds.length === 0 && spreadsheetDiffs.length === 0) {
       alert('Please select at least one change to confirm and merge.');
       return;
     }
@@ -626,29 +678,38 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
             <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-zinc-700 font-medium">
               <CheckCheck className="w-3.5 h-3.5 text-blue-600" />
               <span className="text-slate-700 dark:text-zinc-300">
-                Selected for Merge: <strong className="text-blue-700 dark:text-blue-400">{acceptedBlockIds.length} of {changedDiffs.length}</strong> changes
+                Selected for Merge: <strong className="text-blue-700 dark:text-blue-400">
+                  {totalSelectedCount} of {totalChangesCount}
+                </strong> changes
+                {spreadsheetDiffs.length > 0 && (
+                  <span className="text-[10px] text-slate-500 font-normal ml-1">
+                    ({acceptedBlockIds.length} doc blocks, {spreadsheetDiffs.length} spreadsheet cells)
+                  </span>
+                )}
               </span>
             </div>
 
-                        <div className="flex items-center gap-1 text-xs">
-              <button
-                type="button"
-                onClick={handleSelectAll}
-                className="px-2 py-1 rounded bg-white dark:bg-zinc-800 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 border border-slate-200 dark:border-zinc-700 cursor-pointer"
-              >
-                Select All
-              </button>
-              <button
-                type="button"
-                onClick={handleDeselectAll}
-                className="px-2 py-1 rounded bg-white dark:bg-zinc-800 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 border border-slate-200 dark:border-zinc-700 cursor-pointer"
-              >
-                Deselect All
-              </button>
-            </div>
+            {changedDiffs.length > 0 && (
+              <div className="flex items-center gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  className="px-2 py-1 rounded bg-white dark:bg-zinc-800 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 border border-slate-200 dark:border-zinc-700 cursor-pointer"
+                >
+                  Select All
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeselectAll}
+                  className="px-2 py-1 rounded bg-white dark:bg-zinc-800 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 border border-slate-200 dark:border-zinc-700 cursor-pointer"
+                >
+                  Deselect All
+                </button>
+              </div>
+            )}
 
             {/* Change Categories Breakdown Pill */}
-            {changedDiffs.length > 0 && (
+            {(changedDiffs.length > 0 || spreadsheetDiffs.length > 0) && (
               <div className="hidden xl:flex items-center gap-1.5 text-[11px] bg-white dark:bg-zinc-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-zinc-700">
                 <span className="text-slate-500 font-sans font-medium text-[11px]">Types:</span>
                 {contentChangeCount > 0 && (
@@ -674,6 +735,17 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                     <Table className="w-2.5 h-2.5 text-emerald-600" />
                     {tableChangeCount} Table
                   </span>
+                )}
+                {spreadsheetDiffs.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('spreadsheet-diffs')}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-950 text-amber-950 dark:text-amber-200 font-bold border border-amber-300 text-[10px] cursor-pointer hover:bg-amber-200 transition-colors"
+                    title="View Spreadsheet Cell Diffs"
+                  >
+                    <Table className="w-2.5 h-2.5 text-amber-600" />
+                    {spreadsheetDiffs.length} Excel Cells
+                  </button>
                 )}
               </div>
             )}
@@ -980,6 +1052,31 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                 <Columns className="w-3 h-3" />
                 <span>Block Mode</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('spreadsheet-diffs')}
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'spreadsheet-diffs'
+                    ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900'
+                }`}
+                title="Inspect Spreadsheet & Financial Model Cell Changes"
+              >
+                <Table className="w-3 h-3 text-emerald-500" />
+                <span>Spreadsheet Changes</span>
+                {spreadsheetDiffs.length > 0 && (
+                  <Badge
+                    className={`text-[9px] px-1 py-0 font-mono font-bold ${
+                      viewMode === 'spreadsheet-diffs'
+                        ? 'bg-white text-emerald-800'
+                        : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                    }`}
+                  >
+                    {spreadsheetDiffs.length}
+                  </Badge>
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -1067,7 +1164,11 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                       <div className="space-y-1">
                         {page.blocks.map((block, idx) => (
                           <div key={block.id || idx} className="relative py-0 hover:bg-slate-50/40 rounded transition-colors">
-                            <SecDocBlockRenderer block={block} />
+                            <SecDocBlockRenderer
+                              block={block}
+                              spreadsheet={proposalSpreadsheet}
+                              onInspectCell={handleOpenSpreadsheetToCell}
+                            />
                           </div>
                         ))}
                       </div>
@@ -1114,7 +1215,11 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                       <div className="space-y-1">
                         {page.blocks.map((block, idx) => (
                           <div key={block.id || idx} className="relative py-0 hover:bg-slate-50/40 rounded transition-colors">
-                            <SecDocBlockRenderer block={block} />
+                            <SecDocBlockRenderer
+                              block={block}
+                              spreadsheet={mainSpreadsheet}
+                              onInspectCell={handleOpenSpreadsheetToCell}
+                            />
                           </div>
                         ))}
                       </div>
@@ -1169,7 +1274,11 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                           /* Unchanged Block: Rendered cleanly as standard document content */
                           return (
                             <div key={blockId || idx} className="relative py-0 hover:bg-slate-50/40 rounded transition-colors">
-                              <SecDocBlockRenderer block={block} />
+                              <SecDocBlockRenderer
+                                block={block}
+                                spreadsheet={proposalSpreadsheet}
+                                onInspectCell={handleOpenSpreadsheetToCell}
+                              />
                             </div>
                           );
                         }
@@ -1250,17 +1359,29 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                             {/* Content Stream with Native Track Changes Highlighting */}
                             {diff.status === 'added' ? (
                               <div className={!isAccepted ? 'opacity-50 line-through' : ''}>
-                                <SecDocBlockRenderer block={diff.proposedBlock!} />
+                                <SecDocBlockRenderer
+                                  block={diff.proposedBlock!}
+                                  spreadsheet={proposalSpreadsheet}
+                                  onInspectCell={handleOpenSpreadsheetToCell}
+                                />
                               </div>
                             ) : diff.status === 'deleted' ? (
                               <div className={isAccepted ? 'line-through text-red-700 opacity-70' : 'text-slate-800'}>
-                                <SecDocBlockRenderer block={diff.originalBlock!} />
+                                <SecDocBlockRenderer
+                                  block={diff.originalBlock!}
+                                  spreadsheet={mainSpreadsheet}
+                                  onInspectCell={handleOpenSpreadsheetToCell}
+                                />
                               </div>
                             ) : (
                               <div>
                                 {diff.isSpacingOnly || diff.isTypographyOnly ? (
                                   /* Pure formatting / spacing: show updated formatting seamlessly */
-                                  <SecDocBlockRenderer block={isAccepted ? diff.proposedBlock! : diff.originalBlock!} />
+                                  <SecDocBlockRenderer
+                                    block={isAccepted ? diff.proposedBlock! : diff.originalBlock!}
+                                    spreadsheet={isAccepted ? proposalSpreadsheet : mainSpreadsheet}
+                                    onInspectCell={handleOpenSpreadsheetToCell}
+                                  />
                                 ) : diff.originalBlock?.type === 'financial_table' && diff.proposedBlock?.type === 'financial_table' ? (
                                   /* Financial table with cell revisions: render single integrated table with inline track changes */
                                   <SecDocBlockRenderer
@@ -1269,23 +1390,37 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                                     tableCellDiffs={diff.tableCellDiffs}
                                     side="unified-track-changes"
                                     isAccepted={isAccepted}
+                                    spreadsheet={proposalSpreadsheet}
+                                    onInspectCell={handleOpenSpreadsheetToCell}
                                   />
                                 ) : (
                                   /* Content change: show red strikethrough original + green proposed revision */
                                   <div className="space-y-1">
                                     {diff.originalBlock && (
                                       <div className={isAccepted ? 'line-through text-red-700/80 opacity-70' : 'text-slate-900'}>
-                                        <SecDocBlockRenderer block={diff.originalBlock} />
+                                        <SecDocBlockRenderer
+                                          block={diff.originalBlock}
+                                          spreadsheet={mainSpreadsheet}
+                                          onInspectCell={handleOpenSpreadsheetToCell}
+                                        />
                                       </div>
                                     )}
                                     {diff.proposedBlock && isAccepted && (
                                       <div className="text-emerald-950 bg-emerald-50/40 p-1 rounded border border-emerald-200/60 mt-1">
-                                        <SecDocBlockRenderer block={diff.proposedBlock} />
+                                        <SecDocBlockRenderer
+                                          block={diff.proposedBlock}
+                                          spreadsheet={proposalSpreadsheet}
+                                          onInspectCell={handleOpenSpreadsheetToCell}
+                                        />
                                       </div>
                                     )}
                                     {diff.proposedBlock && !isAccepted && (
                                       <div className="text-slate-400 line-through opacity-50 p-1 rounded border border-dashed border-slate-200 mt-1">
-                                        <SecDocBlockRenderer block={diff.proposedBlock} />
+                                        <SecDocBlockRenderer
+                                          block={diff.proposedBlock}
+                                          spreadsheet={proposalSpreadsheet}
+                                          onInspectCell={handleOpenSpreadsheetToCell}
+                                        />
                                       </div>
                                     )}
                                   </div>
@@ -1389,6 +1524,8 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                                   tableCellDiffs={diff.tableCellDiffs}
                                   side="original"
                                   isAccepted={isAccepted}
+                                  spreadsheet={mainSpreadsheet}
+                                  onInspectCell={handleOpenSpreadsheetToCell}
                                 />
                               </div>
                             </div>
@@ -1466,6 +1603,8 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                                 tableCellDiffs={diff.tableCellDiffs}
                                 side="proposed"
                                 isAccepted={isAccepted}
+                                spreadsheet={proposalSpreadsheet}
+                                onInspectCell={handleOpenSpreadsheetToCell}
                               />
                             </div>
                           ) : (
@@ -1490,9 +1629,28 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                 </div>
               </div>
             </div>
+          ) : viewMode === 'spreadsheet-diffs' ? (
+            /* ========================================================================= */
+            /* 3. SPREADSHEET / EXCEL CELL CHANGES VIEW                                  */
+            /* ========================================================================= */
+            <div className="w-full max-w-[1380px] space-y-4">
+              <EmbeddedSpreadsheetDiffViewer
+                baseSpreadsheet={mainDoc.attachedSpreadsheet || secFilingService.getAttachedSpreadsheet(mainDoc.id)}
+                proposedSpreadsheet={
+                  proposal?.attachedSpreadsheet ||
+                  (proposal?.id ? secFilingService.getProposals().find((p) => p.id === proposal.id)?.attachedSpreadsheet : null) ||
+                  mainDoc.attachedSpreadsheet ||
+                  secFilingService.getAttachedSpreadsheet(mainDoc.id)
+                }
+                spreadsheetDiffs={spreadsheetDiffs}
+                onOpenFullModal={() => setIsSpreadsheetPreviewOpen(true)}
+                initialCellRef={targetSpreadsheetCell}
+                initialTabName={targetSpreadsheetTab}
+              />
+            </div>
           ) : (
             /* ========================================================================= */
-            /* 3. SUMMARY CARDS LIST VIEW                                                */
+            /* 4. SUMMARY CARDS LIST VIEW                                                */
             /* ========================================================================= */
             <div className="w-full max-w-[1380px] space-y-3">
               {changedDiffs.map((diff, idx) => {
@@ -1607,6 +1765,8 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                             tableCellDiffs={diff.tableCellDiffs}
                             side="original"
                             isAccepted={isAccepted}
+                            spreadsheet={mainSpreadsheet}
+                            onInspectCell={handleOpenSpreadsheetToCell}
                           />
                         ) : (
                           <span className="italic text-slate-400">(Block did not exist)</span>
@@ -1624,6 +1784,8 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                             tableCellDiffs={diff.tableCellDiffs}
                             side="proposed"
                             isAccepted={isAccepted}
+                            spreadsheet={proposalSpreadsheet}
+                            onInspectCell={handleOpenSpreadsheetToCell}
                           />
                         ) : (
                           <span className="italic text-red-500">(Block deleted)</span>
@@ -1658,7 +1820,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
               <span>
                 {isLeadController
-                  ? `Lead Controller authority active. ${acceptedBlockIds.length} of ${changedDiffs.length} change(s) selected to merge.`
+                  ? `Lead Controller authority active. ${totalSelectedCount} of ${totalChangesCount} change(s) selected to merge.`
                   : 'Viewing in Contributor mode. Switch role to Lead Controller to merge.'}
               </span>
             </div>
@@ -1688,21 +1850,21 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                   <Button
                     type="button"
                     onClick={handleConfirmMergeSelected}
-                    disabled={acceptedBlockIds.length === 0}
+                    disabled={totalSelectedCount === 0}
                     className="text-xs h-8 bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-sm font-semibold relative z-[70] hover:z-[99] cursor-pointer hover:shadow-md transition-all"
                   >
                     <GitMerge className="w-3.5 h-3.5" />
-                    <span>Confirm & Merge Selected ({acceptedBlockIds.length})</span>
+                    <span>Confirm & Merge Selected ({totalSelectedCount})</span>
                   </Button>
 
-                  {acceptedBlockIds.length < changedDiffs.length && (
+                  {totalSelectedCount < totalChangesCount && (
                     <Button
                       type="button"
                       variant="outline"
                       onClick={handleApproveAndMergeAll}
                       className="text-xs h-8 text-emerald-700 dark:text-emerald-300 border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-medium relative z-[70] hover:z-[99] cursor-pointer hover:shadow-md transition-all"
                     >
-                      <span>Merge All ({changedDiffs.length})</span>
+                      <span>Merge All ({totalChangesCount})</span>
                     </Button>
                   )}
                 </>
@@ -1711,6 +1873,21 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
           </div>
         </div>
       </DialogContent>
+
+      {proposal && (
+        <AttachedSpreadsheetModal
+          open={isSpreadsheetPreviewOpen}
+          onOpenChange={setIsSpreadsheetPreviewOpen}
+          spreadsheet={proposal.attachedSpreadsheet || mainDoc.attachedSpreadsheet}
+          onUpdateSpreadsheet={() => {}}
+          onUpdateCell={() => 0}
+          blocks={proposal.blocks || mainDoc.blocks}
+          mode="manage"
+          targetBlockTitle="Proposal Spreadsheet Inspection"
+          initialCellRef={targetSpreadsheetCell}
+          initialTabName={targetSpreadsheetTab}
+        />
+      )}
     </Dialog>
   );
 };
@@ -1724,12 +1901,16 @@ const SecDocBlockRenderer: React.FC<{
   tableCellDiffs?: SecTableCellDiff[];
   side?: 'original' | 'proposed' | 'unified-track-changes';
   isAccepted?: boolean;
+  spreadsheet?: AttachedSpreadsheet | null;
+  onInspectCell?: (cellRef?: string, tabName?: string) => void;
 }> = ({
   block,
   comparisonBlock: _comparisonBlock,
   tableCellDiffs = [],
   side = 'unified-track-changes',
-  isAccepted = false
+  isAccepted = false,
+  spreadsheet,
+  onInspectCell
 }) => {
   if (block.type === 'heading') {
     const b = block as SecHeadingBlock;
@@ -1752,7 +1933,11 @@ const SecDocBlockRenderer: React.FC<{
         }}
         className="w-full select-text"
       >
-        {b.text}
+        <DocumentVariableRenderer
+          text={b.text}
+          spreadsheet={spreadsheet}
+          onInspectCell={onInspectCell}
+        />
       </div>
     );
   }
@@ -1781,7 +1966,11 @@ const SecDocBlockRenderer: React.FC<{
             Note {b.noteNumber}:
           </span>
         )}
-        {b.text}
+        <DocumentVariableRenderer
+          text={b.text}
+          spreadsheet={spreadsheet}
+          onInspectCell={onInspectCell}
+        />
       </div>
     );
   }
@@ -1900,7 +2089,11 @@ const SecDocBlockRenderer: React.FC<{
                 return (
                   <tr key={row.id} className={`border-t border-slate-100 font-bold text-slate-900 bg-slate-50/30 ${rowHighlightClass}`}>
                     <td colSpan={b.headers.length} className="py-1 px-2 text-[11px] italic">
-                      {row.cells[0]}
+                      <DocumentVariableRenderer
+                        text={row.cells[0]}
+                        spreadsheet={spreadsheet}
+                        onInspectCell={onInspectCell}
+                      />
                     </td>
                   </tr>
                 );
@@ -1930,9 +2123,13 @@ const SecDocBlockRenderer: React.FC<{
                     const align = row.cellAlignments?.[cIdx] || row.align || (isDateHeader ? 'center' : (b.columnAlignments?.[cIdx] || (cIdx === 0 ? 'left' : 'right')));
                     const cellDiff = cellDiffMap.get(`${rIdx}_${cIdx}`);
 
-                    let cellContent = (
+                    let cellContent: React.ReactNode = (
                       <span className={isDateHeader ? 'font-bold text-[#0E2841]' : 'text-slate-800'}>
-                        {cell}
+                        <DocumentVariableRenderer
+                          text={String(cell ?? '')}
+                          spreadsheet={spreadsheet}
+                          onInspectCell={onInspectCell}
+                        />
                       </span>
                     );
 
@@ -1970,7 +2167,11 @@ const SecDocBlockRenderer: React.FC<{
                             className="inline-block bg-amber-100/95 dark:bg-amber-950/90 text-amber-950 dark:text-amber-200 font-bold px-1.5 py-0.5 rounded border border-amber-400 dark:border-amber-700 shadow-2xs font-mono"
                             title={`Original Main Value. Proposed change in draft: "${cellDiff.newValue}"`}
                           >
-                            {cell}
+                            <DocumentVariableRenderer
+                              text={String(cell ?? '')}
+                              spreadsheet={spreadsheet}
+                              onInspectCell={onInspectCell}
+                            />
                           </span>
                         );
                       } else if (side === 'proposed') {
@@ -1979,7 +2180,11 @@ const SecDocBlockRenderer: React.FC<{
                             className="inline-block bg-emerald-100/95 dark:bg-emerald-950/90 text-emerald-950 dark:text-emerald-200 font-bold px-1.5 py-0.5 rounded border border-emerald-400 dark:border-emerald-700 shadow-2xs font-mono"
                             title={`Proposed New Value. Original value in Main was: "${cellDiff.oldValue}"`}
                           >
-                            {cell}
+                            <DocumentVariableRenderer
+                              text={String(cell ?? '')}
+                              spreadsheet={spreadsheet}
+                              onInspectCell={onInspectCell}
+                            />
                           </span>
                         );
                       }
@@ -2046,8 +2251,22 @@ const SecDocBlockRenderer: React.FC<{
         style={{ marginTop: `${b.spacingTop ?? 8}px` }}
         className="w-full p-3.5 rounded-lg border border-blue-200 bg-blue-50/50 text-blue-950 text-xs space-y-1 select-text"
       >
-        {b.title && <div className="font-bold text-blue-900">{b.title}</div>}
-        <div className="leading-relaxed">{b.content}</div>
+        {b.title && (
+          <div className="font-bold text-blue-900">
+            <DocumentVariableRenderer
+              text={b.title}
+              spreadsheet={spreadsheet}
+              onInspectCell={onInspectCell}
+            />
+          </div>
+        )}
+        <div className="leading-relaxed">
+          <DocumentVariableRenderer
+            text={b.content}
+            spreadsheet={spreadsheet}
+            onInspectCell={onInspectCell}
+          />
+        </div>
       </div>
     );
   }

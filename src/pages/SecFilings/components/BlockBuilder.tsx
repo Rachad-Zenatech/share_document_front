@@ -57,7 +57,7 @@ interface BlockBuilderProps {
   viewMode?: 'word' | 'blocks';
   onToggleViewMode?: (mode: 'word' | 'blocks') => void;
   attachedSpreadsheet?: AttachedSpreadsheet | null;
-  onOpenSpreadsheet?: () => void;
+  onOpenSpreadsheet?: (cellRef?: string, tabName?: string) => void;
   onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
   searchQuery?: string;
   activeMatchBlockId?: string | null;

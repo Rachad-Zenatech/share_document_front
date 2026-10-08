@@ -84,7 +84,107 @@ export interface AttachedSpreadsheetModalProps {
   mode?: 'manage' | 'picker';
   onInsertVariable?: (cellRef: string, displayVal: string) => void;
   targetBlockTitle?: string;
+  initialCellRef?: string;
+  initialTabName?: string;
 }
+
+interface MemoizedGridCellProps {
+  cellRef: string;
+  rawVal: any;
+  display: string;
+  isFormula: boolean;
+  isSelected: boolean;
+  isLinked: boolean;
+  isSearchHit: boolean;
+  isInlineEditing: boolean;
+  currentTabName?: string;
+  isPickerMode: boolean;
+  inlineEditingValue: string;
+  onInlineChange: (val: string) => void;
+  onInlineKeyDown: (e: React.KeyboardEvent, cellRef: string) => void;
+  onInlineBlur: (cellRef: string) => void;
+  inlineInputRef: React.RefObject<HTMLInputElement | null>;
+}
+
+const MemoizedGridCell = React.memo<MemoizedGridCellProps>(
+  ({
+    cellRef,
+    rawVal,
+    display,
+    isFormula,
+    isSelected,
+    isLinked,
+    isSearchHit,
+    isInlineEditing,
+    currentTabName,
+    isPickerMode,
+    inlineEditingValue,
+    onInlineChange,
+    onInlineKeyDown,
+    onInlineBlur,
+    inlineInputRef
+  }) => {
+    const isNumeric = !isFormula ? typeof rawVal === 'number' : !isNaN(Number(display));
+
+    return (
+      <td
+        key={cellRef}
+        data-cell-ref={cellRef}
+        className={`w-32 min-w-[128px] max-w-[128px] h-7 px-1.5 border-r border-b text-xs truncate transition-colors cursor-cell relative ${
+          isSelected
+            ? 'bg-blue-100/90 dark:bg-blue-900/60 ring-2 ring-blue-600 ring-inset font-bold text-blue-950 dark:text-white border-blue-400'
+            : isSearchHit
+            ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-950 font-bold border-amber-400'
+            : isLinked
+            ? 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-slate-200 dark:border-zinc-800'
+            : 'bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 border-slate-200 dark:border-zinc-800'
+        } ${isNumeric && !isInlineEditing ? 'text-right font-mono' : 'text-left'}`}
+        title={`${currentTabName ? `${currentTabName}!` : ''}${cellRef}${isFormula ? ` [Formula: ${rawVal}]` : ''}: ${display || '(empty)'}${
+          isLinked ? ' (Linked in document)' : ''
+        }${isPickerMode ? ' (Click to select, double-click to link)' : ' (Double-click or Enter to edit directly)'}`}
+      >
+        {isInlineEditing ? (
+          <input
+            ref={inlineInputRef}
+            autoFocus
+            type="text"
+            value={inlineEditingValue}
+            onChange={(e) => onInlineChange(e.target.value)}
+            onKeyDown={(e) => onInlineKeyDown(e, cellRef)}
+            onBlur={() => onInlineBlur(cellRef)}
+            className="w-full h-6 px-1 text-xs font-mono bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 outline-none ring-2 ring-blue-600 rounded-xs shadow-inner"
+          />
+        ) : (
+          <>
+            {/* Green corner triangle for linked cells */}
+            {isLinked && (
+              <span className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-emerald-600 border-l-[6px] border-l-transparent" />
+            )}
+            {/* Purple corner triangle for formula cells */}
+            {isFormula && !isLinked && (
+              <span className="absolute top-0 left-0 w-0 h-0 border-t-[5px] border-t-violet-500 border-r-[5px] border-r-transparent" />
+            )}
+            <span>{display}</span>
+          </>
+        )}
+      </td>
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.rawVal === next.rawVal &&
+      prev.display === next.display &&
+      prev.isFormula === next.isFormula &&
+      prev.isSelected === next.isSelected &&
+      prev.isLinked === next.isLinked &&
+      prev.isSearchHit === next.isSearchHit &&
+      prev.isInlineEditing === next.isInlineEditing &&
+      (!prev.isInlineEditing || prev.inlineEditingValue === next.inlineEditingValue) &&
+      prev.isPickerMode === next.isPickerMode &&
+      prev.currentTabName === next.currentTabName
+    );
+  }
+);
 
 export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> = ({
   open,
@@ -97,6 +197,8 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   mode = 'manage',
   onInsertVariable,
   targetBlockTitle,
+  initialCellRef,
+  initialTabName,
 }) => {
   const isPickerMode = mode === 'picker';
   const [activeTab, setActiveTab] = useState<'grid' | 'variables'>('grid');
@@ -285,6 +387,42 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     scrollContainerRef.current.scrollTo({ top: targetY, behavior: 'smooth' });
   };
 
+  // Jump smoothly to a specific cell
+  const scrollToCell = useCallback((cellRef: string) => {
+    if (!scrollContainerRef.current) return;
+    const parsed = parseCellRef(cellRef);
+    if (!parsed) return;
+    const targetY = Math.max(0, (parsed.rowIndex - 3) * ROW_HEIGHT);
+    const targetX = Math.max(0, (parsed.colIndex - 2) * COL_WIDTH);
+    scrollContainerRef.current.scrollTo({ top: targetY, left: targetX, behavior: 'smooth' });
+  }, [ROW_HEIGHT, COL_WIDTH]);
+
+  // Jump to initial tab and initial cell on modal open
+  useEffect(() => {
+    if (!open) return;
+
+    if (initialTabName && spreadsheet.tabs && spreadsheet.tabs.length > 0) {
+      const cleanTarget = initialTabName.trim().toLowerCase();
+      const matchTab = spreadsheet.tabs.find(
+        (t) => t.name.trim().toLowerCase() === cleanTarget || t.id.toLowerCase() === cleanTarget
+      );
+      if (matchTab && matchTab.id !== spreadsheet.activeTabId) {
+        onUpdateSpreadsheet(switchActiveTab(spreadsheet, matchTab.id));
+      }
+    }
+
+    if (initialCellRef && initialCellRef.trim()) {
+      const cleanCell = initialCellRef.trim().toUpperCase();
+      setSelectedCellRef(cleanCell);
+      const val = currentCells[cleanCell];
+      setEditingValue(val !== undefined && val !== null ? String(val) : '');
+      const timer = setTimeout(() => {
+        scrollToCell(cleanCell);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [open, initialCellRef, initialTabName]);
+
   // Search filter
   const [searchQuery, setSearchQuery] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -435,7 +573,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     });
 
     return Array.from(map.values());
-  }, [tokensSignature, blocks]);
+  }, [tokensSignature]);
 
   // Set of cell references used in document (fast lookup for green triangle corner)
   const usedCellSet = useMemo(() => {
@@ -1192,6 +1330,39 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const selectedVal = currentCells[selectedCellRef];
   const { display: selectedFormatted, isFormula: selectedIsFormula } = resolveCellDisplay(selectedCellRef);
   // Formula bar shows raw formula (e.g. =SUM(A1:A5)); other bars show the resolved value
+
+  const handleInlineChange = useCallback((val: string) => {
+    setInlineEditingValue(val);
+    setEditingValue(val);
+  }, []);
+
+  const handleInlineKeyDown = useCallback(
+    (e: React.KeyboardEvent, cellRef: string) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commitCellValue(cellRef, inlineEditingValue, 'down');
+        setInlineEditingCellRef(null);
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        commitCellValue(cellRef, inlineEditingValue, e.shiftKey ? 'left' : 'right');
+        setInlineEditingCellRef(null);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setInlineEditingCellRef(null);
+        const val = currentCells[cellRef];
+        setEditingValue(val !== undefined && val !== null ? String(val) : '');
+      }
+    },
+    [inlineEditingValue, currentCells]
+  );
+
+  const handleInlineBlur = useCallback(
+    (cellRef: string) => {
+      commitCellValue(cellRef, inlineEditingValue, 'none');
+      setInlineEditingCellRef(null);
+    },
+    [inlineEditingValue]
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1987,80 +2158,33 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                           const { raw: val, display, isFormula } = resolveCellDisplay(cellRef);
                           const isSelected = selectedCellRef === cellRef;
                           const isLinked = usedCellSet.has(cellRef);
-                          const resolvedNum = !isFormula ? typeof val === 'number' : !isNaN(Number(display));
-                          const isNumeric = resolvedNum;
-
-                          const isSearchHit =
+                          const isSearchHit = Boolean(
                             searchQuery.trim() !== '' &&
                             (cellRef.toLowerCase() === searchQuery.toLowerCase() ||
                               (display &&
-                                display.toLowerCase().includes(searchQuery.toLowerCase())));
-
+                                display.toLowerCase().includes(searchQuery.toLowerCase())))
+                          );
                           const isInlineEditing = inlineEditingCellRef === cellRef;
 
                           return (
-                            <td
+                            <MemoizedGridCell
                               key={cellRef}
-                              data-cell-ref={cellRef}
-                              className={`w-32 min-w-[128px] max-w-[128px] h-7 px-1.5 border-r border-b text-xs truncate transition-colors cursor-cell relative ${
-                                isSelected
-                                  ? 'bg-blue-100/90 dark:bg-blue-900/60 ring-2 ring-blue-600 ring-inset font-bold text-blue-950 dark:text-white border-blue-400'
-                                  : isSearchHit
-                                  ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-950 font-bold border-amber-400'
-                                  : isLinked
-                                  ? 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-slate-200 dark:border-zinc-800'
-                                  : 'bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 border-slate-200 dark:border-zinc-800'
-                              } ${isNumeric && !isInlineEditing ? 'text-right font-mono' : 'text-left'}`}
-                              title={`${currentTab?.name ? `${currentTab.name}!` : ''}${cellRef}${isFormula ? ` [Formula: ${val}]` : ''}: ${display || '(empty)'}${
-                                isLinked ? ' (Linked in document)' : ''
-                              }${isPickerMode ? ' (Click to select, double-click to link)' : ' (Double-click or Enter to edit directly)'}`}
-                            >
-
-                              {isInlineEditing ? (
-                                <input
-                                  ref={inlineInputRef}
-                                  autoFocus
-                                  type="text"
-                                  value={inlineEditingValue}
-                                  onChange={(e) => {
-                                    setInlineEditingValue(e.target.value);
-                                    setEditingValue(e.target.value);
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      commitCellValue(cellRef, inlineEditingValue, 'down');
-                                      setInlineEditingCellRef(null);
-                                    } else if (e.key === 'Tab') {
-                                      e.preventDefault();
-                                      commitCellValue(cellRef, inlineEditingValue, e.shiftKey ? 'left' : 'right');
-                                      setInlineEditingCellRef(null);
-                                    } else if (e.key === 'Escape') {
-                                      e.preventDefault();
-                                      setInlineEditingCellRef(null);
-                                      setEditingValue(val !== undefined && val !== null ? String(val) : '');
-                                    }
-                                  }}
-                                  onBlur={() => {
-                                    commitCellValue(cellRef, inlineEditingValue, 'none');
-                                    setInlineEditingCellRef(null);
-                                  }}
-                                  className="w-full h-6 px-1 text-xs font-mono bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 outline-none ring-2 ring-blue-600 rounded-xs shadow-inner"
-                                />
-                              ) : (
-                                <>
-                                  {/* Green corner triangle for linked cells */}
-                                  {isLinked && (
-                                    <span className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-emerald-600 border-l-[6px] border-l-transparent" />
-                                  )}
-                                  {/* Purple corner triangle for formula cells */}
-                                  {isFormula && !isLinked && (
-                                    <span className="absolute top-0 left-0 w-0 h-0 border-t-[5px] border-t-violet-500 border-r-[5px] border-r-transparent" />
-                                  )}
-                                  <span>{display}</span>
-                                </>
-                              )}
-                            </td>
+                              cellRef={cellRef}
+                              rawVal={val}
+                              display={display}
+                              isFormula={isFormula}
+                              isSelected={isSelected}
+                              isLinked={isLinked}
+                              isSearchHit={isSearchHit}
+                              isInlineEditing={isInlineEditing}
+                              currentTabName={currentTab?.name}
+                              isPickerMode={isPickerMode}
+                              inlineEditingValue={inlineEditingValue}
+                              onInlineChange={handleInlineChange}
+                              onInlineKeyDown={handleInlineKeyDown}
+                              onInlineBlur={handleInlineBlur}
+                              inlineInputRef={inlineInputRef}
+                            />
                           );
                         })}
 

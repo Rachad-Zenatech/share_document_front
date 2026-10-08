@@ -15,11 +15,12 @@ export {
   type StorageFailure,
   setStorageFailureListener,
   describeStorageUsage,
+  cleanupStorageQuota,
   flushPendingSaves,
   STORAGE_KEYS
 } from './secFiling/secFilingStorage';
 
-import { flushPendingSaves } from './secFiling/secFilingStorage';
+import { flushPendingSaves, cleanupStorageQuota } from './secFiling/secFilingStorage';
 
 // 2. Diff & Table Compaction Engine
 export {
@@ -114,6 +115,7 @@ import {
  */
 export const secFilingService = {
   flushPendingSaves,
+  cleanupStorageQuota,
 
   // Document Core CRUD
   getMainDocument,

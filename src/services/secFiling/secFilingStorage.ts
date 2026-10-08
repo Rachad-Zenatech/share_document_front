@@ -149,6 +149,75 @@ export type StorageFailure = {
   largestKey?: string | null;
 };
 
+export function describeStorageUsage(): {
+  totalBytes: number;
+  breakdown: Array<{ key: string; bytes: number }>;
+} {
+  if (typeof localStorage === 'undefined') {
+    return { totalBytes: 0, breakdown: [] };
+  }
+  const breakdown: Array<{ key: string; bytes: number }> = [];
+  let totalBytes = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    const val = localStorage.getItem(key) || '';
+    const bytes = (key.length + val.length) * 2;
+    totalBytes += bytes;
+    breakdown.push({ key, bytes });
+  }
+  breakdown.sort((a, b) => b.bytes - a.bytes);
+  return { totalBytes, breakdown };
+}
+
+export function logStorageBreakdown(): { totalBytes: number; largestKey: string | null } {
+  const { totalBytes, breakdown } = describeStorageUsage();
+  console.table(breakdown.slice(0, 10));
+  return {
+    totalBytes,
+    largestKey: breakdown[0]?.key ?? null,
+  };
+}
+
+function readProposalsForReclaim(): any[] | null {
+  if (typeof localStorage === 'undefined') return null;
+  const raw = localStorage.getItem(STORAGE_KEYS.PROPOSALS);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeProposalsForReclaim(proposals: any[]): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.PROPOSALS, JSON.stringify(proposals));
+  } catch (e) {
+    console.warn('Could not write reclaimed proposals', e);
+  }
+}
+
+function trimHistoryTo(keep: number): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  const raw = localStorage.getItem(STORAGE_KEYS.VERSION_HISTORY);
+  if (!raw) return false;
+  try {
+    const list = JSON.parse(raw);
+    if (!Array.isArray(list) || list.length <= keep) return false;
+    if (keep <= 0) {
+      localStorage.removeItem(STORAGE_KEYS.VERSION_HISTORY);
+    } else {
+      localStorage.setItem(STORAGE_KEYS.VERSION_HISTORY, JSON.stringify(list.slice(0, keep)));
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 let storageFailureListener: ((failure: StorageFailure) => void) | null = null;
 
 export function setStorageFailureListener(
@@ -168,62 +237,6 @@ export function isQuotaError(err: unknown): boolean {
   return !!err && typeof err === 'object' && (err as any).name === 'QuotaExceededError';
 }
 
-const LEGACY_KEYS: { legacy: string; supersededBy: string }[] = [
-  { legacy: 'sec_filing_main_doc_v2_full', supersededBy: STORAGE_KEYS.MAIN_DOC },
-  { legacy: 'sec_filing_main_doc', supersededBy: STORAGE_KEYS.MAIN_DOC },
-  { legacy: 'sec_filing_proposals_v1', supersededBy: STORAGE_KEYS.PROPOSALS },
-  { legacy: 'sec_filing_proposals', supersededBy: STORAGE_KEYS.PROPOSALS },
-  { legacy: 'sec_filing_versions_v2_full', supersededBy: STORAGE_KEYS.VERSION_HISTORY }
-];
-
-export function describeStorageUsage(): { key: string; bytes: number }[] {
-  const entries: { key: string; bytes: number }[] = [];
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key) continue;
-      entries.push({ key, bytes: (localStorage.getItem(key) || '').length + key.length });
-    }
-  } catch (e) {
-    console.warn('Could not measure storage usage', e);
-  }
-  return entries.sort((a, b) => b.bytes - a.bytes);
-}
-
-export function logStorageBreakdown(): { totalBytes: number; largestKey: string | null } {
-  const entries = describeStorageUsage();
-  const totalBytes = entries.reduce((sum, e) => sum + e.bytes, 0);
-  const mb = (n: number) => `${(n / 1024 / 1024).toFixed(2)} MB`;
-  console.warn(
-    `Browser storage is full. ${mb(totalBytes)} in use across ${entries.length} keys:\n` +
-      entries.map((e) => `  ${mb(e.bytes).padStart(9)}  ${e.key}`).join('\n')
-  );
-  return { totalBytes, largestKey: entries.length > 0 ? entries[0].key : null };
-}
-
-function readProposalsForReclaim(): any[] | null {
-  const source =
-    pendingProposalsToSave ||
-    JSON.parse(localStorage.getItem(STORAGE_KEYS.PROPOSALS) || 'null');
-  return Array.isArray(source) ? source : null;
-}
-
-function writeProposalsForReclaim(next: any[]): void {
-  if (pendingProposalsToSave) {
-    pendingProposalsToSave = next;
-  }
-  localStorage.setItem(STORAGE_KEYS.PROPOSALS, JSON.stringify(next));
-}
-
-function trimHistoryTo(limit: number): boolean {
-  const raw = localStorage.getItem(STORAGE_KEYS.VERSION_HISTORY);
-  if (!raw) return false;
-  const history = JSON.parse(raw);
-  if (!Array.isArray(history) || history.length <= limit) return false;
-  localStorage.setItem(STORAGE_KEYS.VERSION_HISTORY, JSON.stringify(history.slice(-limit)));
-  return true;
-}
-
 function trimClosedProposalsTo(keep: number): boolean {
   const source = readProposalsForReclaim();
   if (!source) return false;
@@ -235,31 +248,112 @@ function trimClosedProposalsTo(keep: number): boolean {
   return true;
 }
 
+function trimAllProposalsTo(keep: number): boolean {
+  const source = readProposalsForReclaim();
+  if (!source || source.length <= keep) return false;
+  const sorted = [...source].sort((a, b) => {
+    if (a.status === 'pending_review' && b.status !== 'pending_review') return -1;
+    if (b.status === 'pending_review' && a.status !== 'pending_review') return 1;
+    return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+  });
+  const kept = sorted.slice(0, keep);
+  writeProposalsForReclaim(kept);
+  return true;
+}
+
+function clearOrphanCustomDocs(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  let freed = false;
+  try {
+    const rawList = localStorage.getItem(STORAGE_KEYS.DOCUMENTS_LIST);
+    const validIds = new Set<string>();
+    if (rawList) {
+      try {
+        const parsed = JSON.parse(rawList);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((d) => d?.id && validIds.add(d.id));
+        }
+      } catch {
+        // Ignore
+      }
+    }
+    const activeId = localStorage.getItem(STORAGE_KEYS.ACTIVE_DOC_ID);
+    if (activeId) validIds.add(activeId);
+    validIds.add('sec-doc-zenatech-2026-q2');
+
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('sec_doc_content_')) {
+        const docId = key.replace('sec_doc_content_', '');
+        if (!validIds.has(docId)) {
+          localStorage.removeItem(key);
+          freed = true;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Error clearing orphan docs', e);
+  }
+  return freed;
+}
+
+function purgeAllLegacyAndStaleKeys(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  let freed = false;
+  const currentKeySet = new Set(Object.values(STORAGE_KEYS));
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (key.startsWith('sec_filing_') && !currentKeySet.has(key)) {
+        localStorage.removeItem(key);
+        freed = true;
+      }
+    }
+  } catch (e) {
+    console.warn('Error purging legacy keys', e);
+  }
+  return freed;
+}
+
+export function cleanupStorageQuota(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  let freed = false;
+  try {
+    if (purgeAllLegacyAndStaleKeys()) freed = true;
+    if (clearOrphanCustomDocs()) freed = true;
+    if (trimClosedProposalsTo(2)) freed = true;
+    if (trimAllProposalsTo(3)) freed = true;
+    if (trimHistoryTo(3)) freed = true;
+  } catch (e) {
+    console.warn('Could not run cleanupStorageQuota', e);
+  }
+  return freed;
+}
+
 export function reclaimStorageSpace(round: number): boolean {
   try {
     switch (round) {
-      case 0: {
-        let freed = false;
-        for (const { legacy, supersededBy } of LEGACY_KEYS) {
-          if (localStorage.getItem(legacy) === null) continue;
-          if (!localStorage.getItem(supersededBy)) continue;
-          localStorage.removeItem(legacy);
-          freed = true;
-        }
-        return freed;
-      }
+      case 0:
+        return purgeAllLegacyAndStaleKeys();
       case 1:
-        return trimHistoryTo(MAX_RETAINED_SNAPSHOTS);
+        return clearOrphanCustomDocs();
       case 2:
-        return trimClosedProposalsTo(MAX_RETAINED_CLOSED_PROPOSALS);
+        return trimHistoryTo(MAX_RETAINED_SNAPSHOTS);
       case 3:
-        return trimHistoryTo(MIN_RETAINED_SNAPSHOTS);
+        return trimClosedProposalsTo(MAX_RETAINED_CLOSED_PROPOSALS);
       case 4:
-        return trimClosedProposalsTo(1);
+        return trimHistoryTo(MIN_RETAINED_SNAPSHOTS);
       case 5:
-        return trimHistoryTo(1);
+        return trimAllProposalsTo(3);
       case 6:
         return trimClosedProposalsTo(0);
+      case 7:
+        return trimHistoryTo(1);
+      case 8:
+        return trimAllProposalsTo(1);
+      case 9:
+        return trimHistoryTo(0);
       default:
         return false;
     }
@@ -345,6 +439,7 @@ export function flushPendingSaves(): boolean {
 }
 
 if (typeof window !== 'undefined') {
+  cleanupStorageQuota();
   window.addEventListener('beforeunload', flushPendingSaves);
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {

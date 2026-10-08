@@ -302,6 +302,23 @@ export interface SecFilingDocument {
   attachedSpreadsheet?: AttachedSpreadsheet | null;
 }
 
+export interface SpreadsheetCellDiff {
+  id: string; // e.g. "Sheet1!B8" or "B8"
+  tabName?: string;
+  cellRef: string;
+  oldValue: any;
+  newValue: any;
+  oldFormatted: string;
+  newFormatted: string;
+  status: 'modified' | 'added' | 'deleted';
+  linkedBlocks: Array<{
+    blockId: string;
+    blockType: string;
+    section: string;
+    snippet: string;
+  }>;
+}
+
 export interface SecChangeProposal {
   id: string;
   title: string;
@@ -317,6 +334,8 @@ export interface SecChangeProposal {
   baseVersion: string;
   baseVersionNumber: number;
   blocks: SecBlock[];
+  attachedSpreadsheet?: AttachedSpreadsheet | null;
+  spreadsheetDiffs?: SpreadsheetCellDiff[];
   changeSummary: {
     addedCount: number;
     modifiedCount: number;

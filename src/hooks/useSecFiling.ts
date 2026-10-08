@@ -20,6 +20,12 @@ import { useAuth } from '../lib/AuthContext';
 import { toast } from 'sonner';
 import { ZENATECH_LOGO_DATA_URL } from '../data/zenatechLogoAsset';
 import { blockMatchesQuery } from '../utils/secFilingSearch';
+import {
+  computeSpreadsheetDiffs,
+  updateActiveTabCells,
+  syncVariableCacheTags,
+  ensureSpreadsheetTabs
+} from '../utils/documentVariables';
 
 export type UserFilingRole = 'LEAD_CONTROLLER' | 'CONTRIBUTOR';
 
@@ -91,9 +97,12 @@ export function useSecFiling() {
   }, [workingBlocks]);
 
   const effectiveSpreadsheet = useMemo(() => {
+    if (activeProposal && activeProposal.attachedSpreadsheet) {
+      return activeProposal.attachedSpreadsheet;
+    }
     if (mainDoc.attachedSpreadsheet) return mainDoc.attachedSpreadsheet;
     return secFilingService.getAttachedSpreadsheet(mainDoc.id);
-  }, [mainDoc.attachedSpreadsheet, mainDoc.attachedSpreadsheetId, mainDoc.id]);
+  }, [activeProposal, mainDoc.attachedSpreadsheet, mainDoc.attachedSpreadsheetId, mainDoc.id]);
 
   const matchingBlockIds = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -160,9 +169,23 @@ export function useSecFiling() {
       // Find the base version snapshot if present in history
       const versionHistory = secFilingService.getVersionHistory();
       const baseSnap = versionHistory.find((v) => v.versionNumber === proposal.baseVersionNumber);
-      return secFilingService.calculateDiffs(mainDoc.blocks, proposal.blocks, baseSnap?.blocks);
+      const blockDiffs = secFilingService.calculateDiffs(mainDoc.blocks, proposal.blocks, baseSnap?.blocks);
+      const effectiveBase =
+        mainDoc.attachedSpreadsheet ||
+        secFilingService.getAttachedSpreadsheet(mainDoc.id);
+      const effectiveProp =
+        proposal.attachedSpreadsheet ||
+        (proposal.id ? secFilingService.getProposals().find((p) => p.id === proposal.id)?.attachedSpreadsheet : null) ||
+        effectiveBase;
+      const sheetDiffs = computeSpreadsheetDiffs(
+        effectiveBase,
+        effectiveProp,
+        proposal.blocks
+      );
+      proposal.spreadsheetDiffs = sheetDiffs;
+      return blockDiffs;
     },
-    [mainDoc.blocks]
+    [mainDoc.blocks, mainDoc.attachedSpreadsheet, mainDoc.id]
   );
 
   const handleForkProposal = useCallback(
@@ -1034,18 +1057,88 @@ export function useSecFiling() {
   }, [refreshAll]);
 
   const handleUpdateAttachedSpreadsheet = useCallback((sheet: AttachedSpreadsheet, shiftedBlocks?: SecBlock[]) => {
+    if (activeProposal) {
+      const updatedProposal: SecChangeProposal = {
+        ...activeProposal,
+        attachedSpreadsheet: sheet,
+        blocks: shiftedBlocks && Array.isArray(shiftedBlocks) ? shiftedBlocks : activeProposal.blocks,
+        updatedAt: new Date().toISOString()
+      };
+      secFilingService.updateProposal(updatedProposal);
+      setProposals((prev) => prev.map((p) => (p.id === updatedProposal.id ? updatedProposal : p)));
+      if (shiftedBlocks && Array.isArray(shiftedBlocks)) {
+        setWorkingBlocks(shiftedBlocks);
+      }
+      return;
+    }
     const updated = secFilingService.updateAttachedSpreadsheet(sheet, mainDoc.id, shiftedBlocks);
     setMainDoc({ ...updated });
     if (shiftedBlocks && Array.isArray(shiftedBlocks)) {
       setWorkingBlocks(shiftedBlocks);
     }
-  }, [mainDoc.id, setWorkingBlocks]);
+  }, [activeProposal, mainDoc.id, setWorkingBlocks]);
 
   const handleUpdateSpreadsheetCell = useCallback((cellRef: string, newValue: any, updatedSheet?: AttachedSpreadsheet) => {
+    if (activeProposal) {
+      const baseSpreadsheet = mainDoc.attachedSpreadsheet || secFilingService.getAttachedSpreadsheet(mainDoc.id);
+      const currentSheet = activeProposal.attachedSpreadsheet || baseSpreadsheet;
+      if (!currentSheet && !updatedSheet) return 0;
+
+      const newSheet = updatedSheet || updateActiveTabCells(currentSheet!, {
+        ...(ensureSpreadsheetTabs(currentSheet!).tabs?.find(t => t.id === currentSheet!.activeTabId)?.cells || currentSheet!.cells || {}),
+        [cellRef]: newValue
+      });
+
+      let updatedCount = 0;
+      const nextBlocks = workingBlocks.map((block) => {
+        if (block.type === 'paragraph' || block.type === 'heading') {
+          const synced = syncVariableCacheTags(block.text, newSheet);
+          if (synced !== block.text) {
+            updatedCount++;
+            return { ...block, text: synced };
+          }
+        } else if (block.type === 'callout') {
+          const synced = syncVariableCacheTags(block.content, newSheet);
+          if (synced !== block.content) {
+            updatedCount++;
+            return { ...block, content: synced };
+          }
+        }
+        return block;
+      });
+
+      const sheetDiffs = computeSpreadsheetDiffs(baseSpreadsheet, newSheet, nextBlocks);
+
+      const updatedProposal: SecChangeProposal = {
+        ...activeProposal,
+        attachedSpreadsheet: newSheet,
+        spreadsheetDiffs: sheetDiffs,
+        blocks: nextBlocks,
+        updatedAt: new Date().toISOString()
+      };
+      secFilingService.updateProposal(updatedProposal);
+      secFilingService.saveProposals(secFilingService.getProposals(), true);
+      setProposals((prev) => prev.map((p) => (p.id === updatedProposal.id ? updatedProposal : p)));
+      if (updatedCount > 0) {
+        setWorkingBlocks(nextBlocks);
+      }
+      return updatedCount;
+    }
+
     const { updatedDoc, updatedCount } = secFilingService.updateSpreadsheetCellAndSyncDoc(cellRef, newValue, mainDoc.id, updatedSheet);
-    setMainDoc({ ...updatedDoc });
+    setMainDoc((prev) => {
+      // Fast path: if no document blocks were altered by this cell change, preserve the existing blocks array reference
+      if (updatedCount === 0 && prev.id === updatedDoc.id && prev.blocks === updatedDoc.blocks) {
+        return {
+          ...prev,
+          attachedSpreadsheet: updatedDoc.attachedSpreadsheet,
+          attachedSpreadsheetId: updatedDoc.attachedSpreadsheetId
+        };
+      }
+      return { ...updatedDoc };
+    });
     return updatedCount;
-  }, [mainDoc.id]);
+  }, [activeProposal, mainDoc.attachedSpreadsheet, mainDoc.id, workingBlocks, setWorkingBlocks]);
 
   const handleAssignSpreadsheet = useCallback((sheetId: string | null) => {
     secFilingService.assignSpreadsheetToDocument(mainDoc.id, sheetId);
@@ -1081,8 +1174,20 @@ export function useSecFiling() {
         id: 'sec-filing-storage-full',
         description:
           `${mb(failure.totalBytes)} in use${failure.largestKey ? `, mostly "${failure.largestKey}"` : ''}. ` +
-          'Your edits are still open in this tab. See the console for a full breakdown by key.',
-        duration: 12000
+          'Your edits are still open in memory.',
+        action: {
+          label: 'Free Space Now',
+          onClick: () => {
+            secFilingService.cleanupStorageQuota();
+            const ok = secFilingService.flushPendingSaves();
+            if (ok) {
+              toast.success('Successfully freed storage space and saved filing.');
+            } else {
+              toast.info('Pruned old drafts. Please save again.');
+            }
+          }
+        },
+        duration: 15000
       });
     });
     return () => setStorageFailureListener(null);

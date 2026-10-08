@@ -15,14 +15,15 @@ import ExcelJS from 'exceljs';
  *   3: Cell reference (e.g. "A1", "B8", "AW272")
  *   4: Optional cached display fallback (e.g. "500", "$45,000")
  */
-export const CELL_VARIABLE_REGEX = /@(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?([A-Za-z]{1,3}\d{1,4})(?:\{([^}]*)\})?/g;
+export const CELL_VARIABLE_REGEX =
+  /@+(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?([A-Za-z]{1,3}\d{1,4})(?:\{([^}]*)\})*/g;
 
 /**
  * Check if a string contains any spreadsheet variable reference.
  */
 export function hasDocumentVariables(text: string): boolean {
   if (!text || typeof text !== 'string') return false;
-  return /@(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+)!)?[A-Za-z]{1,3}\d{1,4}/i.test(text);
+  return /@+(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+)!)?[A-Za-z]{1,3}\d{1,4}/i.test(text);
 }
 
 /**
@@ -133,6 +134,288 @@ export function getCellValue(
 }
 
 /**
+ * Computes all cell-by-cell differences between two attached spreadsheets
+ * and tracks which document blocks link to each modified cell.
+ */
+export function computeSpreadsheetDiffs(
+  baseSheet?: AttachedSpreadsheet | null,
+  proposedSheet?: AttachedSpreadsheet | null,
+  blocks: SecBlock[] = []
+): Array<{
+  id: string;
+  tabName?: string;
+  cellRef: string;
+  oldValue: any;
+  newValue: any;
+  oldFormatted: string;
+  newFormatted: string;
+  status: 'modified' | 'added' | 'deleted';
+  linkedBlocks: Array<{
+    blockId: string;
+    blockType: string;
+    section: string;
+    snippet: string;
+  }>;
+}> {
+  // Normalize sheets if provided
+  const normBase = baseSheet ? ensureSpreadsheetTabs(baseSheet) : null;
+  const normProp = proposedSheet && proposedSheet !== baseSheet ? ensureSpreadsheetTabs(proposedSheet) : null;
+
+  const diffs: Array<{
+    id: string;
+    tabName?: string;
+    cellRef: string;
+    oldValue: any;
+    newValue: any;
+    oldFormatted: string;
+    newFormatted: string;
+    status: 'modified' | 'added' | 'deleted';
+    linkedBlocks: Array<{
+      blockId: string;
+      blockType: string;
+      section: string;
+      snippet: string;
+    }>;
+  }> = [];
+
+  const recordedDiffIds = new Set<string>();
+
+  // Helper to find linked blocks for a cell
+  const findLinkedBlocks = (cellRef: string, tabName?: string) => {
+    const linked: Array<{ blockId: string; blockType: string; section: string; snippet: string }> = [];
+    const upperCell = cellRef.toUpperCase();
+    const cleanTab = tabName ? tabName.trim().toLowerCase() : '';
+
+    const checkBlockText = (text: string, b: SecBlock) => {
+      if (!text || typeof text !== 'string' || !text.includes('@')) return;
+      const regex = new RegExp(CELL_VARIABLE_REGEX);
+      regex.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = regex.exec(text)) !== null) {
+        const tokenTab = (m[1] || m[2] || '').trim().toLowerCase();
+        const tokenCell = m[3].toUpperCase();
+        if (tokenCell === upperCell) {
+          if (!tokenTab || !cleanTab || tokenTab === cleanTab) {
+            linked.push({
+              blockId: b.id,
+              blockType: b.type,
+              section: b.section || 'General',
+              snippet: text.length > 90 ? text.slice(0, 90) + '...' : text
+            });
+            break;
+          }
+        }
+      }
+    };
+
+    for (const b of blocks) {
+      if (b.type === 'paragraph' || b.type === 'heading') {
+        checkBlockText(b.text, b);
+      } else if (b.type === 'callout') {
+        checkBlockText(b.content, b);
+        if (b.title) checkBlockText(b.title, b);
+      } else if (b.type === 'financial_table' && Array.isArray(b.rows)) {
+        for (const r of b.rows) {
+          if (Array.isArray(r.cells)) {
+            for (const c of r.cells) {
+              if (typeof c === 'string') checkBlockText(c, b);
+            }
+          }
+        }
+      }
+    }
+    return linked;
+  };
+
+  // Helper to compare values safely without false diffs
+  const areValuesDifferent = (a: any, b: any) => {
+    if (a === b) return false;
+    const isAEmpty = a === undefined || a === null || a === '' || (typeof a === 'string' && a.trim() === '');
+    const isBEmpty = b === undefined || b === null || b === '' || (typeof b === 'string' && b.trim() === '');
+    if (isAEmpty && isBEmpty) return false;
+    if (isAEmpty !== isBEmpty) return true;
+
+    // Number vs string or formatted comparison (e.g. 3300000 vs "3,300,000" vs "$3,300,000")
+    const cleanNumber = (val: any) => {
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') {
+        const cleaned = val.replace(/[$,\s%]/g, '');
+        if (cleaned !== '' && !isNaN(Number(cleaned))) {
+          return Number(cleaned);
+        }
+      }
+      return null;
+    };
+
+    const numA = cleanNumber(a);
+    const numB = cleanNumber(b);
+    if (numA !== null && numB !== null) {
+      return Math.abs(numA - numB) > 0.000001;
+    }
+
+    return String(a ?? '').trim() !== String(b ?? '').trim();
+  };
+
+  const baseTabs = normBase?.tabs || [];
+  const propTabs = normProp?.tabs || [];
+
+  // Pair up tabs between base and proposed
+  const tabPairs: Array<{
+    tabName: string;
+    baseCells: Record<string, any>;
+    propCells: Record<string, any>;
+  }> = [];
+
+  if (normBase && normProp) {
+    if (baseTabs.length === 1 && propTabs.length === 1) {
+      // Single tab workbook on both sides: always pair them even if renamed
+      const tabName = propTabs[0].name || baseTabs[0].name || 'Sheet1';
+      tabPairs.push({
+        tabName,
+        baseCells: baseTabs[0].cells || {},
+        propCells: propTabs[0].cells || {}
+      });
+    } else if (propTabs.length > 0 || baseTabs.length > 0) {
+      const matchedBaseIndices = new Set<number>();
+
+      for (let pIdx = 0; pIdx < propTabs.length; pIdx++) {
+        const pTab = propTabs[pIdx];
+        // 1. Match by ID
+        let bIdx = baseTabs.findIndex((b, idx) => !matchedBaseIndices.has(idx) && b.id === pTab.id);
+        // 2. Match by Name
+        if (bIdx === -1) {
+          bIdx = baseTabs.findIndex(
+            (b, idx) => !matchedBaseIndices.has(idx) && b.name.trim().toLowerCase() === pTab.name.trim().toLowerCase()
+          );
+        }
+        // 3. Match by Position if count matches
+        if (bIdx === -1 && baseTabs.length === propTabs.length && !matchedBaseIndices.has(pIdx)) {
+          bIdx = pIdx;
+        }
+
+        if (bIdx !== -1) {
+          matchedBaseIndices.add(bIdx);
+          tabPairs.push({
+            tabName: pTab.name,
+            baseCells: baseTabs[bIdx].cells || {},
+            propCells: pTab.cells || {}
+          });
+        } else {
+          // Newly added tab
+          tabPairs.push({
+            tabName: pTab.name,
+            baseCells: {},
+            propCells: pTab.cells || {}
+          });
+        }
+      }
+
+      // Unmatched base tabs (deleted tabs)
+      for (let bIdx = 0; bIdx < baseTabs.length; bIdx++) {
+        if (!matchedBaseIndices.has(bIdx)) {
+          tabPairs.push({
+            tabName: baseTabs[bIdx].name,
+            baseCells: baseTabs[bIdx].cells || {},
+            propCells: {}
+          });
+        }
+      }
+    }
+  }
+
+  // 1. Process all cell comparisons across all paired tabs
+  for (const { tabName, baseCells, propCells } of tabPairs) {
+    const allKeys = new Set<string>([...Object.keys(baseCells), ...Object.keys(propCells)]);
+
+    for (const cellKey of allKeys) {
+      const pVal = propCells[cellKey];
+      const bVal = baseCells[cellKey];
+
+      if (areValuesDifferent(pVal, bVal)) {
+        const isBValEmpty = bVal === undefined || bVal === null || bVal === '' || (typeof bVal === 'string' && bVal.trim() === '');
+        const isPValEmpty = pVal === undefined || pVal === null || pVal === '' || (typeof pVal === 'string' && pVal.trim() === '');
+
+        if (isBValEmpty && isPValEmpty) continue;
+
+        const isDeleted = isPValEmpty && !isBValEmpty;
+        const isAdded = isBValEmpty && !isPValEmpty;
+        const status: 'modified' | 'added' | 'deleted' = isDeleted ? 'deleted' : isAdded ? 'added' : 'modified';
+
+        const diffId = `${tabName}!${cellKey}`;
+        recordedDiffIds.add(diffId);
+        recordedDiffIds.add(cellKey);
+
+        diffs.push({
+          id: diffId,
+          tabName,
+          cellRef: cellKey,
+          oldValue: bVal ?? null,
+          newValue: pVal ?? null,
+          oldFormatted: formatCellValue(bVal),
+          newFormatted: formatCellValue(pVal),
+          status,
+          linkedBlocks: findLinkedBlocks(cellKey, tabName)
+        });
+      }
+    }
+  }
+
+  // 2. Document Block Variable Tag Inspection:
+  // Detect any variables with cached values in proposal blocks that differ from baseSheet
+  for (const b of blocks) {
+    const textToCheck: string[] = [];
+    if (b.type === 'paragraph' || b.type === 'heading') {
+      textToCheck.push(b.text || '');
+    } else if (b.type === 'callout') {
+      textToCheck.push(b.content || '');
+      if (b.title) textToCheck.push(b.title);
+    } else if (b.type === 'financial_table' && Array.isArray(b.rows)) {
+      for (const r of b.rows) {
+        if (Array.isArray(r.cells)) {
+          for (const c of r.cells) {
+            if (typeof c === 'string') textToCheck.push(c);
+          }
+        }
+      }
+    }
+
+    for (const text of textToCheck) {
+      if (!text || !text.includes('@')) continue;
+      const regex = new RegExp(CELL_VARIABLE_REGEX);
+      regex.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = regex.exec(text)) !== null) {
+        const tabName = (m[1] || m[2] || '').trim();
+        const cellRef = m[3].toUpperCase();
+        const fallbackVal = m[4]; // e.g. "$3,300,000" or "3300000"
+        const diffId = tabName ? `${tabName}!${cellRef}` : cellRef;
+
+        if (!recordedDiffIds.has(diffId) && fallbackVal !== undefined && fallbackVal !== '') {
+          const baseVal = getCellValue(cellRef, normBase || baseSheet, tabName || undefined);
+          if (areValuesDifferent(fallbackVal, baseVal)) {
+            recordedDiffIds.add(diffId);
+            recordedDiffIds.add(cellRef);
+            diffs.push({
+              id: diffId,
+              tabName: tabName || undefined,
+              cellRef,
+              oldValue: baseVal ?? null,
+              newValue: fallbackVal,
+              oldFormatted: formatCellValue(baseVal),
+              newFormatted: fallbackVal,
+              status: baseVal !== undefined && baseVal !== null ? 'modified' : 'added',
+              linkedBlocks: findLinkedBlocks(cellRef, tabName || undefined)
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return diffs;
+}
+
+/**
  * Replaces all cell variables in a text string with their live spreadsheet values.
  */
 export function interpolateVariables(
@@ -166,7 +449,7 @@ export function syncVariableCacheTags(
   if (!text || typeof text !== 'string') return text || '';
   if (!spreadsheet) return text;
 
-  return text.replace(CELL_VARIABLE_REGEX, (match, qTab, uTab, cellRef) => {
+  return text.replace(CELL_VARIABLE_REGEX, (_match, qTab, uTab, cellRef, fallback) => {
     const tabName = qTab || uTab;
     const upperRef = cellRef.toUpperCase();
     const liveVal = getCellValue(upperRef, spreadsheet, tabName);
@@ -174,7 +457,11 @@ export function syncVariableCacheTags(
     if (liveVal !== undefined && liveVal !== null) {
       return `${prefix}${upperRef}{${formatCellValue(liveVal)}}`;
     }
-    return match;
+    if (fallback !== undefined && fallback !== '') {
+      const cleanFallback = fallback.replace(/^\{+|\}+$/g, '').trim();
+      return `${prefix}${upperRef}{${cleanFallback}}`;
+    }
+    return `${prefix}${upperRef}`;
   });
 }
 

@@ -24,6 +24,7 @@ import {
   getVersionHistory,
   saveVersionHistory
 } from './secFilingCore';
+import { saveSpreadsheet } from './secFilingSpreadsheet';
 
 export function getProposalInviteUrl(proposal: SecChangeProposal): string {
   const baseUrl =
@@ -45,6 +46,9 @@ export function getProposalInviteUrl(proposal: SecChangeProposal): string {
   if (proposal.permissions) {
     queryParams.set('docEdit', String(proposal.permissions.canEditDocument));
     queryParams.set('sheetEdit', String(proposal.permissions.canEditSpreadsheet));
+    if (proposal.permissions.canMergeAndApprove !== undefined) {
+      queryParams.set('canMerge', String(proposal.permissions.canMergeAndApprove));
+    }
   }
   return `${baseUrl}?${queryParams.toString()}`;
 }
@@ -73,7 +77,21 @@ export function getProposals(): SecChangeProposal[] {
 }
 
 export function saveProposals(proposals: SecChangeProposal[], immediate = false): boolean {
-    setPendingProposals(proposals);
+    const sanitized = proposals.map((p) => ({
+      ...p,
+      blocks: sanitizeAndCompactBlocks(p.blocks || [])
+    }));
+
+    // Retain at most 4 proposals total, prioritizing pending review and newest drafts
+    const capped = sanitized
+      .sort((a, b) => {
+        if (a.status === 'pending_review' && b.status !== 'pending_review') return -1;
+        if (b.status === 'pending_review' && a.status !== 'pending_review') return 1;
+        return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+      })
+      .slice(0, 4);
+
+    setPendingProposals(capped);
     if (immediate) {
       return flushPendingSaves();
     }
@@ -101,6 +119,9 @@ export function createProposal(
       baseVersion: baseDoc.version,
       baseVersionNumber: baseDoc.versionNumber,
       blocks: JSON.parse(JSON.stringify(baseDoc.blocks)),
+      attachedSpreadsheet: baseDoc.attachedSpreadsheet
+        ? JSON.parse(JSON.stringify(baseDoc.attachedSpreadsheet))
+        : null,
       assignedSection: assignedSection && assignedSection !== 'ALL' ? assignedSection : undefined,
       changeSummary: {
         addedCount: 0,
@@ -147,6 +168,9 @@ export function createContributorInvite(params: {
       baseVersion: params.baseDoc.version,
       baseVersionNumber: params.baseDoc.versionNumber,
       blocks: JSON.parse(JSON.stringify(params.baseDoc.blocks)),
+      attachedSpreadsheet: params.baseDoc.attachedSpreadsheet
+        ? JSON.parse(JSON.stringify(params.baseDoc.attachedSpreadsheet))
+        : null,
       assignedSection: params.assignedSection && params.assignedSection !== 'ALL' ? params.assignedSection : undefined,
       inviteToken: token,
       permissions: params.permissions,
@@ -201,6 +225,9 @@ export function getOrCreateContributorProposal(params: {
       baseVersion: mainDoc.version,
       baseVersionNumber: mainDoc.versionNumber,
       blocks: JSON.parse(JSON.stringify(mainDoc.blocks)),
+      attachedSpreadsheet: mainDoc.attachedSpreadsheet
+        ? JSON.parse(JSON.stringify(mainDoc.attachedSpreadsheet))
+        : null,
       assignedSection: params.section && params.section !== 'ALL' ? params.section : undefined,
       inviteToken: `inv-${Date.now().toString(36)}`,
       permissions: params.permissions,
@@ -244,6 +271,12 @@ export function forkProposalFromMerged(
     const blocksToUse = customBlocks ? JSON.parse(JSON.stringify(customBlocks)) : JSON.parse(JSON.stringify(currentMain.blocks));
     const diffs = calculateDiffs(currentMain.blocks, blocksToUse);
 
+    const sheetToUse = source.attachedSpreadsheet
+      ? JSON.parse(JSON.stringify(source.attachedSpreadsheet))
+      : currentMain.attachedSpreadsheet
+      ? JSON.parse(JSON.stringify(currentMain.attachedSpreadsheet))
+      : null;
+
     const newProposal: SecChangeProposal = {
       id: newPropId,
       title: nextTitle,
@@ -254,6 +287,7 @@ export function forkProposalFromMerged(
       baseVersion: currentMain.version,
       baseVersionNumber: currentMain.versionNumber,
       blocks: blocksToUse,
+      attachedSpreadsheet: sheetToUse,
       assignedSection: source.assignedSection,
       inviteToken: `inv-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`,
       changeSummary: {
@@ -359,11 +393,43 @@ export function mergeSelectiveChanges(
     const nextVersionLabel = `v${nextVersionNumber} (Merged ${proposal.author.name})`;
     const versionHistory = getVersionHistory();
 
+    let mergedSpreadsheet = currentMain.attachedSpreadsheet || null;
+    if (proposal.attachedSpreadsheet) {
+      const baseSheet = currentMain.attachedSpreadsheet || proposal.attachedSpreadsheet;
+      const baseTabs = baseSheet.tabs || [];
+      const propTabs = proposal.attachedSpreadsheet.tabs || [];
+
+      const mergedTabs = propTabs.length > 0 ? propTabs.map(pTab => {
+        const matchingBaseTab = baseTabs.find(b => b.id === pTab.id || b.name === pTab.name);
+        return {
+          ...pTab,
+          cells: {
+            ...(matchingBaseTab?.cells || {}),
+            ...(pTab.cells || {})
+          }
+        };
+      }) : baseTabs;
+
+      mergedSpreadsheet = {
+        ...baseSheet,
+        ...proposal.attachedSpreadsheet,
+        cells: {
+          ...(baseSheet.cells || {}),
+          ...(proposal.attachedSpreadsheet.cells || {})
+        },
+        tabs: mergedTabs.length > 0 ? mergedTabs : proposal.attachedSpreadsheet.tabs || baseSheet.tabs,
+        updatedAt: new Date().toISOString()
+      };
+      saveSpreadsheet(mergedSpreadsheet, false, true);
+    }
+
     const updatedMain: SecFilingDocument = {
       ...currentMain,
       version: nextVersionLabel,
       versionNumber: nextVersionNumber,
       blocks: mergedBlocks,
+      attachedSpreadsheet: mergedSpreadsheet,
+      attachedSpreadsheetId: mergedSpreadsheet?.id || currentMain.attachedSpreadsheetId,
       updatedAt: new Date().toISOString(),
       lastModifiedBy: reviewerName
     };

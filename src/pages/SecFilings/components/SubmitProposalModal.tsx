@@ -108,6 +108,15 @@ export const SubmitProposalModal: React.FC<SubmitProposalModalProps> = ({
                 </span>
               </div>
             )}
+
+            {(proposal?.spreadsheetDiffs?.length ?? 0) > 0 && (
+              <div className="flex items-center gap-1.5 pt-1 text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                <Table className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                <span>
+                  Includes <strong>{proposal!.spreadsheetDiffs!.length} spreadsheet cell {proposal!.spreadsheetDiffs!.length === 1 ? 'change' : 'changes'}</strong> in linked workbook
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Submission Notes */}
