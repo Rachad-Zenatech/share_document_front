@@ -104,27 +104,25 @@ export function useSecFiling() {
     return secFilingService.getAttachedSpreadsheet(mainDoc.id);
   }, [activeProposal, mainDoc.attachedSpreadsheet, mainDoc.attachedSpreadsheetId, mainDoc.id]);
 
-  const matchingBlockIds = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return [];
-    }
-    return workingBlocks
-      .filter((b) => blockMatchesQuery(b, searchQuery, effectiveSpreadsheet))
-      .map((b) => b.id);
-  }, [workingBlocks, searchQuery, effectiveSpreadsheet]);
-
-  const filteredBlocks = useMemo(() => {
+  const matchingBlocks = useMemo(() => {
     const trimmedQuery = searchQuery.trim();
     if (!trimmedQuery) {
-      return workingBlocks;
+      return null;
     }
-    // If in navigate mode, keep all blocks so the full document can be read/browsed
-    if (searchFilterMode === 'navigate') {
-      return workingBlocks;
-    }
-    // If in filter mode, return only matching blocks
     return workingBlocks.filter((b) => blockMatchesQuery(b, trimmedQuery, effectiveSpreadsheet));
-  }, [workingBlocks, searchQuery, searchFilterMode, effectiveSpreadsheet]);
+  }, [workingBlocks, searchQuery, effectiveSpreadsheet]);
+
+  const matchingBlockIds = useMemo(() => {
+    if (!matchingBlocks) return [];
+    return matchingBlocks.map((b) => b.id);
+  }, [matchingBlocks]);
+
+  const filteredBlocks = useMemo(() => {
+    if (!matchingBlocks || searchFilterMode === 'navigate') {
+      return workingBlocks;
+    }
+    return matchingBlocks;
+  }, [workingBlocks, matchingBlocks, searchFilterMode]);
 
   // --------------------------------------------------------------------------
   // 3. ALL CALLBACKS
@@ -1057,6 +1055,7 @@ export function useSecFiling() {
   }, [refreshAll]);
 
   const handleUpdateAttachedSpreadsheet = useCallback((sheet: AttachedSpreadsheet, shiftedBlocks?: SecBlock[]) => {
+    queryClient.setQueryData(queryKeys.secFilingDocumentSpreadsheet(mainDoc.id), sheet);
     if (activeProposal) {
       const updatedProposal: SecChangeProposal = {
         ...activeProposal,
@@ -1076,7 +1075,7 @@ export function useSecFiling() {
     if (shiftedBlocks && Array.isArray(shiftedBlocks)) {
       setWorkingBlocks(shiftedBlocks);
     }
-  }, [activeProposal, mainDoc.id, setWorkingBlocks]);
+  }, [activeProposal, mainDoc.id, queryClient, setWorkingBlocks]);
 
   const handleUpdateSpreadsheetCell = useCallback((cellRef: string, newValue: any, updatedSheet?: AttachedSpreadsheet) => {
     if (activeProposal) {
@@ -1099,10 +1098,33 @@ export function useSecFiling() {
           }
         } else if (block.type === 'callout') {
           const synced = syncVariableCacheTags(block.content, newSheet);
-          if (synced !== block.content) {
+          const syncedTitle = block.title ? syncVariableCacheTags(block.title, newSheet) : block.title;
+          if (synced !== block.content || syncedTitle !== block.title) {
             updatedCount++;
-            return { ...block, content: synced };
+            return { ...block, content: synced, title: syncedTitle };
           }
+        } else if (block.type === 'financial_table' && Array.isArray(block.rows)) {
+          let rowUpdated = false;
+          const newRows = block.rows.map((r) => {
+            if (Array.isArray(r.cells)) {
+              let cellUpdated = false;
+              const newCells = r.cells.map((c) => {
+                if (typeof c === 'string') {
+                  const synced = syncVariableCacheTags(c, newSheet);
+                  if (synced !== c) {
+                    cellUpdated = true;
+                    rowUpdated = true;
+                    updatedCount++;
+                    return synced;
+                  }
+                }
+                return c;
+              });
+              if (cellUpdated) return { ...r, cells: newCells };
+            }
+            return r;
+          });
+          if (rowUpdated) return { ...block, rows: newRows };
         }
         return block;
       });
@@ -1401,6 +1423,7 @@ export function useSecFiling() {
     attachedSpreadsheet: effectiveSpreadsheet,
     updateAttachedSpreadsheet: handleUpdateAttachedSpreadsheet,
     updateSpreadsheetCell: handleUpdateSpreadsheetCell,
-    assignSpreadsheet: handleAssignSpreadsheet
+    assignSpreadsheet: handleAssignSpreadsheet,
+    setWorkingBlocks
   };
 }

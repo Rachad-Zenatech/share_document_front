@@ -656,7 +656,7 @@ export default function CreateSecFilingPage() {
             type="file"
             ref={fileInputRef}
             onChange={handleImportFileInputChange}
-            accept=".docx,.json,.txt,.csv"
+            accept=".docx,.xlsx,.xls,.md,.markdown,.html,.htm,.txt,.csv,.json"
             className="hidden"
           />
           <Button

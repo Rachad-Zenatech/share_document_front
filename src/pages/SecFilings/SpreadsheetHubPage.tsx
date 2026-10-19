@@ -74,8 +74,8 @@ export const SpreadsheetHubPage: React.FC = () => {
 
   // Reload spreadsheets from service
   const refreshHub = () => {
-    setSpreadsheets(secFilingService.getAllSpreadsheets());
-    setDocuments(secFilingService.getAllDocuments());
+    setSpreadsheets([...secFilingService.getAllSpreadsheets()]);
+    setDocuments([...secFilingService.getAllDocuments()]);
   };
 
   useEffect(() => {
@@ -487,9 +487,12 @@ export const SpreadsheetHubPage: React.FC = () => {
             {filteredSpreadsheets.map((sheet) => {
               const safe = ensureSpreadsheetTabs(sheet);
               const tabsCount = safe.tabs?.length || 1;
+              const currentTab = safe.tabs?.find((t) => t.id === safe.activeTabId) || safe.tabs?.[0];
               const assignedDocIds = sheet.assignedDocIds || [];
               const assignedDocs = documents.filter((d) => assignedDocIds.includes(d.id));
-              const cellCount = Object.keys(sheet.cells || {}).length;
+              const displayRows = currentTab?.rowCount ?? safe.rowCount ?? sheet.rowCount;
+              const displayCols = currentTab?.colCount ?? safe.colCount ?? sheet.colCount;
+              const cellCount = currentTab ? Object.keys(currentTab.cells || {}).length : Object.keys(sheet.cells || {}).length;
 
               return (
                 <div
@@ -505,15 +508,15 @@ export const SpreadsheetHubPage: React.FC = () => {
                         </div>
                         <div className="min-w-0">
                           <h3
-                            onClick={() => setEditingSheet(sheet)}
+                            onClick={() => setEditingSheet(safe)}
                             className="font-bold text-sm text-slate-900 dark:text-zinc-100 truncate cursor-pointer hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors"
-                            title={sheet.fileName}
+                            title={safe.fileName}
                           >
-                            {sheet.fileName}
+                            {safe.fileName}
                           </h3>
                           <div className="text-[11px] text-slate-400 font-mono">
-                            {tabsCount} {tabsCount === 1 ? 'Tab' : 'Tabs'} • {sheet.rowCount} rows ×{' '}
-                            {sheet.colCount} cols • {cellCount} cells
+                            {tabsCount} {tabsCount === 1 ? 'Tab' : 'Tabs'} • {displayRows} rows ×{' '}
+                            {displayCols} cols • {cellCount} cells
                           </div>
                         </div>
                       </div>
@@ -633,7 +636,7 @@ export const SpreadsheetHubPage: React.FC = () => {
                     <Button
                       type="button"
                       size="sm"
-                      onClick={() => setEditingSheet(sheet)}
+                      onClick={() => setEditingSheet(safe)}
                       className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1 font-semibold cursor-pointer"
                     >
                       <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -848,8 +851,11 @@ export const SpreadsheetHubPage: React.FC = () => {
           }}
           spreadsheet={editingSheet}
           onUpdateSpreadsheet={(updated) => {
-            secFilingService.saveSpreadsheet(updated);
+            secFilingService.saveSpreadsheet(updated, false, true);
             setEditingSheet(updated);
+            setSpreadsheets((prev) =>
+              prev.map((s) => (s.id === updated.id ? updated : s))
+            );
           }}
           onUpdateCell={(cellRef, val, updatedSheet) => {
             const updated = updatedSheet || {
@@ -859,8 +865,11 @@ export const SpreadsheetHubPage: React.FC = () => {
                 [cellRef]: val
               }
             };
-            secFilingService.saveSpreadsheet(updated);
+            secFilingService.saveSpreadsheet(updated, false, true);
             setEditingSheet(updated);
+            setSpreadsheets((prev) =>
+              prev.map((s) => (s.id === updated.id ? updated : s))
+            );
             return 1;
           }}
           blocks={[]}

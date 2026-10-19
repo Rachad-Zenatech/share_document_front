@@ -7,7 +7,7 @@ import type {
   SecBlock
 } from '../../types/secFiling';
 import { DEFAULT_TRIAL_BALANCE_SHEET } from '../../data/defaultTrialBalanceSheet';
-import { colToLetter, formatCellValue } from '../../utils/documentVariables';
+import { colToLetter, formatCellValue, parseCellRef, ensureSpreadsheetTabs } from '../../utils/documentVariables';
 import { apiClient } from '../apiClient';
 import {
   STORAGE_KEYS,
@@ -127,16 +127,19 @@ function removeSpreadsheetFromBackend(docId: string): void {
 export function getAllSpreadsheets(): AttachedSpreadsheet[] {
     const cached = getCachedSpreadsheetsList();
     if (cached) {
-      return cached;
+      return [...cached];
     }
     if (typeof localStorage === 'undefined') {
-      return [{
-        ...DEFAULT_TRIAL_BALANCE_SHEET,
-        id: 'sheet-tb-master-2026',
-        fileName: 'TB_Consolidated_Master_Q2_2026_FINAL.xlsx',
-        assignedDocIds: ['sec-doc-zenatech-2026-q2', 'sec-doc-zenatech-10q-q2'],
-        description: 'Master Consolidated Trial Balance for Q2 2026 reporting.'
-      }];
+      const fallback = [
+        ensureSpreadsheetTabs({
+          ...DEFAULT_TRIAL_BALANCE_SHEET,
+          id: 'sheet-tb-master-2026',
+          fileName: 'TB_Consolidated_Master_Q2_2026_FINAL.xlsx',
+          assignedDocIds: ['sec-doc-zenatech-2026-q2', 'sec-doc-zenatech-10q-q2'],
+          description: 'Master Consolidated Trial Balance for Q2 2026 reporting.'
+        })
+      ];
+      return [...fallback];
     }
 
     const saved = localStorage.getItem(STORAGE_KEYS.SPREADSHEETS);
@@ -144,8 +147,9 @@ export function getAllSpreadsheets(): AttachedSpreadsheet[] {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setCachedSpreadsheetsList(parsed);
-          return parsed;
+          const normalized = parsed.map((s) => ensureSpreadsheetTabs(s));
+          setCachedSpreadsheetsList([...normalized]);
+          return [...normalized];
         }
       } catch {
         // Fallback
@@ -153,13 +157,13 @@ export function getAllSpreadsheets(): AttachedSpreadsheet[] {
     }
 
     const initialList: AttachedSpreadsheet[] = [
-      {
+      ensureSpreadsheetTabs({
         ...DEFAULT_TRIAL_BALANCE_SHEET,
         id: 'sheet-tb-master-2026',
         fileName: 'TB_Consolidated_Master_Q2_2026_FINAL.xlsx',
         assignedDocIds: ['sec-doc-zenatech-2026-q2', 'sec-doc-zenatech-10q-q2'],
         description: 'Master Consolidated Trial Balance for Q2 2026 reporting.'
-      }
+      })
     ];
 
     try {
@@ -167,8 +171,8 @@ export function getAllSpreadsheets(): AttachedSpreadsheet[] {
     } catch {
       // Ignore storage error
     }
-    setCachedSpreadsheetsList(initialList);
-    return initialList;
+    setCachedSpreadsheetsList([...initialList]);
+    return [...initialList];
 }
 
 export function getSpreadsheetById(id: string): AttachedSpreadsheet | null {
@@ -177,12 +181,22 @@ export function getSpreadsheetById(id: string): AttachedSpreadsheet | null {
 }
 
 export function saveSpreadsheet(sheet: AttachedSpreadsheet, syncToMainDoc = false, immediate = false): void {
-    const list = getAllSpreadsheets();
-    const existingIdx = list.findIndex((s) => s.id === sheet.id);
+    const safeSheet = ensureSpreadsheetTabs(sheet);
+    const activeTab = (safeSheet.tabs || []).find((t) => t.id === safeSheet.activeTabId) || safeSheet.tabs?.[0];
     const updatedSheet: AttachedSpreadsheet = {
-      ...sheet,
+      ...safeSheet,
+      rowCount: activeTab ? activeTab.rowCount : safeSheet.rowCount,
+      colCount: activeTab ? activeTab.colCount : safeSheet.colCount,
+      maxCol: activeTab ? activeTab.maxCol : safeSheet.maxCol,
+      colLetters: activeTab ? activeTab.colLetters : safeSheet.colLetters,
+      headers: activeTab ? activeTab.headers : safeSheet.headers,
+      cells: activeTab ? activeTab.cells : safeSheet.cells,
       updatedAt: new Date().toISOString()
     };
+
+    const currentList = getAllSpreadsheets();
+    const existingIdx = currentList.findIndex((s) => s.id === updatedSheet.id);
+    const list = [...currentList];
 
     if (existingIdx >= 0) {
       list[existingIdx] = updatedSheet;
@@ -190,7 +204,7 @@ export function saveSpreadsheet(sheet: AttachedSpreadsheet, syncToMainDoc = fals
       list.unshift(updatedSheet);
     }
 
-    setCachedSpreadsheetsList(list);
+    setCachedSpreadsheetsList([...list]);
 
     if (immediate) {
       const regTimer = getSaveSpreadsheetRegistryTimer();
@@ -531,27 +545,39 @@ export function updateSpreadsheetCellAndSyncDoc(
     const formattedVal = formatCellValue(newValue);
     let updatedCount = 0;
 
-    // Pattern to match @Cell or @'Sheet'!Cell or @Sheet!Cell with optional {...}
-    let bareCell = cleanRef;
+    // Pattern to match @Cell or @'Sheet'!Cell or @Sheet!Cell with optional $ and optional {...}
+    let bareCell = cleanRef.replace(/\$/g, '');
     let tabPrefixPattern = '(?:(?:\'[^\']+\'|[A-Za-z0-9_.\\- ]+)!)?';
-    const tabMatch = cleanRef.match(/^(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?([A-Za-z]{1,3}\d{1,4})$/i);
+    const tabMatch = cleanRef.match(/^(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?(\$?[A-Za-z]{1,3}\$?\d{1,4})$/i);
     if (tabMatch) {
-      bareCell = tabMatch[3].toUpperCase();
+      bareCell = tabMatch[3].toUpperCase().replace(/\$/g, '');
       const specificTab = tabMatch[1] || tabMatch[2];
       if (specificTab) {
         const escapedTab = specificTab.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         tabPrefixPattern = `(?:'${escapedTab}'|${escapedTab})!`;
       }
     }
-    const regex = new RegExp(`@(${tabPrefixPattern}${bareCell})(?:\\{[^}]*\\})?`, 'gi');
-    const bareUpper = bareCell.toUpperCase();
+    const parsedBare = parseCellRef(bareCell);
+    const colLetters = parsedBare ? parsedBare.colLetter : bareCell.replace(/[^A-Za-z]/g, '');
+    const rowNum = parsedBare ? String(parsedBare.rowIndex) : bareCell.replace(/[^0-9]/g, '');
+    const flexibleCellPattern = `\\$?${colLetters}\\$?${rowNum}`;
+    const regex = new RegExp(`@(${tabPrefixPattern}${flexibleCellPattern})(?:\\{[^}]*\\})?`, 'gi');
+
+    const hasCellOccurrence = (str: string | undefined): boolean => {
+      if (!str || !str.includes('@')) return false;
+      const upper = str.toUpperCase();
+      return (
+        upper.includes(bareCell) ||
+        (colLetters !== '' && upper.includes(colLetters) && rowNum !== '' && upper.includes(rowNum))
+      );
+    };
 
     // Fast-path: Update occurrences across document blocks only where @ and bareUpper exist
     let hasAnyBlockChanged = false;
     if (Array.isArray(doc.blocks)) {
       doc.blocks = doc.blocks.map((block) => {
         if (block.type === 'paragraph' || block.type === 'heading') {
-          if (block.text && block.text.includes('@') && block.text.toUpperCase().includes(bareUpper)) {
+          if (hasCellOccurrence(block.text)) {
             let blockChanged = false;
             regex.lastIndex = 0;
             const newText = block.text.replace(regex, (_, p1) => {
@@ -572,7 +598,7 @@ export function updateSpreadsheetCellAndSyncDoc(
           let updated = false;
           let content = block.content;
           let title = block.title;
-          if (content && content.includes('@') && content.toUpperCase().includes(bareUpper)) {
+          if (hasCellOccurrence(content)) {
             regex.lastIndex = 0;
             content = content.replace(regex, (_, p1) => {
               updated = true;
@@ -580,7 +606,7 @@ export function updateSpreadsheetCellAndSyncDoc(
               return `@${p1}{${formattedVal}}`;
             });
           }
-          if (title && title.includes('@') && title.toUpperCase().includes(bareUpper)) {
+          if (title && hasCellOccurrence(title)) {
             regex.lastIndex = 0;
             title = title.replace(regex, (_, p1) => {
               updated = true;
@@ -598,7 +624,7 @@ export function updateSpreadsheetCellAndSyncDoc(
             if (Array.isArray(r.cells)) {
               let rowUpdated = false;
               const cells = r.cells.map((c) => {
-                if (typeof c === 'string' && c.includes('@') && c.toUpperCase().includes(bareUpper)) {
+                if (typeof c === 'string' && hasCellOccurrence(c)) {
                   regex.lastIndex = 0;
                   const newC = c.replace(regex, (_, p1) => {
                     rowUpdated = true;

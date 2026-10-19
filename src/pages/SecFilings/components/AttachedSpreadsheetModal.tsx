@@ -38,7 +38,9 @@ import {
 import type { AttachedSpreadsheet, SecBlock } from '../../../types/secFiling';
 import {
   colToLetter,
+  letterToCol,
   parseCellRef,
+  shiftSingleCellRef,
   formatCellValue,
   CELL_VARIABLE_REGEX,
   parseExcelFileToSpreadsheet,
@@ -68,7 +70,12 @@ import {
   shiftCellsLeft,
   shiftCellsUp,
   type CellShiftOperation,
-  shiftBlocksCellReferences
+  shiftBlocksCellReferences,
+  copyCellWithSmartOffset,
+  cycleCellRefAbsolute,
+  insertOrReplaceCellInFormula,
+  extractCellReferencesFromFormula,
+  type FormulaCellReference
 } from '../../../utils/documentVariables';
 import { DEFAULT_TRIAL_BALANCE_SHEET } from '../../../data/defaultTrialBalanceSheet';
 import { toast } from 'sonner';
@@ -104,6 +111,8 @@ interface MemoizedGridCellProps {
   onInlineKeyDown: (e: React.KeyboardEvent, cellRef: string) => void;
   onInlineBlur: (cellRef: string) => void;
   inlineInputRef: React.RefObject<HTMLInputElement | null>;
+  onFillHandleDoubleClick?: () => void;
+  formulaHighlight?: FormulaCellReference;
 }
 
 const MemoizedGridCell = React.memo<MemoizedGridCellProps>(
@@ -122,23 +131,30 @@ const MemoizedGridCell = React.memo<MemoizedGridCellProps>(
     onInlineChange,
     onInlineKeyDown,
     onInlineBlur,
-    inlineInputRef
+    inlineInputRef,
+    onFillHandleDoubleClick,
+    formulaHighlight
   }) => {
     const isNumeric = !isFormula ? typeof rawVal === 'number' : !isNaN(Number(display));
+
+    let cellVisualClasses = 'bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 border-slate-200 dark:border-zinc-800';
+    if (isSelected) {
+      cellVisualClasses = 'bg-blue-100/90 dark:bg-blue-900/60 ring-2 ring-blue-600 ring-inset font-bold text-blue-950 dark:text-white border-blue-400 z-10';
+    } else if (formulaHighlight) {
+      cellVisualClasses = `${formulaHighlight.bgClass} ${formulaHighlight.ringClass} font-semibold ${formulaHighlight.textClass} ${formulaHighlight.borderClass} z-10`;
+    } else if (isSearchHit) {
+      cellVisualClasses = 'bg-amber-100 dark:bg-amber-950/60 text-amber-950 font-bold border-amber-400';
+    } else if (isLinked) {
+      cellVisualClasses = 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-slate-200 dark:border-zinc-800';
+    }
 
     return (
       <td
         key={cellRef}
         data-cell-ref={cellRef}
-        className={`w-32 min-w-[128px] max-w-[128px] h-7 px-1.5 border-r border-b text-xs truncate transition-colors cursor-cell relative ${
-          isSelected
-            ? 'bg-blue-100/90 dark:bg-blue-900/60 ring-2 ring-blue-600 ring-inset font-bold text-blue-950 dark:text-white border-blue-400'
-            : isSearchHit
-            ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-950 font-bold border-amber-400'
-            : isLinked
-            ? 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-slate-200 dark:border-zinc-800'
-            : 'bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 border-slate-200 dark:border-zinc-800'
-        } ${isNumeric && !isInlineEditing ? 'text-right font-mono' : 'text-left'}`}
+        className={`w-32 min-w-[128px] max-w-[128px] h-7 px-1.5 border-r border-b text-xs truncate transition-all cursor-cell relative ${cellVisualClasses} ${
+          isNumeric && !isInlineEditing ? 'text-right font-mono' : 'text-left'
+        }`}
         title={`${currentTabName ? `${currentTabName}!` : ''}${cellRef}${isFormula ? ` [Formula: ${rawVal}]` : ''}: ${display || '(empty)'}${
           isLinked ? ' (Linked in document)' : ''
         }${isPickerMode ? ' (Click to select, double-click to link)' : ' (Double-click or Enter to edit directly)'}`}
@@ -164,7 +180,27 @@ const MemoizedGridCell = React.memo<MemoizedGridCellProps>(
             {isFormula && !isLinked && (
               <span className="absolute top-0 left-0 w-0 h-0 border-t-[5px] border-t-violet-500 border-r-[5px] border-r-transparent" />
             )}
+            {/* Formula Reference Tag Badge */}
+            {formulaHighlight && !isSelected && (
+              <span
+                style={{ backgroundColor: formulaHighlight.color }}
+                className="absolute top-0 right-0 px-1 py-0 text-[8px] font-mono font-bold text-white leading-tight rounded-bl shadow-2xs z-20 pointer-events-none"
+              >
+                {cellRef}
+              </span>
+            )}
             <span>{display}</span>
+            {/* Autofill handle for selected cell */}
+            {isSelected && !isInlineEditing && (
+              <span
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  onFillHandleDoubleClick?.();
+                }}
+                className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-blue-600 border border-white dark:border-zinc-900 cursor-crosshair z-20 hover:scale-125 transition-transform"
+                title="Double-click fill handle to autofill down with formula adjustment"
+              />
+            )}
           </>
         )}
       </td>
@@ -181,7 +217,8 @@ const MemoizedGridCell = React.memo<MemoizedGridCellProps>(
       prev.isInlineEditing === next.isInlineEditing &&
       (!prev.isInlineEditing || prev.inlineEditingValue === next.inlineEditingValue) &&
       prev.isPickerMode === next.isPickerMode &&
-      prev.currentTabName === next.currentTabName
+      prev.currentTabName === next.currentTabName &&
+      prev.formulaHighlight?.raw === next.formulaHighlight?.raw
     );
   }
 );
@@ -225,11 +262,23 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const [inlineEditingValue, setInlineEditingValue] = useState<string>('');
   const inlineInputRef = useRef<HTMLInputElement>(null);
   const formulaCacheRef = useRef<Map<string, number | string>>(new Map());
+  const cellDisplayCacheRef = useRef<Map<string, { raw: string | number | undefined; display: string; isFormula: boolean }>>(new Map());
+  // Active formula bar drafting state and confirmation ref
+  const [isFormulaBarEditing, setIsFormulaBarEditing] = useState<boolean>(false);
+  const confirmFormulaRef = useRef<((direction?: 'down' | 'up' | 'right' | 'left' | 'none') => void) | null>(null);
 
-  // Invalidate formula cache when cell values change
+  // Active Formula Editing Mode (starts with '=')
+  const isFormulaEditing = useMemo(() => {
+    const isInlineFormula = inlineEditingCellRef !== null && inlineEditingValue.trim().startsWith('=');
+    const isBarFormula = isFormulaBarEditing && editingValue.trim().startsWith('=');
+    return isInlineFormula || isBarFormula;
+  }, [inlineEditingCellRef, inlineEditingValue, isFormulaBarEditing, editingValue]);
+
+  // Invalidate formula and cell display cache when cell values or active tab change
   useEffect(() => {
     formulaCacheRef.current.clear();
-  }, [currentCells]);
+    cellDisplayCacheRef.current.clear();
+  }, [currentCells, activeTabId]);
 
   // Column header editing state
   const [editingColIdx, setEditingColIdx] = useState<number | null>(null);
@@ -269,11 +318,20 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
   // Spreadsheet Insert Dialog state (Shift cells right / down / Entire row / Entire col)
   const [isInsertDialogOpen, setIsInsertDialogOpen] = useState<boolean>(false);
-  const [insertOption, setInsertOption] = useState<'shift_right' | 'shift_down' | 'entire_row' | 'entire_col'>('entire_row');
+  const [insertOption, setInsertOption] = useState<
+    'shift_right' | 'shift_down' | 'entire_row_above' | 'entire_row_below' | 'entire_col_left' | 'entire_col_right' | 'entire_row' | 'entire_col'
+  >('entire_row_above');
 
   // Spreadsheet Delete Dialog state
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
   const [deleteOption, setDeleteOption] = useState<'shift_left' | 'shift_up' | 'entire_row' | 'entire_col'>('entire_row');
+
+  // Cell copy/paste state for smart relative/absolute formula adjustment
+  const [copiedCell, setCopiedCell] = useState<{
+    ref: string;
+    value: any;
+    tabId: string;
+  } | null>(null);
 
   const ROW_HEIGHT = 28; // Exact row height in pixels (h-7 = 1.75rem = 28px)
   const COL_WIDTH = 128; // Standard column width in pixels (w-32 = 8rem = 128px)
@@ -307,6 +365,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
   // Update searchable text for browser find (Ctrl+F) debounced so it does not block modal open or rendering
   useEffect(() => {
+    if (!open) return;
     const timer = setTimeout(() => {
       const lines = Object.entries(currentCells).map(([ref, val]) => {
         const formatted = formatCellValue(val);
@@ -315,7 +374,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
       setSearchableText(lines.join('\n'));
     }, 1200);
     return () => clearTimeout(timer);
-  }, [currentCells]);
+  }, [open, currentCells]);
 
   // Dismiss context menu on any click outside.
   // We defer registering the listener by one tick so the right-click event
@@ -341,6 +400,11 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   useEffect(() => {
     const handleSpreadsheetShortcuts = (e: KeyboardEvent) => {
       if (inlineEditingCellRef || editingColIdx !== null) return;
+      if (isFormulaEditing && e.key === 'Enter') {
+        e.preventDefault();
+        confirmFormulaRef.current?.(e.shiftKey ? 'up' : 'down');
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         undoHandlerRef.current?.();
@@ -349,7 +413,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
         redoHandlerRef.current?.();
       } else if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
-        setInsertOption('entire_row');
+        setInsertOption('entire_row_above');
         setIsInsertDialogOpen(true);
       } else if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
         e.preventDefault();
@@ -359,7 +423,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     };
     window.addEventListener('keydown', handleSpreadsheetShortcuts);
     return () => window.removeEventListener('keydown', handleSpreadsheetShortcuts);
-  }, [inlineEditingCellRef, editingColIdx]);
+  }, [inlineEditingCellRef, editingColIdx, isFormulaEditing]);
 
   // Measure container height and width dynamically on resize
   useEffect(() => {
@@ -482,8 +546,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const [resizeRows, setResizeRows] = useState(String(totalRows));
   const [resizeCols, setResizeCols] = useState(String(totalCols));
 
-  // Only re-scan document variable tokens when the actual set of referenced cell tokens in blocks changes
+  // Only re-scan document variable tokens when open and the actual set of referenced cell tokens in blocks changes
   const tokensSignature = useMemo(() => {
+    if (!open) return '';
     let sig = '';
     const regex = new RegExp(CELL_VARIABLE_REGEX);
     for (const b of blocks) {
@@ -515,10 +580,11 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
       sig += ';';
     }
     return sig;
-  }, [blocks]);
+  }, [open, blocks]);
 
   // 1. Scan document for referenced variable tokens (only changes when tokensSignature changes)
   const usedVariableTokens = useMemo(() => {
+    if (!open || !tokensSignature) return [];
     const map = new Map<
       string,
       {
@@ -573,12 +639,18 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     });
 
     return Array.from(map.values());
-  }, [tokensSignature]);
+  }, [open, tokensSignature, blocks]);
 
   // Set of cell references used in document (fast lookup for green triangle corner)
   const usedCellSet = useMemo(() => {
-    return new Set(usedVariableTokens.map((v) => v.cellRef));
-  }, [usedVariableTokens]);
+    if (!open || usedVariableTokens.length === 0) return new Set<string>();
+    const set = new Set<string>();
+    for (const v of usedVariableTokens) {
+      set.add(v.cellRef);
+      set.add(v.cellRef.replace(/\$/g, ''));
+    }
+    return set;
+  }, [open, usedVariableTokens]);
 
   // Full used variables with live values for the Variables tab (only calculated when Variables tab is active)
   const usedVariables = useMemo(() => {
@@ -651,10 +723,12 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   };
 
   // Cell selection
-  const handleSelectCell = (ref: string) => {
+  const handleSelectCell = (ref: string, cellsOverride?: Record<string, any>) => {
     setSelectedCellRef(ref);
-    const val = currentCells[ref];
+    const cellsToUse = cellsOverride || currentCells;
+    const val = cellsToUse[ref];
     setEditingValue(val !== undefined && val !== null ? String(val) : '');
+    setIsFormulaBarEditing(false);
   };
 
   // Start in-cell inline editing (double click, Enter, F2, or character key)
@@ -685,12 +759,12 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const commitCellValue = (
     ref: string,
     rawVal: string,
-    advanceDirection: 'down' | 'right' | 'left' | 'none' = 'none'
+    advanceDirection: 'down' | 'up' | 'right' | 'left' | 'none' = 'none'
   ) => {
     pushHistory(spreadsheet); // snapshot before cell edit
     const cleanVal = rawVal.trim();
     let parsed: any = cleanVal;
-    if (cleanVal !== '' && !isNaN(Number(cleanVal))) {
+    if (cleanVal !== '' && !cleanVal.startsWith('=') && !isNaN(Number(cleanVal))) {
       parsed = Number(cleanVal);
     }
     const cleanRef = ref.toUpperCase();
@@ -699,6 +773,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
     // Invalidate formula cache on cell edit
     formulaCacheRef.current.clear();
+    cellDisplayCacheRef.current.clear();
 
     // Unified single update: updates the sheet AND synchronizes document blocks without duplicate saves
     let count = 0;
@@ -719,26 +794,26 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
         if (advanceDirection === 'down') {
           const nextRow = Math.min(totalRows, parsedRef.rowIndex + 1);
           const nextRef = `${parsedRef.colLetter}${nextRow}`;
-          handleSelectCell(nextRef);
+          handleSelectCell(nextRef, nextCells);
+          scrollToRow(nextRow);
+        } else if (advanceDirection === 'up') {
+          const prevRow = Math.max(1, parsedRef.rowIndex - 1);
+          const nextRef = `${parsedRef.colLetter}${prevRow}`;
+          handleSelectCell(nextRef, nextCells);
+          scrollToRow(prevRow);
         } else if (advanceDirection === 'right') {
           const nextCol = Math.min(totalCols, parsedRef.colIndex + 1);
           const nextRef = `${colToLetter(nextCol)}${parsedRef.rowIndex}`;
-          handleSelectCell(nextRef);
+          handleSelectCell(nextRef, nextCells);
         } else if (advanceDirection === 'left') {
           const prevCol = Math.max(1, parsedRef.colIndex - 1);
           const nextRef = `${colToLetter(prevCol)}${parsedRef.rowIndex}`;
-          handleSelectCell(nextRef);
+          handleSelectCell(nextRef, nextCells);
         }
       }
+    } else {
+      handleSelectCell(cleanRef, nextCells);
     }
-  };
-
-  // Save edited cell value from Formula Bar
-  const handleSaveCell = () => {
-    commitCellValue(selectedCellRef, editingValue, 'none');
-    toast.success(
-      `Saved ${currentTab?.name}!${selectedCellRef} = ${editingValue}`
-    );
   };
 
   // Clear value in selected cell
@@ -748,18 +823,100 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     toast.info(`Cleared cell ${selectedCellRef}`);
   };
 
+  // Smart Copy cell
+  const handleCopyCell = useCallback((targetRef = selectedCellRef) => {
+    const rawVal = currentCells[targetRef];
+    setCopiedCell({ ref: targetRef, value: rawVal, tabId: activeTabId });
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(rawVal !== undefined && rawVal !== null ? String(rawVal) : '');
+    }
+    toast.success(`Copied cell ${targetRef}`);
+  }, [selectedCellRef, currentCells, activeTabId]);
+
+  // Smart Paste cell with relative/absolute formula shifting
+  const handlePasteCell = useCallback((targetRef = selectedCellRef) => {
+    if (!copiedCell) {
+      toast.info('No cell copied yet. Press Ctrl+C on a cell first.');
+      return;
+    }
+    const smartValue = copyCellWithSmartOffset(copiedCell.ref, targetRef, copiedCell.value);
+    commitCellValue(targetRef, smartValue !== undefined && smartValue !== null ? String(smartValue) : '', 'none');
+    setEditingValue(smartValue !== undefined && smartValue !== null ? String(smartValue) : '');
+    if (typeof copiedCell.value === 'string' && copiedCell.value.startsWith('=')) {
+      toast.success(`Pasted formula into ${targetRef}: ${smartValue}`);
+    } else {
+      toast.success(`Pasted into ${targetRef}`);
+    }
+  }, [copiedCell, selectedCellRef, commitCellValue]);
+
+  // Fill Down from cell above (Ctrl+D)
+  const handleFillDown = useCallback(() => {
+    const parsed = parseCellRef(selectedCellRef);
+    if (!parsed || parsed.rowIndex <= 1) return;
+    const sourceRef = `${parsed.colLetter}${parsed.rowIndex - 1}`;
+    const sourceVal = currentCells[sourceRef];
+    if (sourceVal === undefined) return;
+    const smartVal = copyCellWithSmartOffset(sourceRef, selectedCellRef, sourceVal);
+    commitCellValue(selectedCellRef, smartVal !== undefined && smartVal !== null ? String(smartVal) : '', 'down');
+    toast.success(`Filled down from ${sourceRef} to ${selectedCellRef}`);
+  }, [selectedCellRef, currentCells, commitCellValue]);
+
+  // Fill Right from cell to left (Ctrl+R)
+  const handleFillRight = useCallback(() => {
+    const parsed = parseCellRef(selectedCellRef);
+    if (!parsed || parsed.colIndex <= 1) return;
+    const sourceRef = `${colToLetter(parsed.colIndex - 1)}${parsed.rowIndex}`;
+    const sourceVal = currentCells[sourceRef];
+    if (sourceVal === undefined) return;
+    const smartVal = copyCellWithSmartOffset(sourceRef, selectedCellRef, sourceVal);
+    commitCellValue(selectedCellRef, smartVal !== undefined && smartVal !== null ? String(smartVal) : '', 'right');
+    toast.success(`Filled right from ${sourceRef} to ${selectedCellRef}`);
+  }, [selectedCellRef, currentCells, commitCellValue]);
+
+  // Autofill down to next row on double click fill handle
+  const handleAutofillDown = useCallback(() => {
+    const parsed = parseCellRef(selectedCellRef);
+    if (!parsed || parsed.rowIndex >= totalRows) return;
+    const targetRef = `${parsed.colLetter}${parsed.rowIndex + 1}`;
+    const sourceVal = currentCells[selectedCellRef];
+    const smartVal = copyCellWithSmartOffset(selectedCellRef, targetRef, sourceVal);
+    commitCellValue(targetRef, smartVal !== undefined && smartVal !== null ? String(smartVal) : '', 'none');
+    handleSelectCell(targetRef);
+    toast.success(`Autofilled to ${targetRef}: ${smartVal}`);
+  }, [selectedCellRef, totalRows, currentCells, commitCellValue, handleSelectCell]);
+
   // Helper to apply spreadsheet changes and synchronize all linked document cell references
   const applySpreadsheetShift = (
     nextSpreadsheet: AttachedSpreadsheet,
     op: CellShiftOperation,
-    successMessage: string
+    successMessage: string,
+    targetCellRefToSelect?: string
   ) => {
     pushHistory(spreadsheet); // snapshot before change
+    formulaCacheRef.current.clear();
+    cellDisplayCacheRef.current.clear();
+
     const { updatedBlocks, shiftedCount } = shiftBlocksCellReferences(
       blocks,
       op,
-      currentTab?.name
+      currentTab?.name,
+      nextSpreadsheet
     );
+
+    // Track or select the target cell through the shift
+    if (targetCellRefToSelect) {
+      setSelectedCellRef(targetCellRefToSelect);
+      const activeTabObj = (nextSpreadsheet.tabs || []).find((t) => t.id === nextSpreadsheet.activeTabId) || nextSpreadsheet.tabs?.[0];
+      const newRaw = activeTabObj?.cells?.[targetCellRefToSelect] ?? nextSpreadsheet.cells?.[targetCellRefToSelect];
+      setEditingValue(newRaw !== undefined && newRaw !== null ? String(newRaw) : '');
+    } else if (parsedSelected) {
+      const shifted = shiftSingleCellRef(parsedSelected.colIndex, parsedSelected.rowIndex, op);
+      const activeTabObj = (nextSpreadsheet.tabs || []).find((t) => t.id === nextSpreadsheet.activeTabId) || nextSpreadsheet.tabs?.[0];
+      const validRef = shifted !== '#REF!' ? shifted : 'A1';
+      setSelectedCellRef(validRef);
+      const newRaw = activeTabObj?.cells?.[validRef] ?? nextSpreadsheet.cells?.[validRef];
+      setEditingValue(newRaw !== undefined && newRaw !== null ? String(newRaw) : '');
+    }
 
     onUpdateSpreadsheet(nextSpreadsheet, updatedBlocks);
 
@@ -774,36 +931,85 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
   // -----------------------------------------------------------------------
   // Lightweight Formula Evaluator (=SUM, =AVERAGE, =MIN, =MAX, =COUNT,
-  //   =IF, =ROUND, arithmetic, cell refs, ranges like A1:A5)
+  //   =PRODUCT, =POWER, =MOD, =MEDIAN, =IF, =ROUND, arithmetic, cell refs,
+  //   absolute references like $A$1, ranges like A1:A5 or $A$1:$B$5, cross-tab refs)
   // -----------------------------------------------------------------------
-  const evaluateFormula = useCallback((formula: string): string | number => {
+  const evaluateFormula = useCallback((formula: string, depth = 0): string | number => {
     if (!formula.startsWith('=')) return formula;
+    if (depth > 30) return '#CYCLE!';
     const cached = formulaCacheRef.current.get(formula);
     if (cached !== undefined) return cached;
 
     const expr = formula.slice(1).trim();
     const cells = currentCells;
 
-    // Resolve a single cell ref like A1 => its value
-    const resolveCell = (ref: string): number => {
-      const v = cells[ref.toUpperCase()];
+    // Resolve a single cell ref like A1, $A$1, 'Sheet1'!A1, Sheet1!$B$5 => its numeric value
+    const resolveCell = (rawRef: string): number => {
+      let tabName: string | undefined;
+      let cleanRef = rawRef.trim();
+
+      const tabMatch = cleanRef.match(/^(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!(.*)$/);
+      if (tabMatch) {
+        tabName = tabMatch[1] || tabMatch[2];
+        cleanRef = tabMatch[3].trim();
+      }
+
+      cleanRef = cleanRef.replace(/\$/g, '').toUpperCase();
+
+      let targetCells = cells;
+      if (tabName && spreadsheet.tabs) {
+        const foundTab = spreadsheet.tabs.find(
+          (t) => t.name.trim().toLowerCase() === tabName!.trim().toLowerCase()
+        );
+        if (foundTab?.cells) {
+          targetCells = foundTab.cells;
+        }
+      }
+
+      const v = targetCells[cleanRef];
       if (v === undefined || v === null || v === '') return 0;
       if (typeof v === 'number') return v;
-      const n = Number(String(v).replace(/,/g, ''));
-      return isNaN(n) ? 0 : n;
+      if (typeof v === 'boolean') return v ? 1 : 0;
+      if (typeof v === 'string') {
+        if (v.startsWith('=')) {
+          if (v === formula) return 0;
+          const sub = evaluateFormula(v, depth + 1);
+          const subNum = Number(String(sub).replace(/[$,\s%]/g, ''));
+          return isNaN(subNum) ? 0 : subNum;
+        }
+        const cleaned = v.replace(/[$,\s%]/g, '');
+        const n = Number(cleaned);
+        return isNaN(n) ? 0 : n;
+      }
+      return 0;
     };
 
-    // Expand a range like A1:B3 into individual ref values
+    // Expand a range like A1:B3 or $A$1:$B$3 or 'Sheet1'!A1:B3 into individual ref values
     const expandRange = (rangeStr: string): number[] => {
-      const m = rangeStr.match(/^([A-Z]+)([0-9]+):([A-Z]+)([0-9]+)$/i);
+      let tabName: string | undefined;
+      let cleanRange = rangeStr.trim();
+      const tabMatch = cleanRange.match(/^(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!(.*)$/);
+      if (tabMatch) {
+        tabName = tabMatch[1] || tabMatch[2];
+        cleanRange = tabMatch[3].trim();
+      }
+
+      const m = cleanRange.match(/^(\$?)([A-Z]+)(\$?)([0-9]+):(\$?)([A-Z]+)(\$?)([0-9]+)$/i);
       if (!m) return [resolveCell(rangeStr)];
-      const startCol = m[1].toUpperCase(); const startRow = parseInt(m[2]);
-      const endCol   = m[3].toUpperCase(); const endRow   = parseInt(m[4]);
-      const colToIdx = (c: string) => c.split('').reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0);
-      const idxToCol = (n: number) => { let s = ''; while (n > 0) { s = String.fromCharCode(((n-1)%26)+65)+s; n=Math.floor((n-1)/26); } return s; };
-      const sc = colToIdx(startCol); const ec = colToIdx(endCol);
+
+      const startCol = m[2].toUpperCase(); const startRow = parseInt(m[4], 10);
+      const endCol = m[6].toUpperCase(); const endRow = parseInt(m[8], 10);
+      const sc = letterToCol(startCol); const ec = letterToCol(endCol);
+      const minCol = Math.min(sc, ec); const maxCol = Math.max(sc, ec);
+      const minRow = Math.min(startRow, endRow); const maxRow = Math.max(startRow, endRow);
+
+      const tabPrefix = tabName ? `'${tabName}'!` : '';
       const vals: number[] = [];
-      for (let r = startRow; r <= endRow; r++) for (let c = sc; c <= ec; c++) vals.push(resolveCell(`${idxToCol(c)}${r}`));
+      for (let r = minRow; r <= maxRow; r++) {
+        for (let c = minCol; c <= maxCol; c++) {
+          vals.push(resolveCell(`${tabPrefix}${colToLetter(c)}${r}`));
+        }
+      }
       return vals;
     };
 
@@ -827,27 +1033,36 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
       if ((e.startsWith('"') && e.endsWith('"')) || (e.startsWith("'") && e.endsWith("'"))) return e.slice(1,-1);
       // Number literal
       if (/^-?[0-9]+(?:\.[0-9]+)?$/.test(e)) return parseFloat(e);
-      // Cell reference
-      if (/^[A-Z]+[0-9]+$/i.test(e)) return resolveCell(e);
+      // Cell reference (with optional sheet and optional $)
+      if (/^(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Z]+\$?[0-9]+$/i.test(e)) return resolveCell(e);
       // Range (returns first value — use inside function args)
-      if (/^[A-Z]+[0-9]+:[A-Z]+[0-9]+$/i.test(e)) return expandRange(e)[0] ?? 0;
+      if (/^(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Z]+\$?[0-9]+:\$?[A-Z]+\$?[0-9]+$/i.test(e)) return expandRange(e)[0] ?? 0;
       // Function call
-      const fnMatch = e.match(/^([A-Z]+)\((.*)\)$/i);
+      const fnMatch = e.match(/^([A-Z_]+)\((.*)\)$/i);
       if (fnMatch) {
         const fn = fnMatch[1].toUpperCase();
         const innerArgs = splitArgs(fnMatch[2]);
-        const numArgs = innerArgs.flatMap(a => /^[A-Z]+[0-9]+:[A-Z]+[0-9]+$/i.test(a.trim()) ? expandRange(a.trim()) : [Number(evalExpr(a))]);
+        const numArgs = innerArgs.flatMap(a => /^(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Z]+\$?[0-9]+:\$?[A-Z]+\$?[0-9]+$/i.test(a.trim()) ? expandRange(a.trim()) : [Number(evalExpr(a))]);
         switch (fn) {
-          case 'SUM':     return numArgs.reduce((s,v)=>s+v,0);
-          case 'AVERAGE': return numArgs.length ? numArgs.reduce((s,v)=>s+v,0)/numArgs.length : 0;
-          case 'MIN':     return Math.min(...numArgs);
-          case 'MAX':     return Math.max(...numArgs);
-          case 'COUNT':   return numArgs.filter(v=>!isNaN(v)).length;
-          case 'COUNTA':  return innerArgs.flatMap(a => /^[A-Z]+[0-9]+:[A-Z]+[0-9]+$/i.test(a.trim()) ? expandRange(a.trim()) : [evalExpr(a)]).filter(v => v !== '' && v !== 0).length;
+          case 'SUM':     return numArgs.reduce((s, v) => s + v, 0);
+          case 'AVERAGE': return numArgs.length ? numArgs.reduce((s, v) => s + v, 0) / numArgs.length : 0;
+          case 'MIN':     return numArgs.length ? Math.min(...numArgs) : 0;
+          case 'MAX':     return numArgs.length ? Math.max(...numArgs) : 0;
+          case 'PRODUCT': return numArgs.length ? numArgs.reduce((s, v) => s * v, 1) : 0;
+          case 'COUNT':   return numArgs.filter(v => !isNaN(v)).length;
+          case 'COUNTA':  return innerArgs.flatMap(a => /^(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Z]+\$?[0-9]+:\$?[A-Z]+\$?[0-9]+$/i.test(a.trim()) ? expandRange(a.trim()) : [evalExpr(a)]).filter(v => v !== '' && v !== 0).length;
           case 'ROUND':   return Math.round(Number(evalExpr(innerArgs[0])) * Math.pow(10, Number(evalExpr(innerArgs[1] ?? '0')))) / Math.pow(10, Number(evalExpr(innerArgs[1] ?? '0')));
           case 'ABS':     return Math.abs(Number(evalExpr(innerArgs[0])));
           case 'SQRT':    return Math.sqrt(Number(evalExpr(innerArgs[0])));
           case 'INT':     return Math.floor(Number(evalExpr(innerArgs[0])));
+          case 'POWER':   return Math.pow(Number(evalExpr(innerArgs[0])), Number(evalExpr(innerArgs[1] ?? '1')));
+          case 'MOD':     return ((Number(evalExpr(innerArgs[0])) % Number(evalExpr(innerArgs[1]))) + Number(evalExpr(innerArgs[1]))) % Number(evalExpr(innerArgs[1]));
+          case 'MEDIAN': {
+            if (numArgs.length === 0) return 0;
+            const sorted = [...numArgs].sort((a, b) => a - b);
+            const mid = Math.floor(sorted.length / 2);
+            return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+          }
           case 'IF': {
             const cond = innerArgs[0];
             const condVal = cond.includes('>=')
@@ -869,12 +1084,15 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
           default: return `#NAME?`;
         }
       }
-      // Arithmetic: simple left-to-right with operator precedence via JS eval
-      // Replace cell refs first
-      const withRefs = e.replace(/([A-Z]+[0-9]+)/gi, (_, r) => String(resolveCell(r)));
+      // Arithmetic: replace all cell refs (including $, and tab! refs)
+      let withRefs = e.replace(/(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Za-z]+\$?[0-9]+/gi, (match) => String(resolveCell(match)));
+      // Percentage support like 15% -> (15/100)
+      withRefs = withRefs.replace(/([0-9.]+)\s*%/g, '($1/100)');
+      // Power / Exponentiation support like 2^3 -> 2**3
+      withRefs = withRefs.replace(/\^/g, '**');
+
       try {
-        // Safe eval: only allow numbers, operators, parens, dots
-        if (/^[0-9+\-*/().\s]+$/.test(withRefs)) {
+        if (/^[0-9+\-*/().\s*]+$/.test(withRefs)) {
           // eslint-disable-next-line no-new-func
           return Function(`"use strict"; return (${withRefs})`)() as number;
         }
@@ -887,7 +1105,6 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
       let finalResult: number | string;
       if (typeof result === 'number') {
         if (!isFinite(result)) finalResult = '#DIV/0!';
-        // Format: strip unnecessary decimal zeros
         else finalResult = parseFloat(result.toFixed(10));
       } else {
         finalResult = String(result);
@@ -898,107 +1115,360 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
       formulaCacheRef.current.set(formula, '#ERROR');
       return '#ERROR';
     }
-  }, [currentCells]);
+  }, [currentCells, spreadsheet.tabs]);
 
-  // Resolve displayed value for a cell — evaluates formulas on the fly
+  // Resolve displayed value for a cell — evaluates formulas on the fly with display caching
   const resolveCellDisplay = useCallback((cellRef: string): { raw: string | number | undefined; display: string; isFormula: boolean } => {
+    const cached = cellDisplayCacheRef.current.get(cellRef);
+    if (cached !== undefined) return cached;
+
     const rawAny = currentCells[cellRef];
-    if (rawAny === undefined || rawAny === null) return { raw: undefined, display: '', isFormula: false };
+    if (rawAny === undefined || rawAny === null) {
+      const emptyRes = { raw: undefined, display: '', isFormula: false };
+      cellDisplayCacheRef.current.set(cellRef, emptyRes);
+      return emptyRes;
+    }
     const raw = (typeof rawAny === 'boolean' ? (rawAny ? 1 : 0) : rawAny) as string | number;
     const strVal = String(rawAny);
     if (strVal.startsWith('=')) {
       const result = evaluateFormula(strVal);
-      return { raw, display: String(result), isFormula: true };
+      const formulaRes = { raw, display: String(result), isFormula: true };
+      cellDisplayCacheRef.current.set(cellRef, formulaRes);
+      return formulaRes;
     }
-    return { raw, display: formatCellValue(rawAny), isFormula: false };
+    const valRes = { raw, display: formatCellValue(rawAny), isFormula: false };
+    cellDisplayCacheRef.current.set(cellRef, valRes);
+    return valRes;
   }, [currentCells, evaluateFormula]);
 
+  // Reference to formula bar input for focus and selection preservation
+  const formulaBarInputRef = useRef<HTMLInputElement>(null);
+
+
+  // Confirm and commit formula (Enter key like Excel)
+  const handleConfirmFormula = useCallback(
+    (direction: 'down' | 'up' | 'right' | 'left' | 'none' = 'down') => {
+      const targetRef = inlineEditingCellRef || selectedCellRef;
+      const formulaVal = inlineEditingCellRef !== null ? inlineEditingValue : editingValue;
+
+      // Clean dangling trailing operator if user typed e.g. "=A1+"
+      let cleanFormula = formulaVal.trim();
+      if (cleanFormula.startsWith('=')) {
+        if (cleanFormula === '=') {
+          cleanFormula = '';
+        } else {
+          // Remove trailing binary operator +, -, *, /, or comma before confirmation
+          cleanFormula = cleanFormula.replace(new RegExp('[-+*/,]\\s*$'), '').trim();
+        }
+      }
+
+      commitCellValue(targetRef, cleanFormula, direction);
+      setInlineEditingCellRef(null);
+      setIsFormulaBarEditing(false);
+      formulaBarInputRef.current?.blur();
+      setTimeout(() => {
+        scrollContainerRef.current?.focus();
+      }, 20);
+
+      const evaluated = cleanFormula.startsWith('=') ? evaluateFormula(cleanFormula) : cleanFormula;
+      toast.success(`Confirmed ${targetRef} = ${evaluated}`);
+    },
+    [inlineEditingCellRef, selectedCellRef, inlineEditingValue, editingValue, commitCellValue, evaluateFormula]
+  );
+
+  confirmFormulaRef.current = handleConfirmFormula;
+
+  // Save edited cell value from Formula Bar
+  const handleSaveCell = () => {
+    if (isFormulaEditing) {
+      handleConfirmFormula('down');
+    } else {
+      commitCellValue(selectedCellRef, editingValue, 'down');
+      setIsFormulaBarEditing(false);
+      formulaBarInputRef.current?.blur();
+      setTimeout(() => {
+        scrollContainerRef.current?.focus();
+      }, 20);
+      toast.success(
+        `Saved ${currentTab?.name}!${selectedCellRef} = ${editingValue}`
+      );
+    }
+  };
+
+  const activeFormula = inlineEditingCellRef !== null ? inlineEditingValue : editingValue;
+
+  // Extract all referenced cells in the formula for colored visual highlights in the grid
+  const activeFormulaRefs = useMemo(
+    () => extractCellReferencesFromFormula(activeFormula),
+    [activeFormula]
+  );
+
+  // Map of clean cell coordinates -> visual color styles
+  const formulaHighlightMap = useMemo(() => {
+    const map = new Map<string, FormulaCellReference>();
+    if (!isFormulaEditing) return map;
+    for (const ref of activeFormulaRefs) {
+      if (!ref.sheetName || ref.sheetName.toLowerCase() === (currentTab?.name || '').toLowerCase()) {
+        map.set(ref.cleanRef, ref);
+      }
+    }
+    return map;
+  }, [activeFormulaRefs, isFormulaEditing, currentTab?.name]);
+
+  // Live evaluation preview as formula is being composed
+  const liveFormulaPreview = useMemo(() => {
+    if (!activeFormula.startsWith('=')) return null;
+    if (activeFormula.trim() === '=') return null;
+    try {
+      const res = evaluateFormula(activeFormula);
+      return String(res);
+    } catch {
+      return '#ERROR';
+    }
+  }, [activeFormula, evaluateFormula]);
+
+  // Excel Click-to-Reference: Clicking any cell in the grid while formula editing
+  const handleCellReferenceClick = useCallback((clickedRef: string) => {
+    if (clickedRef === selectedCellRef) {
+      return; // Don't self-reference
+    }
+
+    const curFormula = inlineEditingCellRef !== null ? inlineEditingValue : editingValue;
+    const inputEl = inlineEditingCellRef !== null ? inlineInputRef.current : formulaBarInputRef.current;
+    const cursorPos = inputEl?.selectionStart ?? curFormula.length;
+
+    const { newFormula, newCursorPos } = insertOrReplaceCellInFormula(
+      curFormula,
+      clickedRef,
+      currentTab?.name,
+      currentTab?.name,
+      cursorPos
+    );
+
+    setEditingValue(newFormula);
+    if (inlineEditingCellRef !== null) {
+      setInlineEditingValue(newFormula);
+    } else {
+      setIsFormulaBarEditing(true);
+    }
+
+    setTimeout(() => {
+      if (inputEl) {
+        inputEl.focus();
+        inputEl.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 10);
+  }, [selectedCellRef, inlineEditingCellRef, inlineEditingValue, editingValue, currentTab?.name]);
+
+  // Excel F4 Cycle: Toggles A1 -> $A$1 -> A$1 -> $A1 -> A1
+  const handleCycleAbsolute = useCallback(() => {
+    const curFormula = inlineEditingCellRef !== null ? inlineEditingValue : editingValue;
+    if (!curFormula.startsWith('=')) return;
+
+    const inputEl = inlineEditingCellRef !== null ? inlineInputRef.current : formulaBarInputRef.current;
+    const cursorPos = inputEl?.selectionStart ?? curFormula.length;
+
+    const { newFormula, newCursorPos } = cycleCellRefAbsolute(curFormula, cursorPos);
+
+    setEditingValue(newFormula);
+    if (inlineEditingCellRef !== null) {
+      setInlineEditingValue(newFormula);
+    } else {
+      setIsFormulaBarEditing(true);
+    }
+
+    setTimeout(() => {
+      if (inputEl) {
+        inputEl.focus();
+        inputEl.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 10);
+  }, [inlineEditingCellRef, inlineEditingValue, editingValue]);
+
+  // Append operator or function template to formula
+  const handleAppendOperator = useCallback((token: string) => {
+    let cur = inlineEditingCellRef !== null ? inlineEditingValue : editingValue;
+    if (!cur.startsWith('=')) {
+      cur = '=' + cur;
+    }
+
+    const inputEl = inlineEditingCellRef !== null ? inlineInputRef.current : formulaBarInputRef.current;
+    const cursorPos = inputEl?.selectionStart ?? cur.length;
+
+    const isFn = ['SUM', 'AVERAGE', 'MIN', 'MAX', 'COUNT', 'IF'].includes(token);
+    const insertion = isFn ? `${token}(` : ` ${token} `;
+
+    const before = cur.slice(0, cursorPos);
+    const after = cur.slice(cursorPos);
+    const next = before + insertion + after;
+    const nextPos = cursorPos + insertion.length;
+
+    setEditingValue(next);
+    if (inlineEditingCellRef !== null) {
+      setInlineEditingValue(next);
+    } else {
+      setIsFormulaBarEditing(true);
+    }
+
+    setTimeout(() => {
+      if (inputEl) {
+        inputEl.focus();
+        inputEl.setSelectionRange(nextPos, nextPos);
+      }
+    }, 10);
+  }, [inlineEditingCellRef, inlineEditingValue, editingValue]);
+
   // Contextual Row Insert / Delete
-  const handleInsertRowAbove = () => {
-    const next = insertRowAtIndex(spreadsheet, selectedRow, 'above');
-    const op: CellShiftOperation = { type: 'insert_row', targetRow: selectedRow };
-    applySpreadsheetShift(next, op, `Inserted blank row above row ${selectedRow}`);
+  const handleInsertRowAbove = (overrideRow?: number | unknown) => {
+    const targetRow = typeof overrideRow === 'number' ? overrideRow : selectedRow;
+    const next = insertRowAtIndex(spreadsheet, targetRow, 'above');
+    const op: CellShiftOperation = { type: 'insert_row', targetRow };
+    applySpreadsheetShift(
+      next,
+      op,
+      `Inserted blank row above row ${targetRow}`,
+      `${selectedColLetter}${targetRow}`
+    );
   };
 
-  const handleInsertRowBelow = () => {
-    const next = insertRowAtIndex(spreadsheet, selectedRow, 'below');
-    const op: CellShiftOperation = { type: 'insert_row', targetRow: selectedRow + 1 };
-    applySpreadsheetShift(next, op, `Inserted blank row below row ${selectedRow}`);
+  const handleInsertRowBelow = (overrideRow?: number | unknown) => {
+    const targetRow = typeof overrideRow === 'number' ? overrideRow : selectedRow;
+    const next = insertRowAtIndex(spreadsheet, targetRow, 'below');
+    const op: CellShiftOperation = { type: 'insert_row', targetRow: targetRow + 1 };
+    applySpreadsheetShift(
+      next,
+      op,
+      `Inserted blank row below row ${targetRow}`,
+      `${selectedColLetter}${targetRow + 1}`
+    );
   };
 
-  const handleDeleteSelectedRow = () => {
+  const handleDeleteSelectedRow = (overrideRow?: number | unknown) => {
+    const targetRow = typeof overrideRow === 'number' ? overrideRow : selectedRow;
     if (totalRows <= 1) {
       toast.error('Cannot delete the last row in tab');
       return;
     }
-    const next = deleteRowAtIndex(spreadsheet, selectedRow);
-    const op: CellShiftOperation = { type: 'delete_row', targetRow: selectedRow };
-    applySpreadsheetShift(next, op, `Deleted row ${selectedRow} (Total: ${next.rowCount})`);
+    const next = deleteRowAtIndex(spreadsheet, targetRow);
+    const op: CellShiftOperation = { type: 'delete_row', targetRow };
+    const nextRow = Math.min(next.rowCount, targetRow);
+    applySpreadsheetShift(
+      next,
+      op,
+      `Deleted row ${targetRow} (Total: ${next.rowCount})`,
+      `${selectedColLetter}${nextRow}`
+    );
   };
 
   // Contextual Column Insert / Delete
-  const handleInsertColLeft = () => {
-    const next = insertColAtIndex(spreadsheet, selectedCol, 'left');
-    const op: CellShiftOperation = { type: 'insert_col', targetCol: selectedCol };
-    applySpreadsheetShift(next, op, `Inserted blank column left of column ${selectedColLetter}`);
+  const handleInsertColLeft = (overrideCol?: number | unknown) => {
+    const targetCol = typeof overrideCol === 'number' ? overrideCol : selectedCol;
+    const next = insertColAtIndex(spreadsheet, targetCol, 'left');
+    const op: CellShiftOperation = { type: 'insert_col', targetCol };
+    applySpreadsheetShift(
+      next,
+      op,
+      `Inserted blank column left of column ${colToLetter(targetCol)}`,
+      `${colToLetter(targetCol)}${selectedRow}`
+    );
   };
 
-  const handleInsertColRight = () => {
-    const next = insertColAtIndex(spreadsheet, selectedCol, 'right');
-    const op: CellShiftOperation = { type: 'insert_col', targetCol: selectedCol + 1 };
-    applySpreadsheetShift(next, op, `Inserted blank column right of column ${selectedColLetter}`);
+  const handleInsertColRight = (overrideCol?: number | unknown) => {
+    const targetCol = typeof overrideCol === 'number' ? overrideCol : selectedCol;
+    const next = insertColAtIndex(spreadsheet, targetCol, 'right');
+    const op: CellShiftOperation = { type: 'insert_col', targetCol: targetCol + 1 };
+    applySpreadsheetShift(
+      next,
+      op,
+      `Inserted blank column right of column ${colToLetter(targetCol)}`,
+      `${colToLetter(targetCol + 1)}${selectedRow}`
+    );
   };
 
-  const handleDeleteSelectedCol = () => {
+  const handleDeleteSelectedCol = (overrideCol?: number | unknown) => {
+    const targetCol = typeof overrideCol === 'number' ? overrideCol : selectedCol;
     if (totalCols <= 1) {
       toast.error('Cannot delete the last column in tab');
       return;
     }
-    const next = deleteColAtIndex(spreadsheet, selectedCol);
-    const op: CellShiftOperation = { type: 'delete_col', targetCol: selectedCol };
-    applySpreadsheetShift(next, op, `Deleted column ${selectedColLetter} (Total: ${next.colCount})`);
+    const next = deleteColAtIndex(spreadsheet, targetCol);
+    const op: CellShiftOperation = { type: 'delete_col', targetCol };
+    const nextCol = Math.min(next.colCount, targetCol);
+    applySpreadsheetShift(
+      next,
+      op,
+      `Deleted column ${colToLetter(targetCol)} (Total: ${next.colCount})`,
+      `${colToLetter(nextCol)}${selectedRow}`
+    );
   };
 
   // Spreadsheet Dialog Execution Handlers
   const handleExecuteInsert = (
-    option: 'shift_right' | 'shift_down' | 'entire_row' | 'entire_col'
+    option:
+      | 'shift_right'
+      | 'shift_down'
+      | 'entire_row_above'
+      | 'entire_row_below'
+      | 'entire_col_left'
+      | 'entire_col_right'
+      | 'entire_row'
+      | 'entire_col',
+    targetColOverride?: number,
+    targetRowOverride?: number
   ) => {
     const parsed = parseCellRef(selectedCellRef);
-    const targetCol = parsed?.colIndex || 1;
-    const targetRow = parsed?.rowIndex || 1;
+    const targetCol = targetColOverride !== undefined ? targetColOverride : (parsed?.colIndex || 1);
+    const targetRow = targetRowOverride !== undefined ? targetRowOverride : (parsed?.rowIndex || 1);
 
     let next: AttachedSpreadsheet;
     let op: CellShiftOperation;
     let msg: string;
+    let targetSelect: string;
 
     if (option === 'shift_right') {
       next = shiftCellsRight(spreadsheet, targetCol, targetRow);
       op = { type: 'shift_right', targetCol, targetRow };
-      msg = `Shifted cells right at ${selectedCellRef}`;
+      msg = `Shifted cells right at column ${colToLetter(targetCol)} row ${targetRow}`;
+      targetSelect = `${colToLetter(targetCol)}${targetRow}`;
     } else if (option === 'shift_down') {
       next = shiftCellsDown(spreadsheet, targetCol, targetRow);
       op = { type: 'shift_down', targetCol, targetRow };
-      msg = `Shifted cells down at ${selectedCellRef}`;
-    } else if (option === 'entire_row') {
+      msg = `Shifted cells down at column ${colToLetter(targetCol)} row ${targetRow}`;
+      targetSelect = `${colToLetter(targetCol)}${targetRow}`;
+    } else if (option === 'entire_row_below') {
+      next = insertRowAtIndex(spreadsheet, targetRow, 'below');
+      op = { type: 'insert_row', targetRow: targetRow + 1 };
+      msg = `Inserted blank row below row ${targetRow}`;
+      targetSelect = `${colToLetter(targetCol)}${targetRow + 1}`;
+    } else if (option === 'entire_row' || option === 'entire_row_above') {
       next = insertRowAtIndex(spreadsheet, targetRow, 'above');
       op = { type: 'insert_row', targetRow };
-      msg = `Inserted blank row at row ${targetRow}`;
+      msg = `Inserted blank row above row ${targetRow}`;
+      targetSelect = `${colToLetter(targetCol)}${targetRow}`;
+    } else if (option === 'entire_col_right') {
+      next = insertColAtIndex(spreadsheet, targetCol, 'right');
+      op = { type: 'insert_col', targetCol: targetCol + 1 };
+      msg = `Inserted blank column right of column ${colToLetter(targetCol)}`;
+      targetSelect = `${colToLetter(targetCol + 1)}${targetRow}`;
     } else {
       next = insertColAtIndex(spreadsheet, targetCol, 'left');
       op = { type: 'insert_col', targetCol };
-      msg = `Inserted blank column at column ${colToLetter(targetCol)}`;
+      msg = `Inserted blank column left of column ${colToLetter(targetCol)}`;
+      targetSelect = `${colToLetter(targetCol)}${targetRow}`;
     }
 
-    applySpreadsheetShift(next, op, msg);
+    applySpreadsheetShift(next, op, msg, targetSelect);
     setIsInsertDialogOpen(false);
   };
 
   const handleExecuteDelete = (
-    option: 'shift_left' | 'shift_up' | 'entire_row' | 'entire_col'
+    option: 'shift_left' | 'shift_up' | 'entire_row' | 'entire_col',
+    targetColOverride?: number,
+    targetRowOverride?: number
   ) => {
     const parsed = parseCellRef(selectedCellRef);
-    const targetCol = parsed?.colIndex || 1;
-    const targetRow = parsed?.rowIndex || 1;
+    const targetCol = targetColOverride !== undefined ? targetColOverride : (parsed?.colIndex || 1);
+    const targetRow = targetRowOverride !== undefined ? targetRowOverride : (parsed?.rowIndex || 1);
 
     let next: AttachedSpreadsheet;
     let op: CellShiftOperation;
@@ -1007,11 +1477,11 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     if (option === 'shift_left') {
       next = shiftCellsLeft(spreadsheet, targetCol, targetRow);
       op = { type: 'shift_left', targetCol, targetRow };
-      msg = `Shifted cells left at ${selectedCellRef}`;
+      msg = `Shifted cells left at column ${colToLetter(targetCol)} row ${targetRow}`;
     } else if (option === 'shift_up') {
       next = shiftCellsUp(spreadsheet, targetCol, targetRow);
       op = { type: 'shift_up', targetCol, targetRow };
-      msg = `Shifted cells up at ${selectedCellRef}`;
+      msg = `Shifted cells up at column ${colToLetter(targetCol)} row ${targetRow}`;
     } else if (option === 'entire_row') {
       next = deleteRowAtIndex(spreadsheet, targetRow);
       op = { type: 'delete_row', targetRow };
@@ -1056,7 +1526,43 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     const parsed = parseCellRef(selectedCellRef);
     if (!parsed) return;
 
-    if (e.key === 'ArrowUp') {
+    if (e.key === 'F4') {
+      e.preventDefault();
+      handleCycleAbsolute();
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
+      e.preventDefault();
+      setInsertOption('entire_row_above');
+      setIsInsertDialogOpen(true);
+      return;
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
+      e.preventDefault();
+      setDeleteOption('entire_row');
+      setIsDeleteDialogOpen(true);
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+      e.preventDefault();
+      handleCopyCell();
+      return;
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+      if (copiedCell) {
+        e.preventDefault();
+        handlePasteCell();
+        return;
+      }
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      handleFillDown();
+      return;
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) {
+      e.preventDefault();
+      handleFillRight();
+      return;
+    } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       const prevRow = Math.max(1, parsed.rowIndex - 1);
       const nextRef = `${parsed.colLetter}${prevRow}`;
@@ -1082,7 +1588,14 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
       const nextCol = Math.min(totalCols, parsed.colIndex + 1);
       const nextRef = `${colToLetter(nextCol)}${parsed.rowIndex}`;
       handleSelectCell(nextRef);
-    } else if (e.key === 'Enter' || e.key === 'F2') {
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (isFormulaEditing) {
+        handleConfirmFormula(e.shiftKey ? 'up' : 'down');
+      } else {
+        handleStartInlineEdit(selectedCellRef);
+      }
+    } else if (e.key === 'F2') {
       e.preventDefault();
       handleStartInlineEdit(selectedCellRef);
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1301,10 +1814,13 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const topSpacerHeight = startRowIndex * ROW_HEIGHT;
   const bottomSpacerHeight = Math.max(0, (totalRows - endRowIndex) * ROW_HEIGHT);
 
-  const visibleRows: number[] = [];
-  for (let r = startRowIndex + 1; r <= endRowIndex; r++) {
-    visibleRows.push(r);
-  }
+  const visibleRows = useMemo(() => {
+    const list: number[] = [];
+    for (let r = startRowIndex + 1; r <= endRowIndex; r++) {
+      list.push(r);
+    }
+    return list;
+  }, [startRowIndex, endRowIndex]);
 
   // Virtualized column windowing: only render columns currently inside viewport (+ overscan buffer)
   const startColIndex = Math.max(0, Math.floor(scrollLeft / COL_WIDTH) - COL_OVERSCAN);
@@ -1319,6 +1835,8 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const visibleColLetters = useMemo(() => {
     return colLetters.slice(startColIndex, endColIndex);
   }, [colLetters, startColIndex, endColIndex]);
+
+  const cleanSearch = useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
 
   // Display human-readable range (1-indexed) currently in the viewport
   const firstVisibleRow = Math.min(totalRows, Math.max(1, Math.floor(scrollTop / ROW_HEIGHT) + 1));
@@ -1338,30 +1856,49 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
   const handleInlineKeyDown = useCallback(
     (e: React.KeyboardEvent, cellRef: string) => {
+      if (e.key === 'F4') {
+        e.preventDefault();
+        handleCycleAbsolute();
+        return;
+      }
       if (e.key === 'Enter') {
         e.preventDefault();
-        commitCellValue(cellRef, inlineEditingValue, 'down');
-        setInlineEditingCellRef(null);
+        if (inlineEditingValue.trim().startsWith('=')) {
+          handleConfirmFormula(e.shiftKey ? 'up' : 'down');
+        } else {
+          commitCellValue(cellRef, inlineEditingValue, e.shiftKey ? 'up' : 'down');
+          setInlineEditingCellRef(null);
+        }
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        commitCellValue(cellRef, inlineEditingValue, e.shiftKey ? 'left' : 'right');
-        setInlineEditingCellRef(null);
+        if (inlineEditingValue.trim().startsWith('=')) {
+          handleConfirmFormula(e.shiftKey ? 'left' : 'right');
+        } else {
+          commitCellValue(cellRef, inlineEditingValue, e.shiftKey ? 'left' : 'right');
+          setInlineEditingCellRef(null);
+        }
       } else if (e.key === 'Escape') {
         e.preventDefault();
         setInlineEditingCellRef(null);
+        setIsFormulaBarEditing(false);
         const val = currentCells[cellRef];
         setEditingValue(val !== undefined && val !== null ? String(val) : '');
+        scrollContainerRef.current?.focus();
       }
     },
-    [inlineEditingValue, currentCells]
+    [inlineEditingValue, currentCells, handleCycleAbsolute, commitCellValue, handleConfirmFormula]
   );
 
   const handleInlineBlur = useCallback(
     (cellRef: string) => {
+      // If user is actively typing a formula and clicking around cells to add references, don't dismiss inline input
+      if (inlineEditingValue.startsWith('=')) {
+        return;
+      }
       commitCellValue(cellRef, inlineEditingValue, 'none');
       setInlineEditingCellRef(null);
     },
-    [inlineEditingValue]
+    [inlineEditingValue, commitCellValue]
   );
 
   return (
@@ -1590,7 +2127,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               variant="outline"
               size="sm"
               onClick={() => {
-                setInsertOption('entire_row');
+                setInsertOption('entire_row_above');
                 setIsInsertDialogOpen(true);
               }}
               className="h-7 text-[11px] gap-1 bg-white dark:bg-zinc-900 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 cursor-pointer font-medium"
@@ -1600,55 +2137,112 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               <span>Insert...</span>
             </Button>
 
-            {/* Add / Remove Rows */}
+            {/* Contextual Row Operations (Direct Above/Below Insertion) */}
+            <div className="flex items-center gap-1 bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded p-0.5 shadow-2xs">
+              <span className="text-[10px] font-mono font-semibold px-1 text-slate-500 flex items-center gap-0.5" title={`Selected Row ${selectedRow}`}>
+                <Rows className="w-3 h-3 text-emerald-600" />
+                R{selectedRow}:
+              </span>
+              <button
+                type="button"
+                onClick={handleInsertRowAbove}
+                className="px-1.5 py-0.5 text-[10px] hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 font-semibold rounded cursor-pointer transition-colors"
+                title={`Insert blank row above row ${selectedRow}`}
+              >
+                +Above
+              </button>
+              <button
+                type="button"
+                onClick={handleInsertRowBelow}
+                className="px-1.5 py-0.5 text-[10px] hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 font-semibold rounded cursor-pointer transition-colors"
+                title={`Insert blank row below row ${selectedRow}`}
+              >
+                +Below
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSelectedRow}
+                className="px-1 py-0.5 text-[10px] hover:bg-red-50 text-slate-400 hover:text-red-600 rounded font-medium cursor-pointer"
+                title={`Delete row ${selectedRow}`}
+              >
+                Del
+              </button>
+            </div>
+
+            {/* Contextual Column Operations (Direct Left/Right Insertion) */}
+            <div className="flex items-center gap-1 bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded p-0.5 shadow-2xs">
+              <span className="text-[10px] font-mono font-semibold px-1 text-slate-500 flex items-center gap-0.5" title={`Selected Column ${selectedColLetter}`}>
+                <Columns className="w-3 h-3 text-blue-600" />
+                Col {selectedColLetter}:
+              </span>
+              <button
+                type="button"
+                onClick={handleInsertColLeft}
+                className="px-1.5 py-0.5 text-[10px] hover:bg-blue-50 dark:hover:bg-blue-950/50 text-blue-700 dark:text-blue-400 font-semibold rounded cursor-pointer transition-colors"
+                title={`Insert blank column left of column ${selectedColLetter}`}
+              >
+                +Left
+              </button>
+              <button
+                type="button"
+                onClick={handleInsertColRight}
+                className="px-1.5 py-0.5 text-[10px] hover:bg-blue-50 dark:hover:bg-blue-950/50 text-blue-700 dark:text-blue-400 font-semibold rounded cursor-pointer transition-colors"
+                title={`Insert blank column right of column ${selectedColLetter}`}
+              >
+                +Right
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSelectedCol}
+                className="px-1 py-0.5 text-[10px] hover:bg-red-50 text-slate-400 hover:text-red-600 rounded font-medium cursor-pointer"
+                title={`Delete column ${selectedColLetter}`}
+              >
+                Del
+              </button>
+            </div>
+
+            {/* Append / Trim Rows & Columns at Sheet Boundary */}
             <div className="flex items-center bg-white dark:bg-zinc-900 rounded-md border border-slate-300 dark:border-zinc-700 p-0.5 shadow-2xs">
               <button
                 type="button"
                 onClick={() => handleAddRow(1)}
-                title="Add 1 Row at bottom of active tab"
-                className="px-2 py-0.5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded font-medium flex items-center gap-0.5 cursor-pointer"
+                title="Append 1 row to the bottom of active tab"
+                className="px-1.5 py-0.5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-[10px] text-slate-700 dark:text-zinc-300 rounded font-medium cursor-pointer"
               >
-                <Plus className="w-3 h-3 text-emerald-600" />
-                <span>Row</span>
+                +End Row
               </button>
               <button
                 type="button"
                 onClick={() => handleAddRow(5)}
-                title="Add 5 Rows at bottom"
-                className="px-1.5 py-0.5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-400 rounded text-[10px] font-mono cursor-pointer"
+                title="Append 5 rows to the bottom of active tab"
+                className="px-1 py-0.5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-[9px] text-slate-500 font-mono rounded cursor-pointer"
               >
                 +5
               </button>
-              <div className="w-px h-3 bg-slate-200 dark:bg-zinc-700 mx-0.5" />
               <button
                 type="button"
                 onClick={() => handleRemoveRow(1)}
-                title="Remove bottom Row"
-                className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-500 hover:text-red-600 rounded cursor-pointer"
+                title="Remove 1 row from bottom of active tab"
+                className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-red-600 rounded cursor-pointer"
               >
-                <Minus className="w-3 h-3" />
-              </button>
-            </div>
-
-            {/* Add / Remove Columns */}
-            <div className="flex items-center bg-white dark:bg-zinc-900 rounded-md border border-slate-300 dark:border-zinc-700 p-0.5 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => handleAddColumn(1)}
-                title="Add 1 Column at right of active tab"
-                className="px-2 py-0.5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded font-medium flex items-center gap-0.5 cursor-pointer"
-              >
-                <Plus className="w-3 h-3 text-blue-600" />
-                <span>Col</span>
+                <Minus className="w-2.5 h-2.5" />
               </button>
               <div className="w-px h-3 bg-slate-200 dark:bg-zinc-700 mx-0.5" />
               <button
                 type="button"
-                onClick={() => handleRemoveColumn(1)}
-                title="Remove rightmost Column"
-                className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-500 hover:text-red-600 rounded cursor-pointer"
+                onClick={() => handleAddColumn(1)}
+                title="Append 1 column to the right of active tab"
+                className="px-1.5 py-0.5 hover:bg-slate-100 dark:hover:bg-zinc-800 text-[10px] text-slate-700 dark:text-zinc-300 rounded font-medium cursor-pointer"
               >
-                <Minus className="w-3 h-3" />
+                +End Col
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRemoveColumn(1)}
+                title="Remove 1 column from right of active tab"
+                className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-red-600 rounded cursor-pointer"
+              >
+                <Minus className="w-2.5 h-2.5" />
               </button>
             </div>
 
@@ -1743,34 +2337,233 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             </div>
 
             {/* Inline Value Input / Formula Bar */}
-            <div className="flex items-center gap-1.5 flex-1 min-w-[240px] max-w-md">
-              <span className={`text-xs font-mono font-bold shrink-0 ${selectedIsFormula ? 'text-violet-600' : 'text-slate-500'}`}>
-                {selectedIsFormula ? 'fx' : '='}
-              </span>
-              <Input
-                value={editingValue}
-                onChange={(e) => setEditingValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveCell();
-                }}
-                placeholder="Value or formula (e.g. 500, Cash, =SUM(A1:A5))..."
-                className={`h-7 text-xs bg-white dark:bg-zinc-900 border-slate-300 dark:border-zinc-700 font-mono ${selectedIsFormula ? 'text-violet-700 dark:text-violet-300' : ''}`}
-              />
-              <Button
+            <div className="flex items-center gap-1.5 flex-1 min-w-[280px] max-w-2xl flex-wrap sm:flex-nowrap">
+              {/* fx button: click to toggle '=' formula mode */}
+              <button
                 type="button"
-                size="sm"
-                onClick={handleSaveCell}
-                className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1 shrink-0 font-medium"
+                onClick={() => {
+                  setIsFormulaBarEditing(true);
+                  if (!editingValue.startsWith('=')) {
+                    const next = '=' + editingValue;
+                    setEditingValue(next);
+                  }
+                  formulaBarInputRef.current?.focus();
+                }}
+                className={`w-6 h-7 rounded text-xs font-mono font-bold flex items-center justify-center cursor-pointer transition-colors ${
+                  isFormulaEditing
+                    ? 'bg-violet-600 text-white shadow-xs'
+                    : 'bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-300 dark:hover:bg-zinc-700'
+                }`}
+                title="Formula mode (=). Type or click cells to add references."
               >
-                <Save className="w-3 h-3" />
-                <span>Save</span>
-              </Button>
-              {selectedIsFormula && (
-                <span className="text-[10px] font-mono text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 px-1.5 py-0.5 rounded shrink-0">
-                  = {selectedFormatted}
-                </span>
+                fx
+              </button>
+
+              <div className="relative flex-1 min-w-[180px]">
+                <Input
+                  ref={formulaBarInputRef}
+                  value={editingValue}
+                  onFocus={() => {
+                    if (editingValue.trim().startsWith('=')) {
+                      setIsFormulaBarEditing(true);
+                    }
+                  }}
+                  onChange={(e) => {
+                    setEditingValue(e.target.value);
+                    if (e.target.value.trim().startsWith('=')) {
+                      setIsFormulaBarEditing(true);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleConfirmFormula(e.shiftKey ? 'up' : 'down');
+                    } else if (e.key === 'Tab') {
+                      e.preventDefault();
+                      handleConfirmFormula(e.shiftKey ? 'left' : 'right');
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      const orig = currentCells[selectedCellRef];
+                      setEditingValue(orig !== undefined && orig !== null ? String(orig) : '');
+                      setIsFormulaBarEditing(false);
+                      if (inlineEditingCellRef) setInlineEditingCellRef(null);
+                      formulaBarInputRef.current?.blur();
+                      scrollContainerRef.current?.focus();
+                    } else if (e.key === 'F4') {
+                      e.preventDefault();
+                      handleCycleAbsolute();
+                    }
+                  }}
+                  placeholder="Value or formula (e.g. 500, =A1+B1, =SUM(A1:A5))..."
+                  className={`h-7 text-xs bg-white dark:bg-zinc-900 border-slate-300 dark:border-zinc-700 font-mono pr-20 ${
+                    isFormulaEditing
+                      ? 'ring-1 ring-violet-500 border-violet-500 text-violet-950 dark:text-violet-100 font-bold'
+                      : selectedIsFormula
+                      ? 'text-violet-700 dark:text-violet-300'
+                      : ''
+                  }`}
+                />
+                {/* Live calculation preview badge */}
+                {liveFormulaPreview !== null && (
+                  <div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <span
+                      className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-semibold ${
+                        liveFormulaPreview === '#ERROR' || liveFormulaPreview === '#DIV/0!'
+                          ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300'
+                          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                      }`}
+                    >
+                      = {liveFormulaPreview}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Commit / Cancel Buttons */}
+              {isFormulaEditing ? (
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => handleConfirmFormula('down')}
+                    title="Confirm formula (Enter)"
+                    className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer font-bold shadow-xs gap-1"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Enter</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      const orig = currentCells[selectedCellRef];
+                      setEditingValue(orig !== undefined && orig !== null ? String(orig) : '');
+                      setIsFormulaBarEditing(false);
+                      if (inlineEditingCellRef) setInlineEditingCellRef(null);
+                      formulaBarInputRef.current?.blur();
+                      scrollContainerRef.current?.focus();
+                    }}
+                    title="Cancel formula (Esc)"
+                    className="h-7 px-1.5 text-xs text-slate-500 hover:text-red-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSaveCell}
+                  className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1 shrink-0 font-medium"
+                >
+                  <Save className="w-3 h-3" />
+                  <span>Save</span>
+                </Button>
               )}
+
+              {/* Quick Formula Tools: Operators, F4 Absolute, Functions */}
+              <div className="flex items-center gap-1 bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded p-0.5 shadow-2xs shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCycleAbsolute}
+                  title="Cycle Absolute Reference ($A$1 -> A$1 -> $A1 -> A1). Shortcut: F4"
+                  className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300 rounded border border-violet-200 dark:border-violet-800 cursor-pointer transition-colors"
+                >
+                  $ (F4)
+                </button>
+                <div className="w-px h-3 bg-slate-200 dark:bg-zinc-700 mx-0.5" />
+                <button
+                  type="button"
+                  onClick={() => handleAppendOperator('+')}
+                  title="Add (+)"
+                  className="w-5 h-5 flex items-center justify-center text-xs font-mono font-bold hover:bg-slate-100 dark:hover:bg-zinc-800 rounded text-slate-700 dark:text-zinc-300 cursor-pointer"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAppendOperator('-')}
+                  title="Subtract (-)"
+                  className="w-5 h-5 flex items-center justify-center text-xs font-mono font-bold hover:bg-slate-100 dark:hover:bg-zinc-800 rounded text-slate-700 dark:text-zinc-300 cursor-pointer"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAppendOperator('*')}
+                  title="Multiply (*)"
+                  className="w-5 h-5 flex items-center justify-center text-xs font-mono font-bold hover:bg-slate-100 dark:hover:bg-zinc-800 rounded text-slate-700 dark:text-zinc-300 cursor-pointer"
+                >
+                  ×
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAppendOperator('/')}
+                  title="Divide (/)"
+                  className="w-5 h-5 flex items-center justify-center text-xs font-mono font-bold hover:bg-slate-100 dark:hover:bg-zinc-800 rounded text-slate-700 dark:text-zinc-300 cursor-pointer"
+                >
+                  ÷
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAppendOperator('(')}
+                  title="Open Parenthesis ("
+                  className="w-4 h-5 flex items-center justify-center text-xs font-mono font-bold hover:bg-slate-100 dark:hover:bg-zinc-800 rounded text-slate-700 dark:text-zinc-300 cursor-pointer"
+                >
+                  (
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAppendOperator(')')}
+                  title="Close Parenthesis )"
+                  className="w-4 h-5 flex items-center justify-center text-xs font-mono font-bold hover:bg-slate-100 dark:hover:bg-zinc-800 rounded text-slate-700 dark:text-zinc-300 cursor-pointer"
+                >
+                  )
+                </button>
+                <div className="w-px h-3 bg-slate-200 dark:bg-zinc-700 mx-0.5" />
+                <button
+                  type="button"
+                  onClick={() => handleAppendOperator('SUM')}
+                  title="Insert =SUM(...)"
+                  className="px-1 py-0.5 text-[9px] font-mono font-bold hover:bg-slate-100 dark:hover:bg-zinc-800 rounded text-blue-600 dark:text-blue-400 cursor-pointer"
+                >
+                  SUM
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAppendOperator('AVERAGE')}
+                  title="Insert =AVERAGE(...)"
+                  className="px-1 py-0.5 text-[9px] font-mono font-bold hover:bg-slate-100 dark:hover:bg-zinc-800 rounded text-blue-600 dark:text-blue-400 cursor-pointer"
+                >
+                  AVG
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAppendOperator('IF')}
+                  title="Insert =IF(...)"
+                  className="px-1 py-0.5 text-[9px] font-mono font-bold hover:bg-slate-100 dark:hover:bg-zinc-800 rounded text-purple-600 dark:text-purple-400 cursor-pointer"
+                >
+                  IF
+                </button>
+              </div>
             </div>
+
+            {/* Active Formula References Colored Tokens */}
+            {activeFormulaRefs.length > 0 && (
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-[10px] text-slate-400 font-mono">Refs:</span>
+                {activeFormulaRefs.map((r, i) => (
+                  <span
+                    key={i}
+                    style={{ borderColor: r.color }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${r.bgClass} ${r.textClass}`}
+                  >
+                    {r.sheetName ? `${r.sheetName}!` : ''}{r.raw}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Direct In-Cell Edit Trigger */}
             <Button
@@ -1797,71 +2590,46 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               <Trash2 className="w-3 h-3" />
             </Button>
 
-            <div className="w-px h-4 bg-slate-300 dark:bg-zinc-700 mx-1 hidden lg:block" />
-
-            {/* Contextual Row Operations */}
+            {/* Smart Copy & Autofill Operations */}
             <div className="flex items-center gap-1 bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded p-0.5 shadow-2xs">
-              <span className="text-[10px] font-mono font-semibold px-1 text-slate-500 flex items-center gap-0.5">
-                <Rows className="w-3 h-3 text-emerald-600" />
-                R{selectedRow}:
-              </span>
               <button
                 type="button"
-                onClick={handleInsertRowAbove}
-                className="px-1.5 py-0.5 text-[10px] hover:bg-slate-100 dark:hover:bg-zinc-800 rounded font-medium text-slate-700 dark:text-zinc-300 cursor-pointer"
-                title={`Insert blank row above row ${selectedRow}`}
+                onClick={() => handleCopyCell()}
+                className="px-2 py-0.5 text-[10px] hover:bg-slate-100 dark:hover:bg-zinc-800 rounded font-medium text-slate-700 dark:text-zinc-300 cursor-pointer flex items-center gap-1"
+                title="Copy cell value or formula (Ctrl+C)"
               >
-                +Above
+                <Copy className="w-2.5 h-2.5 text-blue-600" />
+                <span>Copy</span>
               </button>
               <button
                 type="button"
-                onClick={handleInsertRowBelow}
-                className="px-1.5 py-0.5 text-[10px] hover:bg-slate-100 dark:hover:bg-zinc-800 rounded font-medium text-slate-700 dark:text-zinc-300 cursor-pointer"
-                title={`Insert blank row below row ${selectedRow}`}
+                disabled={!copiedCell}
+                onClick={() => handlePasteCell()}
+                className="px-2 py-0.5 text-[10px] hover:bg-slate-100 dark:hover:bg-zinc-800 rounded font-medium text-slate-700 dark:text-zinc-300 cursor-pointer flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                title={copiedCell ? `Paste from ${copiedCell.ref} with smart formula adjustment (Ctrl+V)` : 'Copy a cell first'}
               >
-                +Below
+                <span>Paste</span>
+              </button>
+              <div className="w-px h-3 bg-slate-200 dark:bg-zinc-700 mx-0.5" />
+              <button
+                type="button"
+                onClick={handleFillDown}
+                className="px-1.5 py-0.5 text-[10px] hover:bg-slate-100 dark:hover:bg-zinc-800 rounded font-medium text-slate-700 dark:text-zinc-300 cursor-pointer"
+                title="Fill down from row above with formula adjustment (Ctrl+D)"
+              >
+                Fill ↓
               </button>
               <button
                 type="button"
-                onClick={handleDeleteSelectedRow}
-                className="px-1 py-0.5 text-[10px] hover:bg-red-50 text-slate-400 hover:text-red-600 rounded font-medium cursor-pointer"
-                title={`Delete row ${selectedRow}`}
+                onClick={handleFillRight}
+                className="px-1.5 py-0.5 text-[10px] hover:bg-slate-100 dark:hover:bg-zinc-800 rounded font-medium text-slate-700 dark:text-zinc-300 cursor-pointer"
+                title="Fill right from column to left with formula adjustment (Ctrl+R)"
               >
-                Del
+                Fill →
               </button>
             </div>
 
-            {/* Contextual Column Operations */}
-            <div className="flex items-center gap-1 bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded p-0.5 shadow-2xs">
-              <span className="text-[10px] font-mono font-semibold px-1 text-slate-500 flex items-center gap-0.5">
-                <Columns className="w-3 h-3 text-blue-600" />
-                Col {selectedColLetter}:
-              </span>
-              <button
-                type="button"
-                onClick={handleInsertColLeft}
-                className="px-1.5 py-0.5 text-[10px] hover:bg-slate-100 dark:hover:bg-zinc-800 rounded font-medium text-slate-700 dark:text-zinc-300 cursor-pointer"
-                title={`Insert blank column left of column ${selectedColLetter}`}
-              >
-                +Left
-              </button>
-              <button
-                type="button"
-                onClick={handleInsertColRight}
-                className="px-1.5 py-0.5 text-[10px] hover:bg-slate-100 dark:hover:bg-zinc-800 rounded font-medium text-slate-700 dark:text-zinc-300 cursor-pointer"
-                title={`Insert blank column right of column ${selectedColLetter}`}
-              >
-                +Right
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteSelectedCol}
-                className="px-1 py-0.5 text-[10px] hover:bg-red-50 text-slate-400 hover:text-red-600 rounded font-medium cursor-pointer"
-                title={`Delete column ${selectedColLetter}`}
-              >
-                Del
-              </button>
-            </div>
+
 
             {/* Current value preview badge */}
             {selectedVal !== undefined && selectedVal !== null && (
@@ -1976,28 +2744,40 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                           aria-hidden="true"
                         />
                       )}
-                      {visibleColLetters.map((col) => (
-                        <th
-                          key={col}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            const ref = `${col}1`;
-                            handleSelectCell(ref);
-                            const parsed = parseCellRef(ref);
-                            setContextMenu({
-                              open: true,
-                              x: Math.min(e.clientX, window.innerWidth - 220),
-                              y: Math.min(e.clientY, window.innerHeight - 260),
-                              cellRef: ref,
-                              rowIndex: 1,
-                              colIndex: parsed?.colIndex || 1
-                            });
-                          }}
-                          className="w-32 min-w-[128px] max-w-[128px] h-7 px-2 border-r border-b border-slate-300 dark:border-zinc-700 text-center font-mono font-bold text-[11px] text-slate-700 dark:text-zinc-300 bg-slate-100 dark:bg-zinc-900 cursor-context-menu"
-                        >
-                          {col}
-                        </th>
-                      ))}
+                      {visibleColLetters.map((col) => {
+                        const isColActive = selectedColLetter === col;
+                        return (
+                          <th
+                            key={col}
+                            onClick={() => {
+                              const newRef = `${col}${selectedRow || 1}`;
+                              handleSelectCell(newRef);
+                            }}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              const newRef = `${col}${selectedRow || 1}`;
+                              handleSelectCell(newRef);
+                              const parsed = parseCellRef(newRef);
+                              setContextMenu({
+                                open: true,
+                                x: Math.min(e.clientX, window.innerWidth - 220),
+                                y: Math.min(e.clientY, window.innerHeight - 260),
+                                cellRef: newRef,
+                                rowIndex: selectedRow || 1,
+                                colIndex: parsed?.colIndex || 1
+                              });
+                            }}
+                            className={`w-32 min-w-[128px] max-w-[128px] h-7 px-2 border-r border-b border-slate-300 dark:border-zinc-700 text-center font-mono font-bold text-[11px] cursor-pointer transition-colors ${
+                              isColActive
+                                ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200'
+                                : 'text-slate-700 dark:text-zinc-300 bg-slate-100 dark:bg-zinc-900 hover:bg-slate-200 dark:hover:bg-zinc-800'
+                            }`}
+                            title={`Column ${col}. Click to select column.`}
+                          >
+                            {col}
+                          </th>
+                        );
+                      })}
                       {rightSpacerWidth > 0 && (
                         <th
                           style={{ width: `${rightSpacerWidth}px`, minWidth: `${rightSpacerWidth}px` }}
@@ -2077,13 +2857,28 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
                   {/* Body: Virtualized Data Cells with Event Delegation */}
                   <tbody
+                    onMouseDown={(e) => {
+                      if (isFormulaEditing) {
+                        const td = (e.target as HTMLElement).closest<HTMLTableCellElement>('[data-cell-ref]');
+                        if (td && td.dataset.cellRef) {
+                          // Prevent blurring the formula input or resetting selection range when clicking cells
+                          e.preventDefault();
+                        }
+                      }
+                    }}
                     onClick={(e) => {
                       const td = (e.target as HTMLElement).closest<HTMLTableCellElement>('[data-cell-ref]');
                       if (td && td.dataset.cellRef) {
-                        handleSelectCell(td.dataset.cellRef);
+                        const clickedRef = td.dataset.cellRef;
+                        if (isFormulaEditing) {
+                          handleCellReferenceClick(clickedRef);
+                        } else {
+                          handleSelectCell(clickedRef);
+                        }
                       }
                     }}
                     onDoubleClick={(e) => {
+                      if (isFormulaEditing) return;
                       const td = (e.target as HTMLElement).closest<HTMLTableCellElement>('[data-cell-ref]');
                       if (td && td.dataset.cellRef) {
                         handleCellDoubleClick(td.dataset.cellRef);
@@ -2123,22 +2918,32 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                         className="h-7 hover:bg-blue-50/30 dark:hover:bg-blue-950/20"
                         style={{ height: `${ROW_HEIGHT}px` }}
                       >
-                        {/* Sticky Left: Row Number Header with Right-Click Support */}
+                        {/* Sticky Left: Row Number Header with Click and Right-Click Support */}
                         <td
+                          onClick={() => {
+                            const newRef = `${selectedColLetter || 'A'}${row}`;
+                            handleSelectCell(newRef);
+                          }}
                           onContextMenu={(e) => {
                             e.preventDefault();
-                            const ref = `A${row}`;
-                            handleSelectCell(ref);
+                            const newRef = `${selectedColLetter || 'A'}${row}`;
+                            handleSelectCell(newRef);
+                            const parsed = parseCellRef(newRef);
                             setContextMenu({
                               open: true,
                               x: Math.min(e.clientX, window.innerWidth - 220),
                               y: Math.min(e.clientY, window.innerHeight - 260),
-                              cellRef: ref,
+                              cellRef: newRef,
                               rowIndex: row,
-                              colIndex: 1
+                              colIndex: parsed?.colIndex || 1
                             });
                           }}
-                          className="sticky left-0 z-20 w-14 min-w-[56px] max-w-[56px] h-7 bg-slate-100 dark:bg-zinc-900 border-r border-b border-slate-300 dark:border-zinc-800 text-center font-mono font-semibold text-[11px] text-slate-500 cursor-context-menu"
+                          className={`sticky left-0 z-20 w-14 min-w-[56px] max-w-[56px] h-7 border-r border-b border-slate-300 dark:border-zinc-800 text-center font-mono font-semibold text-[11px] cursor-pointer transition-colors ${
+                            selectedRow === row
+                              ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200'
+                              : 'bg-slate-100 dark:bg-zinc-900 text-slate-500 hover:bg-slate-200 dark:hover:bg-zinc-800'
+                          }`}
+                          title={`Row ${row}. Click to select row.`}
                         >
                           {row}
                         </td>
@@ -2159,12 +2964,12 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                           const isSelected = selectedCellRef === cellRef;
                           const isLinked = usedCellSet.has(cellRef);
                           const isSearchHit = Boolean(
-                            searchQuery.trim() !== '' &&
-                            (cellRef.toLowerCase() === searchQuery.toLowerCase() ||
-                              (display &&
-                                display.toLowerCase().includes(searchQuery.toLowerCase())))
+                            cleanSearch &&
+                            (cellRef.toLowerCase() === cleanSearch ||
+                              (display && display.toLowerCase().includes(cleanSearch)))
                           );
                           const isInlineEditing = inlineEditingCellRef === cellRef;
+                          const formulaHighlight = formulaHighlightMap.get(cellRef);
 
                           return (
                             <MemoizedGridCell
@@ -2184,6 +2989,8 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                               onInlineKeyDown={handleInlineKeyDown}
                               onInlineBlur={handleInlineBlur}
                               inlineInputRef={inlineInputRef}
+                              onFillHandleDoubleClick={handleAutofillDown}
+                              formulaHighlight={formulaHighlight}
                             />
                           );
                         })}
@@ -2681,47 +3488,109 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               <span>R{contextMenu.rowIndex} C{contextMenu.colIndex}</span>
             </div>
 
+            {/* Insert Row Above */}
             <button
               type="button"
               onClick={() => {
+                const row = contextMenu.rowIndex;
                 setContextMenu(null);
-                setInsertOption('entire_row');
-                setIsInsertDialogOpen(true);
+                handleInsertRowAbove(row);
               }}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-left font-semibold text-emerald-800 dark:text-emerald-300 cursor-pointer group"
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
             >
               <span className="flex items-center gap-2">
-                <Plus className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
-                <span>Insert...</span>
+                <Rows className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Insert Row Above</span>
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">Ctrl+Shift+=</span>
+              <span className="text-[10px] text-slate-400 font-mono">Row {contextMenu.rowIndex}</span>
             </button>
 
+            {/* Insert Row Below */}
             <button
               type="button"
               onClick={() => {
+                const row = contextMenu.rowIndex;
                 setContextMenu(null);
-                handleExecuteInsert('entire_row');
+                handleInsertRowBelow(row);
               }}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
             >
-              <Rows className="w-3.5 h-3.5 text-slate-400" />
-              <span>Insert Entire Row</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setContextMenu(null);
-                handleExecuteInsert('entire_col');
-              }}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
-            >
-              <Columns className="w-3.5 h-3.5 text-slate-400" />
-              <span>Insert Entire Column</span>
+              <span className="flex items-center gap-2">
+                <Rows className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Insert Row Below</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Row {contextMenu.rowIndex + 1}</span>
             </button>
 
             <div className="h-px bg-slate-200 dark:bg-zinc-800 my-1" />
+
+            {/* Insert Column Left */}
+            <button
+              type="button"
+              onClick={() => {
+                const col = contextMenu.colIndex;
+                setContextMenu(null);
+                handleInsertColLeft(col);
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/40 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <Columns className="w-3.5 h-3.5 text-blue-600" />
+                <span>Insert Column Left</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Col {colToLetter(contextMenu.colIndex)}</span>
+            </button>
+
+            {/* Insert Column Right */}
+            <button
+              type="button"
+              onClick={() => {
+                const col = contextMenu.colIndex;
+                setContextMenu(null);
+                handleInsertColRight(col);
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/40 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <Columns className="w-3.5 h-3.5 text-blue-600" />
+                <span>Insert Column Right</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Col {colToLetter(contextMenu.colIndex + 1)}</span>
+            </button>
+
+            <div className="h-px bg-slate-200 dark:bg-zinc-800 my-1" />
+
+            {/* Delete Row */}
+            <button
+              type="button"
+              onClick={() => {
+                const row = contextMenu.rowIndex;
+                setContextMenu(null);
+                handleDeleteSelectedRow(row);
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left text-rose-700 dark:text-rose-300 cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                <span>Delete Row {contextMenu.rowIndex}</span>
+              </span>
+            </button>
+
+            {/* Delete Column */}
+            <button
+              type="button"
+              onClick={() => {
+                const col = contextMenu.colIndex;
+                setContextMenu(null);
+                handleDeleteSelectedCol(col);
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left text-rose-700 dark:text-rose-300 cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                <span>Delete Column {colToLetter(contextMenu.colIndex)}</span>
+              </span>
+            </button>
 
             <button
               type="button"
@@ -2734,9 +3603,72 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             >
               <span className="flex items-center gap-2">
                 <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                <span>Delete...</span>
+                <span>Delete Dialog...</span>
               </span>
               <span className="text-[10px] text-slate-400 font-mono">Ctrl+-</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const ref = contextMenu.cellRef;
+                setContextMenu(null);
+                handleCopyCell(ref);
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <Copy className="w-3.5 h-3.5 text-blue-600" />
+                <span>Copy Cell</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Ctrl+C</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={!copiedCell}
+              onClick={() => {
+                const ref = contextMenu.cellRef;
+                setContextMenu(null);
+                handlePasteCell(ref);
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-700 dark:text-zinc-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span className="flex items-center gap-2">
+                <Save className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Paste (Smart Formula Shift)</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Ctrl+V</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                handleFillDown();
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <Rows className="w-3.5 h-3.5 text-slate-400" />
+                <span>Fill Down from Above</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Ctrl+D</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setContextMenu(null);
+                handleFillRight();
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <Columns className="w-3.5 h-3.5 text-slate-400" />
+                <span>Fill Right from Left</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Ctrl+R</span>
             </button>
 
             <div className="h-px bg-slate-200 dark:bg-zinc-800 my-1" />
@@ -2787,38 +3719,60 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                 setIsInsertDialogOpen(false);
               } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                const order: ('shift_right' | 'shift_down' | 'entire_row' | 'entire_col')[] = [
+                const order: (
+                  | 'shift_right'
+                  | 'shift_down'
+                  | 'entire_row_above'
+                  | 'entire_row_below'
+                  | 'entire_col_left'
+                  | 'entire_col_right'
+                )[] = [
                   'shift_right',
                   'shift_down',
-                  'entire_row',
-                  'entire_col'
+                  'entire_row_above',
+                  'entire_row_below',
+                  'entire_col_left',
+                  'entire_col_right'
                 ];
-                const curr = order.indexOf(insertOption);
+                const curr = order.indexOf(insertOption as any);
                 setInsertOption(order[(curr + 1) % order.length]);
               } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                const order: ('shift_right' | 'shift_down' | 'entire_row' | 'entire_col')[] = [
+                const order: (
+                  | 'shift_right'
+                  | 'shift_down'
+                  | 'entire_row_above'
+                  | 'entire_row_below'
+                  | 'entire_col_left'
+                  | 'entire_col_right'
+                )[] = [
                   'shift_right',
                   'shift_down',
-                  'entire_row',
-                  'entire_col'
+                  'entire_row_above',
+                  'entire_row_below',
+                  'entire_col_left',
+                  'entire_col_right'
                 ];
-                const curr = order.indexOf(insertOption);
+                const curr = order.indexOf(insertOption as any);
                 setInsertOption(order[(curr - 1 + order.length) % order.length]);
               } else if (e.key === 'r' || e.key === 'R') {
                 setInsertOption('shift_right');
               } else if (e.key === 'd' || e.key === 'D') {
                 setInsertOption('shift_down');
-              } else if (e.key === 'w' || e.key === 'W') {
-                setInsertOption('entire_row');
-              } else if (e.key === 'c' || e.key === 'C') {
-                setInsertOption('entire_col');
+              } else if (e.key === 'a' || e.key === 'A') {
+                setInsertOption('entire_row_above');
+              } else if (e.key === 'b' || e.key === 'B') {
+                setInsertOption('entire_row_below');
+              } else if (e.key === 'l' || e.key === 'L') {
+                setInsertOption('entire_col_left');
+              } else if (e.key === 'g' || e.key === 'G') {
+                setInsertOption('entire_col_right');
               }
             }}
             tabIndex={-1}
           >
             <div
-              className="w-[220px] bg-[#fcfcfc] dark:bg-zinc-800 border border-slate-300 dark:border-zinc-600 rounded-lg shadow-2xl overflow-hidden font-sans select-none animate-in fade-in zoom-in-95 duration-100"
+              className="w-[260px] bg-[#fcfcfc] dark:bg-zinc-800 border border-slate-300 dark:border-zinc-600 rounded-lg shadow-2xl overflow-hidden font-sans select-none animate-in fade-in zoom-in-95 duration-100"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Title Bar */}
@@ -2830,7 +3784,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                   <button
                     type="button"
                     onClick={() =>
-                      toast.info('Insert cells, rows, or columns at the currently selected cell.')
+                      toast.info('Insert cells, rows above/below, or columns left/right at the selection.')
                     }
                     className="w-5 h-5 flex items-center justify-center text-[12px] font-bold text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-slate-200/70 dark:hover:bg-zinc-700 rounded-sm cursor-pointer"
                     title="Help"
@@ -2852,7 +3806,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               <div className="px-3 pb-2 pt-1.5">
                 <fieldset className="border border-slate-300 dark:border-zinc-600 rounded px-2.5 py-1.5 bg-white dark:bg-zinc-900/60">
                   <legend className="px-1 text-[11px] text-slate-600 dark:text-zinc-400 font-normal">
-                    Insert
+                    Insert Option
                   </legend>
                   <div className="space-y-1.5 py-1">
                     <label className="flex items-center gap-2 cursor-pointer group">
@@ -2881,16 +3835,19 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                       </span>
                     </label>
 
+                    <div className="h-px bg-slate-200 dark:bg-zinc-700 my-1" />
+
                     <label className="flex items-center gap-2 cursor-pointer group">
                       <input
                         type="radio"
                         name="insertOption"
-                        checked={insertOption === 'entire_row'}
-                        onChange={() => setInsertOption('entire_row')}
+                        checked={insertOption === 'entire_row_above' || insertOption === 'entire_row'}
+                        onChange={() => setInsertOption('entire_row_above')}
                         className="w-3.5 h-3.5 accent-[#0067b8] text-[#0067b8]"
                       />
-                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-blue-600">
-                        Entire <span className="underline font-medium">r</span>ow
+                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-emerald-600 flex items-center justify-between w-full">
+                        <span>Insert row <span className="underline font-medium">a</span>bove</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Row {selectedRow}</span>
                       </span>
                     </label>
 
@@ -2898,12 +3855,43 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                       <input
                         type="radio"
                         name="insertOption"
-                        checked={insertOption === 'entire_col'}
-                        onChange={() => setInsertOption('entire_col')}
+                        checked={insertOption === 'entire_row_below'}
+                        onChange={() => setInsertOption('entire_row_below')}
                         className="w-3.5 h-3.5 accent-[#0067b8] text-[#0067b8]"
                       />
-                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-blue-600">
-                        Entire <span className="underline font-medium">c</span>olumn
+                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-emerald-600 flex items-center justify-between w-full">
+                        <span>Insert row <span className="underline font-medium">b</span>elow</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Row {selectedRow + 1}</span>
+                      </span>
+                    </label>
+
+                    <div className="h-px bg-slate-200 dark:bg-zinc-700 my-1" />
+
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="radio"
+                        name="insertOption"
+                        checked={insertOption === 'entire_col_left' || insertOption === 'entire_col'}
+                        onChange={() => setInsertOption('entire_col_left')}
+                        className="w-3.5 h-3.5 accent-[#0067b8] text-[#0067b8]"
+                      />
+                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-blue-600 flex items-center justify-between w-full">
+                        <span>Insert column <span className="underline font-medium">l</span>eft</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Col {selectedColLetter}</span>
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="radio"
+                        name="insertOption"
+                        checked={insertOption === 'entire_col_right'}
+                        onChange={() => setInsertOption('entire_col_right')}
+                        className="w-3.5 h-3.5 accent-[#0067b8] text-[#0067b8]"
+                      />
+                      <span className="text-[12px] text-slate-800 dark:text-zinc-200 group-hover:text-blue-600 flex items-center justify-between w-full">
+                        <span>Insert column ri<span className="underline font-medium">g</span>ht</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Col {colToLetter(selectedCol + 1)}</span>
                       </span>
                     </label>
                   </div>

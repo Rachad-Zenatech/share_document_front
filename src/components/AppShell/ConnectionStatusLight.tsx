@@ -50,14 +50,6 @@ export function ConnectionStatusLight({ className = "" }: { className?: string }
         // Fallthrough to alternative paths
       }
 
-      // 2. Try /api/purchasing/integration/status (for m7a router prefix)
-      try {
-        const res = await apiClient.get<IntegrationStatusResponse>("/api/purchasing/integration/status");
-        if (res && Array.isArray(res.services)) return res;
-      } catch {
-        // Fallthrough
-      }
-
       // 3. Fallback to basic alive indicators
       try {
         await apiClient.get("/health/live");

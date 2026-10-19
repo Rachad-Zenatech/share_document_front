@@ -22,8 +22,10 @@ import {
   Redo2,
   Layers,
   ExternalLink,
-  Unlink
+  Unlink,
+  Upload
 } from 'lucide-react';
+import type { SecBlock } from '../../types/secFiling';
 import { useSecFiling } from '../../hooks/useSecFiling';
 import { secFilingService } from '../../services/secFilingService';
 import { BlockBuilder } from './components/BlockBuilder';
@@ -38,6 +40,7 @@ import { MediaBucketModal } from './components/MediaBucketModal';
 import { AttachedSpreadsheetModal } from './components/AttachedSpreadsheetModal';
 import { SpreadsheetSelectorModal } from './components/SpreadsheetSelectorModal';
 import { exportSecFilingToDocx, downloadBlob, printSecFiling } from '../../utils/secFilingExport';
+import { ImportDocumentModal, type ImportDestination } from './components/ImportDocumentModal';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
@@ -111,7 +114,8 @@ export default function SecFilingsPage() {
     attachedSpreadsheet,
     updateAttachedSpreadsheet,
     updateSpreadsheetCell,
-    assignSpreadsheet
+    assignSpreadsheet,
+    setWorkingBlocks
   } = useSecFiling();
 
   const [activeMatchIdx, setActiveMatchIdx] = useState<number>(0);
@@ -243,6 +247,7 @@ export default function SecFilingsPage() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isSubmitProposalModalOpen, setIsSubmitProposalModalOpen] = useState(false);
   const [isMediaBucketOpen, setIsMediaBucketOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isSpreadsheetOpen, setIsSpreadsheetOpen] = useState(false);
   const [isSpreadsheetPickerOpen, setIsSpreadsheetPickerOpen] = useState(false);
   const [spreadsheetModalMode, setSpreadsheetModalMode] = useState<'manage' | 'picker'>('manage');
@@ -319,6 +324,60 @@ export default function SecFilingsPage() {
       version: activeProposal ? `${mainDoc.version} (Branch: ${activeProposal.title})` : mainDoc.version
     };
     printSecFiling(currentWorkingDoc);
+  };
+
+  const handleInsertImportedBlocks = (
+    importedBlocks: SecBlock[],
+    destination: ImportDestination,
+    newTitle?: string
+  ) => {
+    if (destination === 'new_document') {
+      const newDoc = secFilingService.createDocumentFromTemplate('blank', newTitle || 'Imported Filing');
+      newDoc.blocks = importedBlocks;
+      secFilingService.saveMainDocument(newDoc);
+      const list = secFilingService.getDocumentsList();
+      list.unshift({
+        id: newDoc.id,
+        title: newDoc.title,
+        formType: newDoc.formType || 'Form 10-Q',
+        period: newDoc.period || 'Current Period',
+        updatedAt: newDoc.updatedAt,
+        createdAt: newDoc.createdAt,
+        owner: 'me',
+        isShared: true,
+        version: newDoc.version,
+        blocksCount: importedBlocks.length,
+        templateType: '10-q',
+      });
+      secFilingService.saveDocumentsList(list);
+      secFilingService.openDocument(newDoc.id);
+      window.location.reload();
+      return;
+    }
+
+    if (destination === 'replace') {
+      setWorkingBlocks(importedBlocks);
+      toast.success(`Replaced filing with ${importedBlocks.length} imported blocks`);
+      return;
+    }
+
+    if (destination === 'insert_at_selection') {
+      let insertIdx = workingBlocks.length;
+      if (selectedBlockId) {
+        const found = workingBlocks.findIndex((b) => b.id === selectedBlockId);
+        if (found !== -1) insertIdx = found + 1;
+      }
+      const next = [...workingBlocks];
+      next.splice(insertIdx, 0, ...importedBlocks);
+      setWorkingBlocks(next);
+      toast.success(`Inserted ${importedBlocks.length} blocks at selection`);
+      return;
+    }
+
+    // Default: 'append'
+    const next = [...workingBlocks, ...importedBlocks];
+    setWorkingBlocks(next);
+    toast.success(`Appended ${importedBlocks.length} imported blocks to document`);
   };
 
   const pendingProposalsCount = proposals.filter((p) => p.status === 'pending_review').length;
@@ -719,6 +778,19 @@ export default function SecFilingsPage() {
               </Button>
             )}
 
+            {/* Import / Insert Existing Document (Word, Excel, Markdown, Text) */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsImportModalOpen(true)}
+              className="h-8 text-xs gap-1.5 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800 font-medium cursor-pointer shadow-2xs"
+              title="Insert or import an existing document (.docx, .xlsx, .md, .html, .txt) without starting over"
+            >
+              <Upload className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <span>Import / Insert Doc</span>
+            </Button>
+
             {/* Export Dropdown (.docx, .pdf) */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1114,6 +1186,15 @@ export default function SecFilingsPage() {
         onSpreadsheetAssigned={(sheetId) => {
           assignSpreadsheet(sheetId);
         }}
+      />
+
+      <ImportDocumentModal
+        open={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
+        currentDocTitle={mainDoc.title}
+        currentSections={documentSections}
+        activeSection={sectionFilter !== 'ALL' ? sectionFilter : undefined}
+        onInsertBlocks={handleInsertImportedBlocks}
       />
 
       {isMergeModalOpen && reviewProposal && (
