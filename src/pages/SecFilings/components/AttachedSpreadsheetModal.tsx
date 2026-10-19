@@ -399,12 +399,21 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const redoHandlerRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     const handleSpreadsheetShortcuts = (e: KeyboardEvent) => {
-      if (inlineEditingCellRef || editingColIdx !== null) return;
-      if (isFormulaEditing && e.key === 'Enter') {
-        e.preventDefault();
-        confirmFormulaRef.current?.(e.shiftKey ? 'up' : 'down');
-        return;
+      if (editingColIdx !== null || isEditingWorkbookName || editingTabId !== null) return;
+      if (e.key === 'Enter') {
+        if (isFormulaEditing || inlineEditingCellRef) {
+          e.preventDefault();
+          confirmFormulaRef.current?.(e.shiftKey ? 'up' : 'down');
+          return;
+        }
+      } else if (e.key === 'Tab') {
+        if (isFormulaEditing || inlineEditingCellRef) {
+          e.preventDefault();
+          confirmFormulaRef.current?.(e.shiftKey ? 'left' : 'right');
+          return;
+        }
       }
+      if (inlineEditingCellRef) return;
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         undoHandlerRef.current?.();
@@ -423,7 +432,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     };
     window.addEventListener('keydown', handleSpreadsheetShortcuts);
     return () => window.removeEventListener('keydown', handleSpreadsheetShortcuts);
-  }, [inlineEditingCellRef, editingColIdx, isFormulaEditing]);
+  }, [inlineEditingCellRef, editingColIdx, isFormulaEditing, isEditingWorkbookName, editingTabId]);
 
   // Measure container height and width dynamically on resize
   useEffect(() => {
@@ -1520,8 +1529,23 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
   // Keyboard navigation & quick edit on grid
   const handleGridKeyDown = (e: React.KeyboardEvent) => {
-    if (inlineEditingCellRef) return; // Allow input to handle keys when editing
     if (isEditingWorkbookName || editingTabId !== null || editingColIdx !== null) return;
+
+    if (e.key === 'Enter') {
+      if (isFormulaEditing || inlineEditingCellRef) {
+        e.preventDefault();
+        handleConfirmFormula(e.shiftKey ? 'up' : 'down');
+        return;
+      }
+    } else if (e.key === 'Tab') {
+      if (isFormulaEditing || inlineEditingCellRef) {
+        e.preventDefault();
+        handleConfirmFormula(e.shiftKey ? 'left' : 'right');
+        return;
+      }
+    }
+
+    if (inlineEditingCellRef) return; // Allow input to handle keys when editing
 
     const parsed = parseCellRef(selectedCellRef);
     if (!parsed) return;
@@ -1586,6 +1610,12 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       const nextCol = Math.min(totalCols, parsed.colIndex + 1);
+      const nextRef = `${colToLetter(nextCol)}${parsed.rowIndex}`;
+      handleSelectCell(nextRef);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      const delta = e.shiftKey ? -1 : 1;
+      const nextCol = Math.max(1, Math.min(totalCols, parsed.colIndex + delta));
       const nextRef = `${colToLetter(nextCol)}${parsed.rowIndex}`;
       handleSelectCell(nextRef);
     } else if (e.key === 'Enter') {
