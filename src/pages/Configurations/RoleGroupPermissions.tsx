@@ -271,7 +271,7 @@ export default function RoleGroupPermissions() {
           <div className="mb-4 relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Search permission groups (e.g. Purchasing, General Ledger, Invoices, Users)..."
+              placeholder="Search permission groups (e.g. Documents, SEC Filings, Users, Roles)..."
               className="pl-9 h-9 bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 rounded-lg text-sm"
               value={permissionSearchQuery}
               onChange={(e) => setPermissionSearchQuery(e.target.value)}

@@ -2,7 +2,7 @@ import type { AttachedSpreadsheet, SpreadsheetTab, SecBlock } from '../types/sec
 import ExcelJS from 'exceljs';
 
 /**
- * Regex to match Excel cell variables in document text.
+ * Regex to match spreadsheet cell variables in document text.
  * Matches:
  *   - @A1
  *   - @A1{500}
@@ -15,18 +15,19 @@ import ExcelJS from 'exceljs';
  *   3: Cell reference (e.g. "A1", "B8", "AW272")
  *   4: Optional cached display fallback (e.g. "500", "$45,000")
  */
-export const CELL_VARIABLE_REGEX = /@(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?([A-Za-z]{1,3}\d{1,4})(?:\{([^}]*)\})?/g;
+export const CELL_VARIABLE_REGEX =
+  /@+(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?(\$?[A-Za-z]{1,3}\$?\d{1,4})(?:\{([^}]*)\})*/g;
 
 /**
  * Check if a string contains any spreadsheet variable reference.
  */
 export function hasDocumentVariables(text: string): boolean {
   if (!text || typeof text !== 'string') return false;
-  return /@(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+)!)?[A-Za-z]{1,3}\d{1,4}/i.test(text);
+  return /@+(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+)!)?\$?[A-Za-z]{1,3}\$?\d{1,4}/i.test(text);
 }
 
 /**
- * Converts a column number (1-based) to Excel column letters (A, B, ... Z, AA ... AW).
+ * Converts a column number (1-based) to column letters (A, B, ... Z, AA ... AW).
  */
 export function colToLetter(col: number): string {
   let letter = '';
@@ -39,6 +40,13 @@ export function colToLetter(col: number): string {
   return letter;
 }
 
+// Pre-instantiated formatters for fast number formatting without per-call Intl allocation
+const intFormatter = new Intl.NumberFormat('en-US');
+const floatFormatter = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
 /**
  * Formats a cell value into a human-readable display string.
  */
@@ -47,12 +55,9 @@ export function formatCellValue(val: any): string {
   if (typeof val === 'number') {
     if (isNaN(val)) return '0';
     if (Number.isInteger(val)) {
-      return val.toLocaleString('en-US');
+      return intFormatter.format(val);
     }
-    return val.toLocaleString('en-US', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    });
+    return floatFormatter.format(val);
   }
   return String(val);
 }
@@ -80,7 +85,7 @@ export function createCellVariableToken(
 }
 
 /**
- * Resolves a cell reference like 'A1' or 'Sheet1!B8' or ''06.30.26 TB'!C12'
+ * Resolves a cell reference like 'A1', '$A$1', 'Sheet1!B8', or ''06.30.26 TB'!$C$12'
  * from an attached spreadsheet.
  */
 export function getCellValue(
@@ -94,7 +99,7 @@ export function getCellValue(
   let targetCell = cellRef.trim();
 
   // If cellRef itself contains sheet prefix: 'Sheet'!Cell or Sheet!Cell
-  const match = targetCell.match(/^(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?([A-Za-z]{1,3}\d{1,4})$/i);
+  const match = targetCell.match(/^(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?(\$?[A-Za-z]{1,3}\$?\d{1,4})$/i);
   if (match) {
     if (match[1] || match[2]) {
       targetTabName = match[1] || match[2];
@@ -102,7 +107,8 @@ export function getCellValue(
     targetCell = match[3];
   }
 
-  const upperCell = targetCell.toUpperCase();
+  // Normalize cell coordinate: strip any $ absolute reference indicators so $B$8 maps to B8
+  const upperCell = targetCell.toUpperCase().replace(/\$/g, '');
 
   // 1. If tabName specified, find that tab
   if (targetTabName && spreadsheet.tabs && spreadsheet.tabs.length > 0) {
@@ -130,6 +136,288 @@ export function getCellValue(
   }
 
   return undefined;
+}
+
+/**
+ * Computes all cell-by-cell differences between two attached spreadsheets
+ * and tracks which document blocks link to each modified cell.
+ */
+export function computeSpreadsheetDiffs(
+  baseSheet?: AttachedSpreadsheet | null,
+  proposedSheet?: AttachedSpreadsheet | null,
+  blocks: SecBlock[] = []
+): Array<{
+  id: string;
+  tabName?: string;
+  cellRef: string;
+  oldValue: any;
+  newValue: any;
+  oldFormatted: string;
+  newFormatted: string;
+  status: 'modified' | 'added' | 'deleted';
+  linkedBlocks: Array<{
+    blockId: string;
+    blockType: string;
+    section: string;
+    snippet: string;
+  }>;
+}> {
+  // Normalize sheets if provided
+  const normBase = baseSheet ? ensureSpreadsheetTabs(baseSheet) : null;
+  const normProp = proposedSheet && proposedSheet !== baseSheet ? ensureSpreadsheetTabs(proposedSheet) : null;
+
+  const diffs: Array<{
+    id: string;
+    tabName?: string;
+    cellRef: string;
+    oldValue: any;
+    newValue: any;
+    oldFormatted: string;
+    newFormatted: string;
+    status: 'modified' | 'added' | 'deleted';
+    linkedBlocks: Array<{
+      blockId: string;
+      blockType: string;
+      section: string;
+      snippet: string;
+    }>;
+  }> = [];
+
+  const recordedDiffIds = new Set<string>();
+
+  // Helper to find linked blocks for a cell
+  const findLinkedBlocks = (cellRef: string, tabName?: string) => {
+    const linked: Array<{ blockId: string; blockType: string; section: string; snippet: string }> = [];
+    const upperCell = cellRef.toUpperCase();
+    const cleanTab = tabName ? tabName.trim().toLowerCase() : '';
+
+    const checkBlockText = (text: string, b: SecBlock) => {
+      if (!text || typeof text !== 'string' || !text.includes('@')) return;
+      const regex = new RegExp(CELL_VARIABLE_REGEX);
+      regex.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = regex.exec(text)) !== null) {
+        const tokenTab = (m[1] || m[2] || '').trim().toLowerCase();
+        const tokenCell = m[3].toUpperCase();
+        if (tokenCell === upperCell) {
+          if (!tokenTab || !cleanTab || tokenTab === cleanTab) {
+            linked.push({
+              blockId: b.id,
+              blockType: b.type,
+              section: b.section || 'General',
+              snippet: text.length > 90 ? text.slice(0, 90) + '...' : text
+            });
+            break;
+          }
+        }
+      }
+    };
+
+    for (const b of blocks) {
+      if (b.type === 'paragraph' || b.type === 'heading') {
+        checkBlockText(b.text, b);
+      } else if (b.type === 'callout') {
+        checkBlockText(b.content, b);
+        if (b.title) checkBlockText(b.title, b);
+      } else if (b.type === 'financial_table' && Array.isArray(b.rows)) {
+        for (const r of b.rows) {
+          if (Array.isArray(r.cells)) {
+            for (const c of r.cells) {
+              if (typeof c === 'string') checkBlockText(c, b);
+            }
+          }
+        }
+      }
+    }
+    return linked;
+  };
+
+  // Helper to compare values safely without false diffs
+  const areValuesDifferent = (a: any, b: any) => {
+    if (a === b) return false;
+    const isAEmpty = a === undefined || a === null || a === '' || (typeof a === 'string' && a.trim() === '');
+    const isBEmpty = b === undefined || b === null || b === '' || (typeof b === 'string' && b.trim() === '');
+    if (isAEmpty && isBEmpty) return false;
+    if (isAEmpty !== isBEmpty) return true;
+
+    // Number vs string or formatted comparison (e.g. 3300000 vs "3,300,000" vs "$3,300,000")
+    const cleanNumber = (val: any) => {
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') {
+        const cleaned = val.replace(/[$,\s%]/g, '');
+        if (cleaned !== '' && !isNaN(Number(cleaned))) {
+          return Number(cleaned);
+        }
+      }
+      return null;
+    };
+
+    const numA = cleanNumber(a);
+    const numB = cleanNumber(b);
+    if (numA !== null && numB !== null) {
+      return Math.abs(numA - numB) > 0.000001;
+    }
+
+    return String(a ?? '').trim() !== String(b ?? '').trim();
+  };
+
+  const baseTabs = normBase?.tabs || [];
+  const propTabs = normProp?.tabs || [];
+
+  // Pair up tabs between base and proposed
+  const tabPairs: Array<{
+    tabName: string;
+    baseCells: Record<string, any>;
+    propCells: Record<string, any>;
+  }> = [];
+
+  if (normBase && normProp) {
+    if (baseTabs.length === 1 && propTabs.length === 1) {
+      // Single tab workbook on both sides: always pair them even if renamed
+      const tabName = propTabs[0].name || baseTabs[0].name || 'Sheet1';
+      tabPairs.push({
+        tabName,
+        baseCells: baseTabs[0].cells || {},
+        propCells: propTabs[0].cells || {}
+      });
+    } else if (propTabs.length > 0 || baseTabs.length > 0) {
+      const matchedBaseIndices = new Set<number>();
+
+      for (let pIdx = 0; pIdx < propTabs.length; pIdx++) {
+        const pTab = propTabs[pIdx];
+        // 1. Match by ID
+        let bIdx = baseTabs.findIndex((b, idx) => !matchedBaseIndices.has(idx) && b.id === pTab.id);
+        // 2. Match by Name
+        if (bIdx === -1) {
+          bIdx = baseTabs.findIndex(
+            (b, idx) => !matchedBaseIndices.has(idx) && b.name.trim().toLowerCase() === pTab.name.trim().toLowerCase()
+          );
+        }
+        // 3. Match by Position if count matches
+        if (bIdx === -1 && baseTabs.length === propTabs.length && !matchedBaseIndices.has(pIdx)) {
+          bIdx = pIdx;
+        }
+
+        if (bIdx !== -1) {
+          matchedBaseIndices.add(bIdx);
+          tabPairs.push({
+            tabName: pTab.name,
+            baseCells: baseTabs[bIdx].cells || {},
+            propCells: pTab.cells || {}
+          });
+        } else {
+          // Newly added tab
+          tabPairs.push({
+            tabName: pTab.name,
+            baseCells: {},
+            propCells: pTab.cells || {}
+          });
+        }
+      }
+
+      // Unmatched base tabs (deleted tabs)
+      for (let bIdx = 0; bIdx < baseTabs.length; bIdx++) {
+        if (!matchedBaseIndices.has(bIdx)) {
+          tabPairs.push({
+            tabName: baseTabs[bIdx].name,
+            baseCells: baseTabs[bIdx].cells || {},
+            propCells: {}
+          });
+        }
+      }
+    }
+  }
+
+  // 1. Process all cell comparisons across all paired tabs
+  for (const { tabName, baseCells, propCells } of tabPairs) {
+    const allKeys = new Set<string>([...Object.keys(baseCells), ...Object.keys(propCells)]);
+
+    for (const cellKey of allKeys) {
+      const pVal = propCells[cellKey];
+      const bVal = baseCells[cellKey];
+
+      if (areValuesDifferent(pVal, bVal)) {
+        const isBValEmpty = bVal === undefined || bVal === null || bVal === '' || (typeof bVal === 'string' && bVal.trim() === '');
+        const isPValEmpty = pVal === undefined || pVal === null || pVal === '' || (typeof pVal === 'string' && pVal.trim() === '');
+
+        if (isBValEmpty && isPValEmpty) continue;
+
+        const isDeleted = isPValEmpty && !isBValEmpty;
+        const isAdded = isBValEmpty && !isPValEmpty;
+        const status: 'modified' | 'added' | 'deleted' = isDeleted ? 'deleted' : isAdded ? 'added' : 'modified';
+
+        const diffId = `${tabName}!${cellKey}`;
+        recordedDiffIds.add(diffId);
+        recordedDiffIds.add(cellKey);
+
+        diffs.push({
+          id: diffId,
+          tabName,
+          cellRef: cellKey,
+          oldValue: bVal ?? null,
+          newValue: pVal ?? null,
+          oldFormatted: formatCellValue(bVal),
+          newFormatted: formatCellValue(pVal),
+          status,
+          linkedBlocks: findLinkedBlocks(cellKey, tabName)
+        });
+      }
+    }
+  }
+
+  // 2. Document Block Variable Tag Inspection:
+  // Detect any variables with cached values in proposal blocks that differ from baseSheet
+  for (const b of blocks) {
+    const textToCheck: string[] = [];
+    if (b.type === 'paragraph' || b.type === 'heading') {
+      textToCheck.push(b.text || '');
+    } else if (b.type === 'callout') {
+      textToCheck.push(b.content || '');
+      if (b.title) textToCheck.push(b.title);
+    } else if (b.type === 'financial_table' && Array.isArray(b.rows)) {
+      for (const r of b.rows) {
+        if (Array.isArray(r.cells)) {
+          for (const c of r.cells) {
+            if (typeof c === 'string') textToCheck.push(c);
+          }
+        }
+      }
+    }
+
+    for (const text of textToCheck) {
+      if (!text || !text.includes('@')) continue;
+      const regex = new RegExp(CELL_VARIABLE_REGEX);
+      regex.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = regex.exec(text)) !== null) {
+        const tabName = (m[1] || m[2] || '').trim();
+        const cellRef = m[3].toUpperCase();
+        const fallbackVal = m[4]; // e.g. "$3,300,000" or "3300000"
+        const diffId = tabName ? `${tabName}!${cellRef}` : cellRef;
+
+        if (!recordedDiffIds.has(diffId) && fallbackVal !== undefined && fallbackVal !== '') {
+          const baseVal = getCellValue(cellRef, normBase || baseSheet, tabName || undefined);
+          if (areValuesDifferent(fallbackVal, baseVal)) {
+            recordedDiffIds.add(diffId);
+            recordedDiffIds.add(cellRef);
+            diffs.push({
+              id: diffId,
+              tabName: tabName || undefined,
+              cellRef,
+              oldValue: baseVal ?? null,
+              newValue: fallbackVal,
+              oldFormatted: formatCellValue(baseVal),
+              newFormatted: fallbackVal,
+              status: baseVal !== undefined && baseVal !== null ? 'modified' : 'added',
+              linkedBlocks: findLinkedBlocks(cellRef, tabName || undefined)
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return diffs;
 }
 
 /**
@@ -166,7 +454,7 @@ export function syncVariableCacheTags(
   if (!text || typeof text !== 'string') return text || '';
   if (!spreadsheet) return text;
 
-  return text.replace(CELL_VARIABLE_REGEX, (match, qTab, uTab, cellRef) => {
+  return text.replace(CELL_VARIABLE_REGEX, (_match, qTab, uTab, cellRef, fallback) => {
     const tabName = qTab || uTab;
     const upperRef = cellRef.toUpperCase();
     const liveVal = getCellValue(upperRef, spreadsheet, tabName);
@@ -174,7 +462,11 @@ export function syncVariableCacheTags(
     if (liveVal !== undefined && liveVal !== null) {
       return `${prefix}${upperRef}{${formatCellValue(liveVal)}}`;
     }
-    return match;
+    if (fallback !== undefined && fallback !== '') {
+      const cleanFallback = fallback.replace(/^\{+|\}+$/g, '').trim();
+      return `${prefix}${upperRef}{${cleanFallback}}`;
+    }
+    return `${prefix}${upperRef}`;
   });
 }
 
@@ -209,21 +501,75 @@ export function ensureSpreadsheetTabs(sheet?: AttachedSpreadsheet | null): Attac
     };
   }
 
+  const initialTabId = sheet.id ? `tab-${sheet.id}-main` : 'tab-main-1';
+  const rowCount = Math.max(1, sheet.rowCount || 30);
+  const colCount = Math.max(1, sheet.colCount || 10);
+  const maxCol = sheet.maxCol || colToLetter(colCount);
+
+  const colLetters = sheet.colLetters && sheet.colLetters.length >= colCount
+    ? sheet.colLetters
+    : Array.from({ length: colCount }, (_, i) => colToLetter(i + 1));
+
+  const headers = sheet.headers && sheet.headers.length >= colCount
+    ? sheet.headers
+    : colLetters.map((c) => `Column ${c}`);
+
   const initialTab: SpreadsheetTab = {
-    id: `tab-main-${Date.now()}`,
+    id: initialTabId,
     name: sheet.sheetName || 'Sheet1',
-    rowCount: sheet.rowCount || 30,
-    colCount: sheet.colCount || 10,
-    maxCol: sheet.maxCol || 'J',
-    colLetters: sheet.colLetters,
-    headers: sheet.headers,
+    rowCount,
+    colCount,
+    maxCol,
+    colLetters,
+    headers,
     cells: { ...(sheet.cells || {}) }
   };
 
   return {
     ...sheet,
     tabs: [initialTab],
-    activeTabId: initialTab.id
+    activeTabId: initialTab.id,
+    sheetName: initialTab.name,
+    rowCount,
+    colCount,
+    maxCol,
+    colLetters,
+    headers,
+    cells: initialTab.cells
+  };
+}
+
+/**
+ * Synchronizes an active tab's full dimensional metadata into the top-level AttachedSpreadsheet properties.
+ */
+export function syncActiveTabToTopLevel(
+  withTabs: AttachedSpreadsheet,
+  updatedTabs: SpreadsheetTab[],
+  activeId?: string
+): AttachedSpreadsheet {
+  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0] || {
+    id: 'tab-main-1',
+    name: 'Sheet1',
+    rowCount: 30,
+    colCount: 10,
+    maxCol: 'J',
+    colLetters: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'],
+    headers: [],
+    cells: {}
+  };
+
+  return {
+    ...withTabs,
+    tabs: updatedTabs,
+    activeTabId: activeTab.id,
+    sheetName: activeTab.name,
+    rowCount: activeTab.rowCount,
+    colCount: activeTab.colCount,
+    maxCol: activeTab.maxCol,
+    colLetters: activeTab.colLetters,
+    headers: activeTab.headers,
+    cells: activeTab.cells,
+    updatedAt: new Date().toISOString()
   };
 }
 
@@ -235,18 +581,7 @@ export function switchActiveTab(sheet: AttachedSpreadsheet, tabId: string): Atta
   const targetTab = withTabs.tabs?.find((t) => t.id === tabId) || withTabs.tabs?.[0];
   if (!targetTab) return sheet;
 
-  return {
-    ...withTabs,
-    activeTabId: targetTab.id,
-    sheetName: targetTab.name,
-    rowCount: targetTab.rowCount,
-    colCount: targetTab.colCount,
-    maxCol: targetTab.maxCol,
-    colLetters: targetTab.colLetters,
-    headers: targetTab.headers,
-    cells: targetTab.cells,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, withTabs.tabs || [], targetTab.id);
 }
 
 /**
@@ -475,7 +810,7 @@ export async function parseExcelFileToSpreadsheet(file: File): Promise<AttachedS
 }
 
 /**
- * Exports an AttachedSpreadsheet (including ALL tabs) back to an Excel (.xlsx) Blob.
+ * Exports an AttachedSpreadsheet (including ALL tabs) back to an .xlsx Blob.
  */
 export async function exportSpreadsheetToExcel(sheet: AttachedSpreadsheet): Promise<Blob> {
   const wb = new ExcelJS.Workbook();
@@ -574,14 +909,7 @@ export function addRowsToSpreadsheet(sheet: AttachedSpreadsheet, count = 1): Att
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    rowCount: activeTab.rowCount,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
 }
 
 /**
@@ -598,14 +926,7 @@ export function removeRowsFromSpreadsheet(sheet: AttachedSpreadsheet, count = 1)
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    rowCount: activeTab.rowCount,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
 }
 
 /**
@@ -636,17 +957,7 @@ export function addColumnsToSpreadsheet(sheet: AttachedSpreadsheet, count = 1): 
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    colCount: activeTab.colCount,
-    maxCol: activeTab.maxCol,
-    colLetters: activeTab.colLetters,
-    headers: activeTab.headers,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
 }
 
 /**
@@ -675,17 +986,7 @@ export function removeColumnsFromSpreadsheet(sheet: AttachedSpreadsheet, count =
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    colCount: activeTab.colCount,
-    maxCol: activeTab.maxCol,
-    colLetters: activeTab.colLetters,
-    headers: activeTab.headers,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
 }
 
 /**
@@ -722,18 +1023,7 @@ export function resizeSpreadsheetGrid(
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    rowCount: activeTab.rowCount,
-    colCount: activeTab.colCount,
-    maxCol: activeTab.maxCol,
-    colLetters: activeTab.colLetters,
-    headers: activeTab.headers,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
 }
 
 /**
@@ -749,15 +1039,19 @@ export function letterToCol(letter: string): number {
 }
 
 /**
- * Parses a cell reference like "A1" or "AW272" into column letters, 1-based column index, and 1-based row index.
+ * Parses a cell reference like "A1", "$A$1", "A$1", or "AW272" into column letters, 1-based column index, and 1-based row index.
  */
-export function parseCellRef(ref: string): { colLetter: string; colIndex: number; rowIndex: number } | null {
-  const match = (ref || '').trim().toUpperCase().match(/^([A-Z]+)(\d+)$/);
+export function parseCellRef(
+  ref: string
+): { colLetter: string; colIndex: number; rowIndex: number; isColAbsolute?: boolean; isRowAbsolute?: boolean } | null {
+  const match = (ref || '').trim().toUpperCase().match(/^(\$?)([A-Z]+)(\$?)([0-9]+)$/);
   if (!match) return null;
-  const colLetter = match[1];
-  const rowIndex = parseInt(match[2], 10);
+  const isColAbsolute = Boolean(match[1]);
+  const colLetter = match[2];
+  const isRowAbsolute = Boolean(match[3]);
+  const rowIndex = parseInt(match[4], 10);
   const colIndex = letterToCol(colLetter);
-  return { colLetter, colIndex, rowIndex };
+  return { colLetter, colIndex, rowIndex, isColAbsolute, isRowAbsolute };
 }
 
 /**
@@ -775,12 +1069,14 @@ export type CellShiftOperation =
 
 /**
  * Shifts a single cell coordinate according to the given operation.
- * Returns the shifted cell ref (e.g. "B9") or "#REF!" if the cell was deleted.
+ * Returns the shifted cell ref (e.g. "B9" or "$B$9") or "#REF!" if the cell was deleted.
  */
 export function shiftSingleCellRef(
   colIndex: number,
   rowIndex: number,
-  op: CellShiftOperation
+  op: CellShiftOperation,
+  isColAbsolute = false,
+  isRowAbsolute = false
 ): string {
   let newCol = colIndex;
   let newRow = rowIndex;
@@ -844,11 +1140,13 @@ export function shiftSingleCellRef(
     }
   }
 
-  return `${colToLetter(newCol)}${newRow}`;
+  const colPrefix = isColAbsolute ? '$' : '';
+  const rowPrefix = isRowAbsolute ? '$' : '';
+  return `${colPrefix}${colToLetter(newCol)}${rowPrefix}${newRow}`;
 }
 
 /**
- * Shifts any cell references inside an Excel formula string (e.g. "=B8*1.1" -> "=B9*1.1").
+ * Shifts any cell references inside a formula string (e.g. "=B8*1.1" -> "=B9*1.1", "=$A$1+2" -> "=$A$2+2").
  */
 export function shiftFormulaInString(
   formulaStr: string,
@@ -860,8 +1158,8 @@ export function shiftFormulaInString(
   }
 
   return formulaStr.replace(
-    /(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?([A-Za-z]{1,3})(\d{1,4})/g,
-    (match, qTab, uTab, colLetters, rowDigits) => {
+    /(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?(\$?)([A-Za-z]{1,3})(\$?)([0-9]{1,5})/g,
+    (match, qTab, uTab, colAbs, colLetters, rowAbs, rowDigits) => {
       const tab = qTab || uTab;
       if (tab && targetTabName) {
         if (tab.trim().toLowerCase() !== targetTabName.trim().toLowerCase()) {
@@ -870,7 +1168,9 @@ export function shiftFormulaInString(
       }
       const col = letterToCol(colLetters);
       const row = parseInt(rowDigits, 10);
-      const shifted = shiftSingleCellRef(col, row, op);
+      const isColAbsolute = Boolean(colAbs);
+      const isRowAbsolute = Boolean(rowAbs);
+      const shifted = shiftSingleCellRef(col, row, op, isColAbsolute, isRowAbsolute);
       if (shifted === '#REF!') {
         return tab ? (qTab ? `'${tab}'!#REF!` : `${tab}!#REF!`) : '#REF!';
       }
@@ -890,7 +1190,8 @@ export function shiftFormulaInString(
 export function shiftBlocksCellReferences(
   blocks: SecBlock[],
   op: CellShiftOperation,
-  targetTabName?: string
+  targetTabName?: string,
+  nextSpreadsheet?: AttachedSpreadsheet
 ): { updatedBlocks: SecBlock[]; shiftedCount: number } {
   if (!blocks || !Array.isArray(blocks) || blocks.length === 0) {
     return { updatedBlocks: blocks || [], shiftedCount: 0 };
@@ -912,7 +1213,14 @@ export function shiftBlocksCellReferences(
       const parsed = parseCellRef(cellRef);
       if (!parsed) return match;
 
-      const shifted = shiftSingleCellRef(parsed.colIndex, parsed.rowIndex, op);
+      // Preserve absolute cell reference flags so $B$8 shifts to $B$9
+      const shifted = shiftSingleCellRef(
+        parsed.colIndex,
+        parsed.rowIndex,
+        op,
+        parsed.isColAbsolute,
+        parsed.isRowAbsolute
+      );
 
       if (shifted === '#REF!') {
         shiftedCount++;
@@ -920,10 +1228,19 @@ export function shiftBlocksCellReferences(
         return `@${tabPrefix}#REF!{#REF!}`;
       }
 
-      if (shifted !== cellRef.toUpperCase()) {
+      // Check if the cell coordinate shifted or if the live value from nextSpreadsheet should be synced
+      const tabPrefix = tab ? (qTab ? `'${tab}'!` : `${tab}!`) : '';
+      let displayValue = fallback;
+      if (nextSpreadsheet) {
+        const liveVal = getCellValue(shifted, nextSpreadsheet, tab);
+        if (liveVal !== undefined && liveVal !== null) {
+          displayValue = formatCellValue(liveVal);
+        }
+      }
+
+      if (shifted !== cellRef.toUpperCase() || (nextSpreadsheet && displayValue !== fallback)) {
         shiftedCount++;
-        const tabPrefix = tab ? (qTab ? `'${tab}'!` : `${tab}!`) : '';
-        const fallbackPart = fallback !== undefined && fallback !== '' ? `{${fallback}}` : '';
+        const fallbackPart = displayValue !== undefined && displayValue !== '' ? `{${displayValue}}` : '';
         return `@${tabPrefix}${shifted}${fallbackPart}`;
       }
 
@@ -983,7 +1300,7 @@ export function insertRowAtIndex(
   position: 'above' | 'below' = 'below'
 ): AttachedSpreadsheet {
   const withTabs = ensureSpreadsheetTabs(sheet);
-  const activeId = withTabs.activeTabId;
+  const activeId = withTabs.activeTabId || withTabs.tabs?.[0]?.id;
   const actualRow = position === 'below' ? targetRow + 1 : targetRow;
   const op: CellShiftOperation = { type: 'insert_row', targetRow: actualRow };
 
@@ -1015,14 +1332,7 @@ export function insertRowAtIndex(
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    rowCount: activeTab.rowCount,
-    cells: activeTab.cells,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
 }
 
 /**
@@ -1034,7 +1344,7 @@ export function deleteRowAtIndex(
   targetRow: number
 ): AttachedSpreadsheet {
   const withTabs = ensureSpreadsheetTabs(sheet);
-  const activeId = withTabs.activeTabId;
+  const activeId = withTabs.activeTabId || withTabs.tabs?.[0]?.id;
   const op: CellShiftOperation = { type: 'delete_row', targetRow };
 
   const updatedTabs = (withTabs.tabs || []).map((t) => {
@@ -1068,14 +1378,7 @@ export function deleteRowAtIndex(
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    rowCount: activeTab.rowCount,
-    cells: activeTab.cells,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
 }
 
 /**
@@ -1088,7 +1391,7 @@ export function insertColAtIndex(
   position: 'left' | 'right' = 'right'
 ): AttachedSpreadsheet {
   const withTabs = ensureSpreadsheetTabs(sheet);
-  const activeId = withTabs.activeTabId;
+  const activeId = withTabs.activeTabId || withTabs.tabs?.[0]?.id;
   const actualCol = position === 'right' ? targetCol + 1 : targetCol;
   const op: CellShiftOperation = { type: 'insert_col', targetCol: actualCol };
 
@@ -1133,17 +1436,7 @@ export function insertColAtIndex(
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    colCount: activeTab.colCount,
-    maxCol: activeTab.maxCol,
-    colLetters: activeTab.colLetters,
-    headers: activeTab.headers,
-    cells: activeTab.cells,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
 }
 
 /**
@@ -1154,7 +1447,7 @@ export function deleteColAtIndex(
   targetCol: number
 ): AttachedSpreadsheet {
   const withTabs = ensureSpreadsheetTabs(sheet);
-  const activeId = withTabs.activeTabId;
+  const activeId = withTabs.activeTabId || withTabs.tabs?.[0]?.id;
   const op: CellShiftOperation = { type: 'delete_col', targetCol };
 
   const updatedTabs = (withTabs.tabs || []).map((t) => {
@@ -1201,17 +1494,7 @@ export function deleteColAtIndex(
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    colCount: activeTab.colCount,
-    maxCol: activeTab.maxCol,
-    colLetters: activeTab.colLetters,
-    headers: activeTab.headers,
-    cells: activeTab.cells,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
 }
 
 /**
@@ -1386,7 +1669,7 @@ export function shiftCellsRight(
   targetRow: number
 ): AttachedSpreadsheet {
   const withTabs = ensureSpreadsheetTabs(sheet);
-  const activeId = withTabs.activeTabId;
+  const activeId = withTabs.activeTabId || withTabs.tabs?.[0]?.id;
   const op: CellShiftOperation = { type: 'shift_right', targetCol, targetRow };
 
   const updatedTabs = (withTabs.tabs || []).map((t) => {
@@ -1437,17 +1720,7 @@ export function shiftCellsRight(
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    colCount: activeTab.colCount,
-    maxCol: activeTab.maxCol,
-    colLetters: activeTab.colLetters,
-    headers: activeTab.headers,
-    cells: activeTab.cells,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
 }
 
 /**
@@ -1460,7 +1733,7 @@ export function shiftCellsDown(
   targetRow: number
 ): AttachedSpreadsheet {
   const withTabs = ensureSpreadsheetTabs(sheet);
-  const activeId = withTabs.activeTabId;
+  const activeId = withTabs.activeTabId || withTabs.tabs?.[0]?.id;
   const op: CellShiftOperation = { type: 'shift_down', targetCol, targetRow };
 
   const updatedTabs = (withTabs.tabs || []).map((t) => {
@@ -1499,14 +1772,7 @@ export function shiftCellsDown(
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    rowCount: activeTab.rowCount,
-    cells: activeTab.cells,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
 }
 
 /**
@@ -1518,7 +1784,7 @@ export function shiftCellsLeft(
   targetRow: number
 ): AttachedSpreadsheet {
   const withTabs = ensureSpreadsheetTabs(sheet);
-  const activeId = withTabs.activeTabId;
+  const activeId = withTabs.activeTabId || withTabs.tabs?.[0]?.id;
   const op: CellShiftOperation = { type: 'shift_left', targetCol, targetRow };
 
   const updatedTabs = (withTabs.tabs || []).map((t) => {
@@ -1554,13 +1820,7 @@ export function shiftCellsLeft(
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    cells: activeTab.cells,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
 }
 
 /**
@@ -1572,7 +1832,7 @@ export function shiftCellsUp(
   targetRow: number
 ): AttachedSpreadsheet {
   const withTabs = ensureSpreadsheetTabs(sheet);
-  const activeId = withTabs.activeTabId;
+  const activeId = withTabs.activeTabId || withTabs.tabs?.[0]?.id;
   const op: CellShiftOperation = { type: 'shift_up', targetCol, targetRow };
 
   const updatedTabs = (withTabs.tabs || []).map((t) => {
@@ -1608,12 +1868,293 @@ export function shiftCellsUp(
     return t;
   });
 
-  const activeTab = updatedTabs.find((t) => t.id === activeId) || updatedTabs[0];
-  return {
-    ...withTabs,
-    tabs: updatedTabs,
-    cells: activeTab.cells,
-    updatedAt: new Date().toISOString()
-  };
+  return syncActiveTabToTopLevel(withTabs, updatedTabs, activeId);
+}
+
+/**
+ * Adjusts cell references inside a formula string by a column and row offset (e.g. for copy/paste or fill handle),
+ * respecting $ absolute anchors:
+ * - Columns preceded by $ are locked (deltaCol ignored).
+ * - Rows preceded by $ are locked (deltaRow ignored).
+ */
+export function adjustFormulaForOffset(
+  formulaStr: string,
+  deltaCol: number,
+  deltaRow: number
+): string {
+  if (!formulaStr || typeof formulaStr !== 'string' || !formulaStr.startsWith('=')) {
+    return formulaStr;
+  }
+
+  return formulaStr.replace(
+    /(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?(\$?)([A-Za-z]{1,3})(\$?)([0-9]{1,5})/g,
+    (_match, qTab, uTab, colAbs, colLetters, rowAbs, rowDigits) => {
+      const tab = qTab || uTab;
+      const col = letterToCol(colLetters);
+      const row = parseInt(rowDigits, 10);
+      const isColAbsolute = Boolean(colAbs);
+      const isRowAbsolute = Boolean(rowAbs);
+
+      const finalCol = isColAbsolute ? col : Math.max(1, col + deltaCol);
+      const finalRow = isRowAbsolute ? row : Math.max(1, row + deltaRow);
+
+      const colPrefix = isColAbsolute ? '$' : '';
+      const rowPrefix = isRowAbsolute ? '$' : '';
+      const shifted = `${colPrefix}${colToLetter(finalCol)}${rowPrefix}${finalRow}`;
+
+      if (tab) {
+        const formattedTab = qTab ? `'${tab}'` : tab;
+        return `${formattedTab}!${shifted}`;
+      }
+      return shifted;
+    }
+  );
+}
+
+/**
+ * Copies a source cell value to a target cell reference, adjusting any relative formulas by the offset
+ * between source and target coordinates while keeping $ absolute anchors fixed.
+ */
+export function copyCellWithSmartOffset(
+  sourceRef: string,
+  targetRef: string,
+  sourceValue: any
+): any {
+  if (typeof sourceValue !== 'string' || !sourceValue.startsWith('=')) {
+    return sourceValue;
+  }
+  const sourceParsed = parseCellRef(sourceRef);
+  const targetParsed = parseCellRef(targetRef);
+  if (!sourceParsed || !targetParsed) {
+    return sourceValue;
+  }
+  const deltaCol = targetParsed.colIndex - sourceParsed.colIndex;
+  const deltaRow = targetParsed.rowIndex - sourceParsed.rowIndex;
+  return adjustFormulaForOffset(sourceValue, deltaCol, deltaRow);
+}
+
+export interface FormulaCellReference {
+  raw: string;
+  cleanRef: string;
+  sheetName?: string;
+  color: string;
+  ringClass: string;
+  bgClass: string;
+  textClass: string;
+  borderClass: string;
+  index: number;
+}
+
+export const FORMULA_REF_COLORS = [
+  {
+    color: '#2563eb', // blue
+    ringClass: 'ring-2 ring-blue-500',
+    bgClass: 'bg-blue-500/15 dark:bg-blue-500/25',
+    textClass: 'text-blue-700 dark:text-blue-300',
+    borderClass: 'border-blue-500',
+  },
+  {
+    color: '#9333ea', // purple
+    ringClass: 'ring-2 ring-purple-500',
+    bgClass: 'bg-purple-500/15 dark:bg-purple-500/25',
+    textClass: 'text-purple-700 dark:text-purple-300',
+    borderClass: 'border-purple-500',
+  },
+  {
+    color: '#d97706', // amber
+    ringClass: 'ring-2 ring-amber-500',
+    bgClass: 'bg-amber-500/15 dark:bg-amber-500/25',
+    textClass: 'text-amber-700 dark:text-amber-300',
+    borderClass: 'border-amber-500',
+  },
+  {
+    color: '#059669', // emerald
+    ringClass: 'ring-2 ring-emerald-500',
+    bgClass: 'bg-emerald-500/15 dark:bg-emerald-500/25',
+    textClass: 'text-emerald-700 dark:text-emerald-300',
+    borderClass: 'border-emerald-500',
+  },
+  {
+    color: '#e11d48', // rose
+    ringClass: 'ring-2 ring-rose-500',
+    bgClass: 'bg-rose-500/15 dark:bg-rose-500/25',
+    textClass: 'text-rose-700 dark:text-rose-300',
+    borderClass: 'border-rose-500',
+  },
+  {
+    color: '#0891b2', // cyan
+    ringClass: 'ring-2 ring-cyan-500',
+    bgClass: 'bg-cyan-500/15 dark:bg-cyan-500/25',
+    textClass: 'text-cyan-700 dark:text-cyan-300',
+    borderClass: 'border-cyan-500',
+  },
+];
+
+/**
+ * Cycles an individual cell reference through the 4 Excel reference states:
+ *   A1 -> $A$1 -> A$1 -> $A1 -> A1
+ * Preserves sheet prefix (e.g. 'Sheet1'!A1 -> 'Sheet1'!$A$1).
+ */
+export function cycleSingleCellRef(cell: string): string {
+  const m = cell.match(/^(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?(\$?)([A-Za-z]{1,3})(\$?)([0-9]{1,5})$/);
+  if (!m) return cell;
+  const qSheet = m[1];
+  const uSheet = m[2];
+  const sheet = qSheet ? `'${qSheet}'!` : uSheet ? `${uSheet}!` : '';
+  const colAbs = m[3] === '$';
+  const col = m[4].toUpperCase();
+  const rowAbs = m[5] === '$';
+  const row = m[6];
+
+  let nextColAbs: boolean;
+  let nextRowAbs: boolean;
+  if (!colAbs && !rowAbs) {
+    // A1 -> $A$1
+    nextColAbs = true;
+    nextRowAbs = true;
+  } else if (colAbs && rowAbs) {
+    // $A$1 -> A$1
+    nextColAbs = false;
+    nextRowAbs = true;
+  } else if (!colAbs && rowAbs) {
+    // A$1 -> $A1
+    nextColAbs = true;
+    nextRowAbs = false;
+  } else {
+    // $A1 -> A1
+    nextColAbs = false;
+    nextRowAbs = false;
+  }
+
+  return `${sheet}${nextColAbs ? '$' : ''}${col}${nextRowAbs ? '$' : ''}${row}`;
+}
+
+/**
+ * Excel F4 key cycling for formulas:
+ * Cycles the cell reference at or near cursorPos (or the last cell ref in formula).
+ */
+export function cycleCellRefAbsolute(
+  formula: string,
+  cursorPos?: number
+): { newFormula: string; newCursorPos: number } {
+  if (!formula || typeof formula !== 'string') {
+    return { newFormula: formula, newCursorPos: cursorPos ?? 0 };
+  }
+
+  const regex = /(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?\$?[A-Za-z]{1,3}\$?[0-9]{1,5}/g;
+  const matches: { text: string; start: number; end: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(formula)) !== null) {
+    matches.push({
+      text: m[0],
+      start: m.index,
+      end: m.index + m[0].length,
+    });
+  }
+
+  if (matches.length === 0) {
+    return { newFormula: formula, newCursorPos: cursorPos ?? formula.length };
+  }
+
+  let target = matches[matches.length - 1];
+  if (cursorPos !== undefined && cursorPos !== null) {
+    const found = matches.find((item) => cursorPos >= item.start && cursorPos <= item.end);
+    if (found) {
+      target = found;
+    } else {
+      const preceding = matches.filter((item) => item.end <= cursorPos);
+      if (preceding.length > 0) {
+        target = preceding[preceding.length - 1];
+      }
+    }
+  }
+
+  const cycled = cycleSingleCellRef(target.text);
+  const before = formula.slice(0, target.start);
+  const after = formula.slice(target.end);
+  const newFormula = before + cycled + after;
+  const delta = cycled.length - target.text.length;
+  const newCursorPos = cursorPos !== undefined ? Math.max(0, cursorPos + delta) : newFormula.length;
+
+  return { newFormula, newCursorPos };
+}
+
+/**
+ * Handles clicking a cell while formula editing is active.
+ * - If last token before cursor is an operator or delimiter (=, +, -, *, /, (, ,, :), appends cell coordinate.
+ * - If last token before cursor is ALREADY a cell reference, replaces it with the newly clicked coordinate (standard Excel behavior).
+ */
+export function insertOrReplaceCellInFormula(
+  currentFormula: string,
+  clickedRef: string,
+  clickedTabName?: string,
+  activeTabName?: string,
+  cursorPos?: number
+): { newFormula: string; newCursorPos: number } {
+  let fullRef = clickedRef;
+  if (clickedTabName && activeTabName && clickedTabName !== activeTabName) {
+    fullRef = `'${clickedTabName}'!${clickedRef}`;
+  }
+
+  if (!currentFormula || !currentFormula.startsWith('=')) {
+    return { newFormula: `=${fullRef}`, newCursorPos: fullRef.length + 1 };
+  }
+
+  const pos = cursorPos !== undefined && cursorPos !== null ? cursorPos : currentFormula.length;
+  const textBefore = currentFormula.slice(0, pos);
+  const textAfter = currentFormula.slice(pos);
+
+  // If textBefore ends with a cell reference (e.g. user previously clicked A1, now clicks B1 without an operator)
+  const cellRefEndMatch = textBefore.match(
+    /(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?\$?[A-Za-z]{1,3}\$?[0-9]{1,5}$/
+  );
+
+  if (cellRefEndMatch) {
+    const replaceStart = textBefore.length - cellRefEndMatch[0].length;
+    const newFormula = currentFormula.slice(0, replaceStart) + fullRef + textAfter;
+    const newCursorPos = replaceStart + fullRef.length;
+    return { newFormula, newCursorPos };
+  }
+
+  // Otherwise, append fullRef directly at cursor
+  const newFormula = textBefore + fullRef + textAfter;
+  const newCursorPos = textBefore.length + fullRef.length;
+  return { newFormula, newCursorPos };
+}
+
+/**
+ * Extracts and maps all cell references in a formula to visual color styles for grid highlights.
+ */
+export function extractCellReferencesFromFormula(formula: string): FormulaCellReference[] {
+  if (!formula || typeof formula !== 'string' || !formula.startsWith('=')) {
+    return [];
+  }
+
+  const regex = /(?:(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!)?\$?([A-Za-z]{1,3})\$?([0-9]{1,5})/g;
+  const refs: FormulaCellReference[] = [];
+  const seen = new Set<string>();
+  let m: RegExpExecArray | null;
+  let idx = 0;
+
+  while ((m = regex.exec(formula)) !== null) {
+    const raw = m[0];
+    const sheetName = m[1] || m[2];
+    const cleanRef = `${m[3].toUpperCase()}${m[4]}`;
+    const dedupeKey = sheetName ? `${sheetName}!${cleanRef}` : cleanRef;
+
+    if (!seen.has(dedupeKey)) {
+      seen.add(dedupeKey);
+      const colorStyle = FORMULA_REF_COLORS[idx % FORMULA_REF_COLORS.length];
+      refs.push({
+        raw,
+        cleanRef,
+        sheetName,
+        ...colorStyle,
+        index: idx++,
+      });
+    }
+  }
+
+  return refs;
 }
 

@@ -22,8 +22,10 @@ import {
   Redo2,
   Layers,
   ExternalLink,
-  Unlink
+  Unlink,
+  Upload
 } from 'lucide-react';
+import type { SecBlock } from '../../types/secFiling';
 import { useSecFiling } from '../../hooks/useSecFiling';
 import { secFilingService } from '../../services/secFilingService';
 import { BlockBuilder } from './components/BlockBuilder';
@@ -38,6 +40,7 @@ import { MediaBucketModal } from './components/MediaBucketModal';
 import { AttachedSpreadsheetModal } from './components/AttachedSpreadsheetModal';
 import { SpreadsheetSelectorModal } from './components/SpreadsheetSelectorModal';
 import { exportSecFilingToDocx, downloadBlob, printSecFiling } from '../../utils/secFilingExport';
+import { ImportDocumentModal, type ImportDestination } from './components/ImportDocumentModal';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
@@ -111,7 +114,8 @@ export default function SecFilingsPage() {
     attachedSpreadsheet,
     updateAttachedSpreadsheet,
     updateSpreadsheetCell,
-    assignSpreadsheet
+    assignSpreadsheet,
+    setWorkingBlocks
   } = useSecFiling();
 
   const [activeMatchIdx, setActiveMatchIdx] = useState<number>(0);
@@ -243,14 +247,18 @@ export default function SecFilingsPage() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isSubmitProposalModalOpen, setIsSubmitProposalModalOpen] = useState(false);
   const [isMediaBucketOpen, setIsMediaBucketOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isSpreadsheetOpen, setIsSpreadsheetOpen] = useState(false);
   const [isSpreadsheetPickerOpen, setIsSpreadsheetPickerOpen] = useState(false);
   const [spreadsheetModalMode, setSpreadsheetModalMode] = useState<'manage' | 'picker'>('manage');
+  const [targetSpreadsheetCell, setTargetSpreadsheetCell] = useState<string | undefined>(undefined);
+  const [targetSpreadsheetTab, setTargetSpreadsheetTab] = useState<string | undefined>(undefined);
   const [pickerCallback, setPickerCallback] = useState<((cellRef: string, displayVal: string) => void) | null>(null);
   const [pickerBlockTitle, setPickerBlockTitle] = useState<string>('');
 
   const handleOpenCellPicker = (onPick: (cellRef: string, displayVal: string) => void, blockTitle = 'Block') => {
-    if (!attachedSpreadsheet) {
+    const currentSheet = attachedSpreadsheet || secFilingService.getAttachedSpreadsheet(mainDoc.id);
+    if (!currentSheet) {
       toast.warning('No spreadsheet linked to this document', {
         description: 'Please select a workbook from the Spreadsheet Hub first.',
         action: {
@@ -269,6 +277,16 @@ export default function SecFilingsPage() {
 
   const [selectedProposalForReview, setSelectedProposalForReview] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'word' | 'blocks'>('word');
+
+  const reviewProposal = selectedProposalForReview || activeProposal;
+
+  const reviewDiffs = useMemo(() => {
+    if (!isMergeModalOpen || !reviewProposal) return [];
+    if (selectedProposalForReview) {
+      return calculateDiffForProposal(selectedProposalForReview);
+    }
+    return activeDiffs;
+  }, [isMergeModalOpen, reviewProposal, selectedProposalForReview, calculateDiffForProposal, activeDiffs]);
 
   const navigate = useNavigate();
   const [isExportingDocx, setIsExportingDocx] = useState(false);
@@ -306,6 +324,60 @@ export default function SecFilingsPage() {
       version: activeProposal ? `${mainDoc.version} (Branch: ${activeProposal.title})` : mainDoc.version
     };
     printSecFiling(currentWorkingDoc);
+  };
+
+  const handleInsertImportedBlocks = (
+    importedBlocks: SecBlock[],
+    destination: ImportDestination,
+    newTitle?: string
+  ) => {
+    if (destination === 'new_document') {
+      const newDoc = secFilingService.createDocumentFromTemplate('blank', newTitle || 'Imported Filing');
+      newDoc.blocks = importedBlocks;
+      secFilingService.saveMainDocument(newDoc);
+      const list = secFilingService.getDocumentsList();
+      list.unshift({
+        id: newDoc.id,
+        title: newDoc.title,
+        formType: newDoc.formType || 'Form 10-Q',
+        period: newDoc.period || 'Current Period',
+        updatedAt: newDoc.updatedAt,
+        createdAt: newDoc.createdAt,
+        owner: 'me',
+        isShared: true,
+        version: newDoc.version,
+        blocksCount: importedBlocks.length,
+        templateType: '10-q',
+      });
+      secFilingService.saveDocumentsList(list);
+      secFilingService.openDocument(newDoc.id);
+      window.location.reload();
+      return;
+    }
+
+    if (destination === 'replace') {
+      setWorkingBlocks(importedBlocks);
+      toast.success(`Replaced filing with ${importedBlocks.length} imported blocks`);
+      return;
+    }
+
+    if (destination === 'insert_at_selection') {
+      let insertIdx = workingBlocks.length;
+      if (selectedBlockId) {
+        const found = workingBlocks.findIndex((b) => b.id === selectedBlockId);
+        if (found !== -1) insertIdx = found + 1;
+      }
+      const next = [...workingBlocks];
+      next.splice(insertIdx, 0, ...importedBlocks);
+      setWorkingBlocks(next);
+      toast.success(`Inserted ${importedBlocks.length} blocks at selection`);
+      return;
+    }
+
+    // Default: 'append'
+    const next = [...workingBlocks, ...importedBlocks];
+    setWorkingBlocks(next);
+    toast.success(`Appended ${importedBlocks.length} imported blocks to document`);
   };
 
   const pendingProposalsCount = proposals.filter((p) => p.status === 'pending_review').length;
@@ -706,6 +778,19 @@ export default function SecFilingsPage() {
               </Button>
             )}
 
+            {/* Import / Insert Existing Document (Word, Excel, Markdown, Text) */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsImportModalOpen(true)}
+              className="h-8 text-xs gap-1.5 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800 font-medium cursor-pointer shadow-2xs"
+              title="Insert or import an existing document (.docx, .xlsx, .md, .html, .txt) without starting over"
+            >
+              <Upload className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <span>Import / Insert Doc</span>
+            </Button>
+
             {/* Export Dropdown (.docx, .pdf) */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -995,7 +1080,7 @@ export default function SecFilingsPage() {
 
       {/* Expansive Center Workspace */}
       <main className="w-full max-w-full mx-auto px-2 sm:px-4 md:px-6 py-4 flex gap-4 lg:gap-6 items-start justify-center">
-        {/* Left Column: Word Headings Outline Pane (Collapsible, Full Height) */}
+        {/* Left Column: Headings Outline Pane (Collapsible, Full Height) */}
         {showOutline && (
           <div className="w-64 shrink-0 sticky top-28 h-[calc(100vh-16rem)] max-h-[calc(100vh-16rem)] min-h-[340px] flex flex-col">
             <DocumentOutline
@@ -1012,7 +1097,7 @@ export default function SecFilingsPage() {
           </div>
         )}
 
-        {/* Center Column: Prominent Word Document Sheet */}
+        {/* Center Column: Prominent Document Sheet */}
         <div className="flex-1 w-full min-w-0">
           <BlockBuilder
             tableTemplates={tableTemplates}
@@ -1043,8 +1128,10 @@ export default function SecFilingsPage() {
             viewMode={viewMode}
             onToggleViewMode={setViewMode}
             attachedSpreadsheet={attachedSpreadsheet}
-            onOpenSpreadsheet={() => {
+            onOpenSpreadsheet={(cellRef, tabName) => {
               setSpreadsheetModalMode('manage');
+              setTargetSpreadsheetCell(cellRef);
+              setTargetSpreadsheetTab(tabName);
               setIsSpreadsheetOpen(true);
             }}
             onOpenCellPicker={handleOpenCellPicker}
@@ -1079,6 +1166,8 @@ export default function SecFilingsPage() {
         mode={spreadsheetModalMode}
         onInsertVariable={pickerCallback || undefined}
         targetBlockTitle={pickerBlockTitle}
+        initialCellRef={targetSpreadsheetCell}
+        initialTabName={targetSpreadsheetTab}
         onSelectBlock={(blockId) => {
           setSelectedBlockId(blockId);
           const el = document.getElementById(blockId);
@@ -1099,21 +1188,31 @@ export default function SecFilingsPage() {
         }}
       />
 
-      <MergeReviewModal
-        open={isMergeModalOpen}
-        onOpenChange={setIsMergeModalOpen}
-        proposal={selectedProposalForReview || activeProposal}
-        mainDoc={mainDoc}
-        diffs={
-          selectedProposalForReview
-            ? calculateDiffForProposal(selectedProposalForReview)
-            : activeDiffs
-        }
-        isLeadController={activeRole === 'LEAD_CONTROLLER'}
-        onMerge={handleMergeProposal}
-        onMergeSelective={handleSelectiveMerge}
-        onReject={handleRejectProposal}
+      <ImportDocumentModal
+        open={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
+        currentDocTitle={mainDoc.title}
+        currentSections={documentSections}
+        activeSection={sectionFilter !== 'ALL' ? sectionFilter : undefined}
+        onInsertBlocks={handleInsertImportedBlocks}
       />
+
+      {isMergeModalOpen && reviewProposal && (
+        <MergeReviewModal
+          open={isMergeModalOpen}
+          onOpenChange={setIsMergeModalOpen}
+          proposal={reviewProposal}
+          mainDoc={{
+            ...mainDoc,
+            attachedSpreadsheet: mainDoc.attachedSpreadsheet || attachedSpreadsheet || secFilingService.getAttachedSpreadsheet(mainDoc.id)
+          }}
+          diffs={reviewDiffs}
+          isLeadController={activeRole === 'LEAD_CONTROLLER'}
+          onMerge={handleMergeProposal}
+          onMergeSelective={handleSelectiveMerge}
+          onReject={handleRejectProposal}
+        />
+      )}
 
       <VersionHistoryModal
         open={isHistoryModalOpen}

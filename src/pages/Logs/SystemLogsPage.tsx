@@ -610,7 +610,7 @@ export default function SystemLogsPage() {
                   const actionMeta = getActionMeta(log.action);
                   const ActionIcon = actionMeta.icon;
                   const dateInfo = formatLogDate(log.created_at);
-                  const isPurchaseRequest = log.entity_type === "PurchaseRequest";
+                  const isDocumentEntity = log.entity_type === "SecFiling" || log.entity_type === "SecFinancialTableTemplate";
                   const entityLabel = log.entity_title
                     ? log.entity_title
                     : `${log.entity_type} #${log.entity_id}`;
@@ -676,19 +676,19 @@ export default function SystemLogsPage() {
                       {/* 4. Target Entity */}
                       <TableCell className="py-3">
                         <div className="flex items-center gap-2 min-w-0">
-                          {isPurchaseRequest ? (
+                          {isDocumentEntity ? (
                             <div
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/purchasing/requests/${log.entity_id}`);
+                                navigate("/sec-filings");
                               }}
                               className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:underline flex items-center gap-1.5 truncate group/link"
-                              title={`Open Purchase Request #${log.entity_id}`}
+                              title={`Open Document Hub`}
                             >
                               <span className="p-1 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-mono text-[10px] font-bold border border-indigo-100 dark:border-indigo-900">
                                 #{log.entity_id}
                               </span>
-                              <span className="truncate">{log.entity_title || `Request #${log.entity_id}`}</span>
+                              <span className="truncate">{log.entity_title || `${log.entity_type} #${log.entity_id}`}</span>
                               <ExternalLink className="h-3 w-3 opacity-0 group-hover/link:opacity-100 transition-opacity shrink-0" />
                             </div>
                           ) : (
@@ -862,15 +862,15 @@ export default function SystemLogsPage() {
                     <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300 uppercase tracking-wide">
                       Target Entity
                     </span>
-                    {selectedLog.entity_type === "PurchaseRequest" && (
+                    {(selectedLog.entity_type === "SecFiling" || selectedLog.entity_type === "SecFinancialTableTemplate") && (
                       <Button
                         type="button"
                         size="sm"
                         variant="outline"
-                        onClick={() => navigate(`/purchasing/requests/${selectedLog.entity_id}`)}
+                        onClick={() => navigate("/sec-filings")}
                         className="h-7 text-xs gap-1.5 text-indigo-600 bg-white dark:bg-zinc-950 font-medium"
                       >
-                        <span>Open Request</span>
+                        <span>Open Document Hub</span>
                         <ExternalLink className="h-3 w-3" />
                       </Button>
                     )}

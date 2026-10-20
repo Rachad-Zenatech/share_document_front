@@ -150,7 +150,7 @@ const loadImageForDocx = async (url?: string, requestedWidth?: number, requested
 
 /**
  * Dynamically exports any SEC Filing Document (including added/removed/reordered blocks)
- * into a beautifully formatted Microsoft Word (.docx) document.
+ * into a beautifully formatted Word (.docx) document.
  */
 export async function exportSecFilingToDocx(doc: SecFilingDocument): Promise<Blob> {
   const children: any[] = [];

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useTheme } from 'next-themes';
 import {
   FileText,
+  FileSpreadsheet,
   Send,
   CheckCircle2,
   Download,
@@ -17,7 +18,8 @@ import {
   Redo2,
   GitBranch,
   Link2,
-  Check
+  Check,
+  Crown
 } from 'lucide-react';
 import type {
   SecFilingDocument
@@ -29,6 +31,7 @@ import { BlockBuilder } from './components/BlockBuilder';
 import { BlockInspector } from './components/BlockInspector';
 import { DocumentOutline } from './components/DocumentOutline';
 import { SubmitProposalModal } from './components/SubmitProposalModal';
+import { AttachedSpreadsheetModal } from './components/AttachedSpreadsheetModal';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import {
@@ -54,6 +57,9 @@ export default function SecFilingContributorPage() {
   const descFromUrl =
     queryParams.get('desc') ||
     'Please review and update this section. All edits are saved automatically in your private branch.';
+  const canMergeFromUrl =
+    queryParams.get('canMerge') === 'true' ||
+    queryParams.get('docManager') === 'true';
 
   // Force Normal Light Mode: SEC filing contributor share link is always a clean, bright, professional paper sheet experience
   useEffect(() => {
@@ -123,7 +129,10 @@ export default function SecFilingContributorPage() {
     canUndo,
     canRedo,
     handleForkProposal,
-    handleSubmitForReview
+    handleSubmitForReview,
+    attachedSpreadsheet,
+    updateAttachedSpreadsheet,
+    updateSpreadsheetCell
   } = useSecFiling();
 
   // Statement templates come from the database; the bundled set is the fallback
@@ -141,6 +150,27 @@ export default function SecFilingContributorPage() {
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState<boolean>(false);
   const [isExportingDocx, setIsExportingDocx] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
+
+  // Attached Spreadsheet Modal & Cell Variable Picker States
+  const [isSpreadsheetOpen, setIsSpreadsheetOpen] = useState<boolean>(false);
+  const [spreadsheetModalMode, setSpreadsheetModalMode] = useState<'manage' | 'picker'>('manage');
+  const [targetSpreadsheetCell, setTargetSpreadsheetCell] = useState<string | undefined>(undefined);
+  const [targetSpreadsheetTab, setTargetSpreadsheetTab] = useState<string | undefined>(undefined);
+  const [pickerCallback, setPickerCallback] = useState<((cellRef: string, displayVal: string) => void) | null>(null);
+  const [pickerBlockTitle, setPickerBlockTitle] = useState<string>('');
+
+  const handleOpenCellPicker = (onPick: (cellRef: string, displayVal: string) => void, blockTitle = 'Block') => {
+    if (!attachedSpreadsheet) {
+      toast.warning('No spreadsheet linked to this document', {
+        description: 'A spreadsheet must be linked by the document lead first.'
+      });
+      return;
+    }
+    setPickerCallback(() => onPick);
+    setPickerBlockTitle(blockTitle);
+    setSpreadsheetModalMode('picker');
+    setIsSpreadsheetOpen(true);
+  };
 
   // Selected block for inspector
   const selectedBlock = workingBlocks.find((b) => b.id === selectedBlockId) || null;
@@ -227,9 +257,16 @@ export default function SecFilingContributorPage() {
                   <span className="text-sm font-bold tracking-tight text-slate-900">
                     EDGAR Studio
                   </span>
-                  <Badge className="bg-blue-50 text-blue-700 text-[9px] font-bold border border-blue-200 px-1.5 py-0 uppercase tracking-wider">
-                    Contributor Edition
-                  </Badge>
+                  {canMergeFromUrl || activeProposal?.permissions?.canMergeAndApprove ? (
+                    <Badge className="bg-purple-50 text-purple-700 text-[9px] font-bold border border-purple-300 px-1.5 py-0 uppercase tracking-wider flex items-center gap-1">
+                      <Crown className="w-2.5 h-2.5" />
+                      <span>Doc Co-Manager</span>
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-blue-50 text-blue-700 text-[9px] font-bold border border-blue-200 px-1.5 py-0 uppercase tracking-wider">
+                      Contributor Edition
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
                   <span className="font-semibold text-slate-700">{mainDoc.title || 'ZenaTech, Inc.'}</span>
@@ -336,6 +373,27 @@ export default function SecFilingContributorPage() {
                 Blocks Flow
               </button>
             </div>
+
+            {/* Attached Spreadsheet / Dynamic Variable Button */}
+            {attachedSpreadsheet && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSpreadsheetModalMode('manage');
+                  setIsSpreadsheetOpen(true);
+                }}
+                className="h-8 text-xs gap-1.5 text-emerald-700 bg-emerald-50 border-emerald-300 font-medium hover:bg-emerald-100 cursor-pointer"
+                title="Attached Spreadsheet - View workbook and dynamic cell variables"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden md:inline">Spreadsheet</span>
+                <span className="px-1.5 py-0.2 text-[10px] rounded font-mono bg-emerald-200 text-emerald-900 truncate max-w-[110px]">
+                  {attachedSpreadsheet?.sheetName || attachedSpreadsheet?.fileName || 'Sheet'}
+                </span>
+              </Button>
+            )}
 
             {/* Export Dropdown */}
             <DropdownMenu>
@@ -469,6 +527,20 @@ export default function SecFilingContributorPage() {
           </div>
 
           <div className="flex items-center gap-2 self-end lg:self-center shrink-0">
+            {(canMergeFromUrl || activeProposal?.permissions?.canMergeAndApprove) && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  window.location.href = '/sec-filings';
+                }}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs h-8 px-3 gap-1.5 shadow-xs cursor-pointer"
+                title="Open Lead Controller / Document Merge Review Hub"
+              >
+                <Crown className="w-3.5 h-3.5" />
+                <span>Open Merge Review Hub</span>
+              </Button>
+            )}
             {isMerged ? (
               <div className="flex items-center gap-2">
                 <div className="text-right text-xs text-purple-700 font-medium bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-200">
@@ -549,7 +621,7 @@ export default function SecFilingContributorPage() {
           </aside>
         )}
 
-        {/* Center Column: The Prominent Word Document Sheet */}
+        {/* Center Column: The Prominent Document Sheet */}
         <div className="flex-1 w-full min-w-0">
           {isMerged && (
             <div className="mb-4 p-4 rounded-xl bg-purple-50/90 border border-purple-200 text-purple-900 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
@@ -610,6 +682,14 @@ export default function SecFilingContributorPage() {
             diffs={activeDiffs}
             viewMode={viewMode}
             onToggleViewMode={setViewMode}
+            attachedSpreadsheet={attachedSpreadsheet}
+            onOpenSpreadsheet={(cellRef, tabName) => {
+              setSpreadsheetModalMode('manage');
+              setTargetSpreadsheetCell(cellRef);
+              setTargetSpreadsheetTab(tabName);
+              setIsSpreadsheetOpen(true);
+            }}
+            onOpenCellPicker={handleOpenCellPicker}
           />
         </div>
 
@@ -635,6 +715,25 @@ export default function SecFilingContributorPage() {
         proposal={activeProposal}
         diffs={activeDiffs}
         onSubmit={handleSubmitForReview}
+      />
+
+      <AttachedSpreadsheetModal
+        open={isSpreadsheetOpen}
+        onOpenChange={setIsSpreadsheetOpen}
+        spreadsheet={attachedSpreadsheet}
+        onUpdateSpreadsheet={updateAttachedSpreadsheet}
+        onUpdateCell={updateSpreadsheetCell}
+        blocks={workingBlocks}
+        mode={spreadsheetModalMode}
+        onInsertVariable={pickerCallback || undefined}
+        targetBlockTitle={pickerBlockTitle}
+        initialCellRef={targetSpreadsheetCell}
+        initialTabName={targetSpreadsheetTab}
+        onSelectBlock={(blockId) => {
+          setSelectedBlockId(blockId);
+          const el = document.getElementById(blockId);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }}
       />
 
       {/* Standalone Application Footer */}

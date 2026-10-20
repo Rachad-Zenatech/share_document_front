@@ -84,12 +84,13 @@ export const DocumentVariableRenderer: React.FC<DocumentVariableRendererProps> =
       parts.push(renderHighlightedText(text.slice(lastIndex, matchIndex), highlightQuery));
     }
 
+    const cleanFallback = fallback ? fallback.replace(/^\{+|\}+$/g, '').trim() : undefined;
     const liveVal = getCellValue(cellRef, spreadsheet, tabName);
     const displayVal =
       liveVal !== undefined && liveVal !== null
         ? formatCellValue(liveVal)
-        : fallback !== undefined && fallback !== ''
-        ? fallback
+        : cleanFallback !== undefined && cleanFallback !== ''
+        ? cleanFallback
         : `@${cellRef}`;
 
     const fullRefLabel = tabName ? `${tabName}!${cellRef}` : cellRef;
@@ -108,16 +109,16 @@ export const DocumentVariableRenderer: React.FC<DocumentVariableRendererProps> =
                   onCellClick?.(cellRef, tabName);
                 }
               }}
-              className="inline-flex items-baseline px-1 py-0.2 mx-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 font-semibold border-b-2 border-emerald-500 hover:bg-emerald-100/90 dark:hover:bg-emerald-900/80 transition-colors cursor-pointer select-text group/var"
-              title={`Linked Cell: @${fullRefLabel} (${displayVal})`}
+              className="inline-flex items-baseline px-1.5 py-0.5 mx-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 font-semibold border border-emerald-400/80 hover:border-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 transition-all cursor-pointer select-text group/var shadow-2xs"
+              title={`Linked Cell: @${fullRefLabel} (${displayVal}) - Click to inspect in spreadsheet`}
             >
               <span>{renderHighlightedText(displayVal, highlightQuery)}</span>
-              <span className="ml-0.5 text-[9px] font-mono text-emerald-600 dark:text-emerald-400 opacity-60 group-hover/var:opacity-100 select-none">
+              <span className="ml-1 text-[10px] font-mono text-emerald-600 dark:text-emerald-400 opacity-70 group-hover/var:opacity-100 select-none font-bold">
                 ↗
               </span>
             </span>
           </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs p-2.5 bg-slate-900 text-white border-slate-700 space-y-1 rounded-lg shadow-xl">
+          <TooltipContent side="top" className="text-xs p-2.5 bg-slate-900 text-white border-slate-700 space-y-1 rounded-lg shadow-xl z-50">
             <div className="font-bold flex items-center justify-between gap-3 text-emerald-300">
               <span>{tabName ? `Tab: ${tabName}` : 'Spreadsheet Cell'}</span>
               <span className="font-mono text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.5 rounded text-[10px]">
@@ -127,8 +128,8 @@ export const DocumentVariableRenderer: React.FC<DocumentVariableRendererProps> =
             <div className="text-[11px] text-slate-300">
               Live Value: <span className="font-mono font-bold text-white text-xs">{displayVal}</span>
             </div>
-            <div className="text-[10px] text-slate-400 border-t border-slate-800 pt-1">
-              Click to view or edit in background spreadsheet
+            <div className="text-[10px] text-emerald-400 border-t border-slate-800 pt-1 font-medium flex items-center gap-1">
+              <span>↗</span> Click to go straight to this cell in spreadsheet
             </div>
           </TooltipContent>
         </Tooltip>

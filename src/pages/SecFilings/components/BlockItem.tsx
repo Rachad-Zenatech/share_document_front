@@ -141,7 +141,7 @@ interface BlockItemProps {
   viewMode?: 'word' | 'blocks';
   globalSpacing?: SecBlockSpacing;
   attachedSpreadsheet?: AttachedSpreadsheet | null;
-  onOpenSpreadsheet?: () => void;
+  onOpenSpreadsheet?: (cellRef?: string, tabName?: string) => void;
   onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
   searchQuery?: string;
   isActiveSearchMatch?: boolean;
@@ -1135,7 +1135,7 @@ const HeadingBlockEditor: React.FC<{
   block: SecHeadingBlock;
   onUpdate: (u: Partial<SecHeadingBlock>) => void;
   attachedSpreadsheet?: AttachedSpreadsheet;
-  onOpenSpreadsheet?: () => void;
+  onOpenSpreadsheet?: (cellRef?: string, tabName?: string) => void;
   onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
   searchQuery?: string;
 }> = ({ block, onUpdate, attachedSpreadsheet, onOpenSpreadsheet, onOpenCellPicker, searchQuery }) => {
@@ -1315,13 +1315,13 @@ const HeadingBlockEditor: React.FC<{
 };
 
 /* ------------------------------------------------------------------------- */
-/* 2. PARAGRAPH BLOCK EDITOR (Word Body Text)                                */
+/* 2. PARAGRAPH BLOCK EDITOR (Body Text)                                */
 /* ------------------------------------------------------------------------- */
 const ParagraphBlockEditor: React.FC<{
   block: SecParagraphBlock;
   onUpdate: (u: Partial<SecParagraphBlock>) => void;
   attachedSpreadsheet?: AttachedSpreadsheet;
-  onOpenSpreadsheet?: () => void;
+  onOpenSpreadsheet?: (cellRef?: string, tabName?: string) => void;
   onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
   searchQuery?: string;
 }> = ({ block, onUpdate, attachedSpreadsheet, onOpenSpreadsheet, onOpenCellPicker, searchQuery }) => {
@@ -1522,7 +1522,7 @@ const TableCellInput: React.FC<{
   onFocus?: () => void;
   attachedSpreadsheet?: AttachedSpreadsheet;
   onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
-  onOpenSpreadsheet?: () => void;
+  onOpenSpreadsheet?: (cellRef?: string, tabName?: string) => void;
   rowIdx?: number;
   colIdx?: number;
   tableName?: string;
@@ -1752,7 +1752,7 @@ const TableCellInput: React.FC<{
 };
 
 /* ------------------------------------------------------------------------- */
-/* 3. FINANCIAL STATEMENT TABLE EDITOR (Authentic Word Financial Table)       */
+/* 3. FINANCIAL STATEMENT TABLE EDITOR (Financial Statement Table)       */
 /* ------------------------------------------------------------------------- */
 const FinancialTableBlockEditor: React.FC<{
   block: SecFinancialTableBlock;
@@ -1761,7 +1761,7 @@ const FinancialTableBlockEditor: React.FC<{
   tableTemplates?: FinancialTableTemplate[];
   tableCellDiffs?: SecTableCellDiff[];
   attachedSpreadsheet?: AttachedSpreadsheet;
-  onOpenSpreadsheet?: () => void;
+  onOpenSpreadsheet?: (cellRef?: string, tabName?: string) => void;
   onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
   searchQuery?: string;
 }> = ({
@@ -2539,7 +2539,7 @@ const FinancialTableBlockEditor: React.FC<{
         </div>
       )}
 
-      {/* Authentic Word Financial Table Grid */}
+      {/* Financial Statement Table Grid */}
       <div className="overflow-x-auto w-full my-1">
         <table className="w-full text-[13px] border-collapse">
           <thead>
@@ -3102,7 +3102,7 @@ const CalloutBlockEditor: React.FC<{
   block: SecCalloutBlock;
   onUpdate: (u: Partial<SecCalloutBlock>) => void;
   attachedSpreadsheet?: AttachedSpreadsheet;
-  onOpenSpreadsheet?: () => void;
+  onOpenSpreadsheet?: (cellRef?: string, tabName?: string) => void;
   onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
   searchQuery?: string;
 }> = ({ block, onUpdate, attachedSpreadsheet, onOpenSpreadsheet, onOpenCellPicker, searchQuery }) => {
