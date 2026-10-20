@@ -1,0 +1,237 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.ACCOUNT_ID }}
+  S3_BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
+  CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.DISTRIBUTION_ID || secrets.DISTRIBUTION_NAME }}
+  VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || secrets.API_BASE_URL }}
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+ 
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-22.04
+    environment: Zenatech
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Trim leading/trailing whitespace from secrets
+          AWS_REGION="$(echo -n "${AWS_REGION:-}" | xargs)"
+          AWS_ACCOUNT_ID="$(echo -n "${AWS_ACCOUNT_ID:-}" | xargs)"
+          S3_BUCKET_NAME="$(echo -n "${S3_BUCKET_NAME:-}" | xargs)"
+          CLOUDFRONT_DISTRIBUTION_ID="$(echo -n "${CLOUDFRONT_DISTRIBUTION_ID:-}" | xargs)"
+          VITE_API_BASE_URL="$(echo -n "${VITE_API_BASE_URL:-}" | xargs)"
+
+          # Export sanitized variables to subsequent steps
+          echo "AWS_REGION=${AWS_REGION}" >> "$GITHUB_ENV"
+          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> "$GITHUB_ENV"
+          echo "S3_BUCKET_NAME=${S3_BUCKET_NAME}" >> "$GITHUB_ENV"
+          echo "CLOUDFRONT_DISTRIBUTION_ID=${CLOUDFRONT_DISTRIBUTION_ID}" >> "$GITHUB_ENV"
+          echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" >> "$GITHUB_ENV"
+
+          missing=0
+
+          if [ -z "${AWS_REGION:-}" ]; then
+            echo "::error title=Missing AWS region::The REGION repository secret is missing or empty."
+            missing=1
+          else
+            echo "AWS_REGION=${AWS_REGION}"
+          fi
+
+          if [ -z "${AWS_ACCOUNT_ID:-}" ]; then
+            echo "::error title=Missing AWS account ID::The ACCOUNT_ID repository secret is missing or empty."
+            missing=1
+          else
+            echo "AWS_ACCOUNT_ID length is ${#AWS_ACCOUNT_ID} characters."
+            if [ "${AWS_ACCOUNT_ID}" != "506155053417" ]; then
+              echo "::warning title=Account ID Mismatch::The ACCOUNT_ID secret is not 506155053417. It is currently set to an ID of length ${#AWS_ACCOUNT_ID}."
+            else
+              echo "AWS_ACCOUNT_ID matches expected value."
+            fi
+          fi
+
+          echo "--- OIDC DIAGNOSTICS ---"
+          echo "GitHub Repository: ${{ github.repository }}"
+          echo "GitHub Ref: ${{ github.ref }}"
+          echo "GitHub Environment: Zenatech"
+          echo "Expected OIDC 'sub' claims to match one of:"
+          echo "  repo:${{ github.repository }}:environment:Zenatech"
+          echo "  repo:${{ github.repository }}:ref:${{ github.ref }}"
+          echo "------------------------"
+
+          if [ -z "${S3_BUCKET_NAME:-}" ]; then
+            echo "::error title=Missing S3 bucket::The BUCKET_NAME repository secret is missing or empty."
+            missing=1
+          else
+            echo "S3_BUCKET_NAME=${S3_BUCKET_NAME}"
+          fi
+
+          if [ -z "${CLOUDFRONT_DISTRIBUTION_ID:-}" ]; then
+            echo "::error title=Missing CloudFront ID::The DISTRIBUTION_ID or DISTRIBUTION_NAME repository secret is missing or empty."
+            missing=1
+          fi
+
+          if [ -z "${VITE_API_BASE_URL:-}" ]; then
+            echo "::warning title=Missing API Base URL::The VITE_API_BASE_URL or API_BASE_URL secret is not set."
+          else
+            echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}"
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Deployment configuration validation failed."
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          npm ci
+
+      - name: Build the app
+        shell: bash
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+        run: |
+          set -euxo pipefail
+          npm run build
+
+          if [ ! -d "dist" ]; then
+            echo "::error title=Build output missing::The dist directory was not created."
+            exit 1
+          fi
+
+          if [ ! -f "dist/index.html" ]; then
+            echo "::error title=index.html missing::dist/index.html was not created."
+            exit 1
+          fi
+
+          echo "Build output:"
+          find dist -maxdepth 2 -type f | head -n 100 || true
+
+      - name: Debug OIDC Token
+        shell: bash
+        run: |
+          ID_TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          echo $ID_TOKEN | base64
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: github-actions-frontend-deploy
+
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          set -euxo pipefail
+          aws sts get-caller-identity
+          aws configure list
+          aws s3api get-bucket-location \
+            --bucket "${S3_BUCKET_NAME}"
+
+      - name: Deploy to S3
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          aws s3 sync dist/ "s3://${S3_BUCKET_NAME}" \
+            --delete \
+            --only-show-errors
+
+          echo "S3 deployment completed successfully."
+
+      - name: Verify S3 deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3api head-object \
+            --bucket "${S3_BUCKET_NAME}" \
+            --key "index.html"
+          echo "Verified s3://${S3_BUCKET_NAME}/index.html"
+
+      - name: Verify CloudFront distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Checking CloudFront distribution..."
+          target_dist="${CLOUDFRONT_DISTRIBUTION_ID}"
+
+          # If target_dist looks like a domain, attempt auto-resolution
+          if [[ "${target_dist}" == *"."* ]]; then
+            echo "Attempting to resolve CloudFront Distribution ID for domain: ${target_dist}"
+            resolved_id="$(aws cloudfront list-distributions --query "DistributionList.Items[?DomainName=='${target_dist}' || contains(Aliases.Items || \`[]\`, '${target_dist}')].Id | [0]" --output text 2>/dev/null || true)"
+            if [ -n "${resolved_id}" ] && [ "${resolved_id}" != "None" ]; then
+              echo "Resolved domain ${target_dist} -> Distribution ID ${resolved_id}"
+              target_dist="${resolved_id}"
+            fi
+          fi
+
+          aws cloudfront get-distribution \
+            --id "${target_dist}" \
+            --query "Distribution.{Id:Id,DomainName:DomainName,Status:Status,Enabled:DistributionConfig.Enabled}" \
+            --output table
+
+      - name: Invalidate CloudFront cache
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          target_dist="${CLOUDFRONT_DISTRIBUTION_ID}"
+
+          # If target_dist looks like a domain, attempt auto-resolution
+          if [[ "${target_dist}" == *"."* ]]; then
+            echo "Attempting to resolve CloudFront Distribution ID for domain: ${target_dist}"
+            resolved_id="$(aws cloudfront list-distributions --query "DistributionList.Items[?DomainName=='${target_dist}' || contains(Aliases.Items || \`[]\`, '${target_dist}')].Id | [0]" --output text 2>/dev/null || true)"
+            if [ -n "${resolved_id}" ] && [ "${resolved_id}" != "None" ]; then
+              echo "Resolved domain ${target_dist} -> Distribution ID ${resolved_id}"
+              target_dist="${resolved_id}"
+            fi
+          fi
+
+          echo "Submitting invalidation for CloudFront distribution: ${target_dist}"
+
+          invalidation_id="$(
+            aws cloudfront create-invalidation \
+              --distribution-id "${target_dist}" \
+              --paths "/*" \
+              --query "Invalidation.Id" \
+              --output text
+          )" || {
+            echo "::error title=NoSuchDistribution::The CloudFront Distribution ID '${target_dist}' was not found in your AWS account."
+            echo "Please ensure the GitHub repository secret (DISTRIBUTION_ID or DISTRIBUTION_NAME) contains the CloudFront Distribution ID (e.g., E1A2B3C4D5E6F7) from AWS CloudFront console."
+            exit 1
+          }
+
+          if [ -z "${invalidation_id}" ] || [ "${invalidation_id}" = "None" ]; then
+            echo "::error title=Invalidation failed::CloudFront did not return an invalidation ID."
+            exit 1
+          fi
+
+          echo "CloudFront invalidation created: ${invalidation_id}"
