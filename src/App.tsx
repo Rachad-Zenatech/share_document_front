@@ -19,7 +19,20 @@ const SystemLogsPage = lazy(() => import("./pages/Logs/SystemLogsPage"));
 const Login = lazy(() => import("./pages/Login"));
 const PendingAccess = lazy(() => import("./pages/PendingAccess"));
 
-const SecFilings = lazy(() => import("./pages/SecFilings/SecFilingsPage"));
+const loadSecFilings = () => import("./pages/SecFilings/SecFilingsPage");
+const SecFilings = lazy(loadSecFilings);
+
+// Preload Document Editor on browser idle so clicking it is instantaneous
+if (typeof window !== 'undefined') {
+  const idlePreload = () => {
+    loadSecFilings();
+  };
+  if ('requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(idlePreload);
+  } else {
+    setTimeout(idlePreload, 300);
+  }
+}
 const CreateSecFilingPage = lazy(() => import("./pages/SecFilings/CreateSecFilingPage"));
 const SecFilingContributorPage = lazy(() => import("./pages/SecFilings/SecFilingContributorPage"));
 const MobileSignerPage = lazy(() => import("./pages/SecFilings/MobileSignerPage"));
@@ -28,9 +41,7 @@ const SpreadsheetHubPage = lazy(() => import("./pages/SecFilings/SpreadsheetHubP
 function SpreadsheetHubRoute() {
   return (
     <ProtectedRoute navigationCode="SEC_FILINGS">
-      <AppShell>
-        <SpreadsheetHubPage />
-      </AppShell>
+      <SpreadsheetHubPage />
     </ProtectedRoute>
   );
 }
@@ -51,9 +62,7 @@ function SecFilingsHubRoute() {
 
   return (
     <ProtectedRoute navigationCode="SEC_FILINGS">
-      <AppShell>
-        <CreateSecFilingPage />
-      </AppShell>
+      <CreateSecFilingPage />
     </ProtectedRoute>
   );
 }
@@ -74,9 +83,7 @@ function SecFilingsEditorRoute() {
 
   return (
     <ProtectedRoute navigationCode="SEC_FILINGS">
-      <AppShell>
-        <SecFilings />
-      </AppShell>
+      <SecFilings />
     </ProtectedRoute>
   );
 }
@@ -114,13 +121,8 @@ function App() {
 
             {/* Standalone Contributor & Mobile Signing Routes */}
             <Route path="/sec-filings/contribute" element={<SecFilingContributorPage />} />
-            <Route path="/sec-filings" element={<SecFilingsHubRoute />} />
-            <Route path="/sec-filings/new" element={<Navigate to="/sec-filings" replace />} />
-            <Route path="/sec-filings/editor" element={<SecFilingsEditorRoute />} />
-            <Route path="/sec-filings/spreadsheets" element={<SpreadsheetHubRoute />} />
-            <Route path="/spreadsheets" element={<Navigate to="/sec-filings/spreadsheets" replace />} />
 
-            {/* Main app layout routes */}
+            {/* Main app layout routes (AppShell stays permanently mounted) */}
             <Route
               element={
                 <ProtectedRoute>
@@ -132,6 +134,13 @@ function App() {
             >
               <Route path="/" element={<Navigate to="/sec-filings" replace />} />
               <Route path="/dashboard" element={<Navigate to="/sec-filings" replace />} />
+
+              {/* SEC Filings Suite (Persistent Shell for instantaneous page transitions) */}
+              <Route path="/sec-filings" element={<SecFilingsHubRoute />} />
+              <Route path="/sec-filings/new" element={<Navigate to="/sec-filings" replace />} />
+              <Route path="/sec-filings/editor" element={<SecFilingsEditorRoute />} />
+              <Route path="/sec-filings/spreadsheets" element={<SpreadsheetHubRoute />} />
+              <Route path="/spreadsheets" element={<Navigate to="/sec-filings/spreadsheets" replace />} />
 
               {/* Configuration Routes */}
               <Route path="/configuration" element={<Navigate to="/configurations/users" replace />} />

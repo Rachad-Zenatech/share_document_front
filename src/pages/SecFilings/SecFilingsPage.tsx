@@ -39,7 +39,6 @@ import { SubmitProposalModal } from './components/SubmitProposalModal';
 import { MediaBucketModal } from './components/MediaBucketModal';
 import { AttachedSpreadsheetModal } from './components/AttachedSpreadsheetModal';
 import { SpreadsheetSelectorModal } from './components/SpreadsheetSelectorModal';
-import { exportSecFilingToDocx, downloadBlob, printSecFiling } from '../../utils/secFilingExport';
 import { ImportDocumentModal, type ImportDestination } from './components/ImportDocumentModal';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -305,6 +304,7 @@ export default function SecFilingsPage() {
         blocks: workingBlocks,
         version: activeProposal ? `${mainDoc.version} (Branch: ${activeProposal.title})` : mainDoc.version
       };
+      const { exportSecFilingToDocx, downloadBlob } = await import('../../utils/secFilingExport');
       const blob = await exportSecFilingToDocx(currentWorkingDoc);
       const filename = `ZenaTech_SEC_Filing_${currentWorkingDoc.version.replace(/\s+/g, '_')}.docx`;
       downloadBlob(blob, filename);
@@ -317,7 +317,8 @@ export default function SecFilingsPage() {
     }
   };
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
+    const { printSecFiling } = await import('../../utils/secFilingExport');
     const currentWorkingDoc = {
       ...mainDoc,
       blocks: workingBlocks,
@@ -1156,7 +1157,8 @@ export default function SecFilingsPage() {
       </main>
 
       {/* Modals */}
-      <AttachedSpreadsheetModal
+      {isSpreadsheetOpen && (
+        <AttachedSpreadsheetModal
         open={isSpreadsheetOpen}
         onOpenChange={setIsSpreadsheetOpen}
         spreadsheet={attachedSpreadsheet}
@@ -1199,8 +1201,10 @@ export default function SecFilingsPage() {
           }
         }}
       />
+      )}
 
-      <SpreadsheetSelectorModal
+      {isSpreadsheetPickerOpen && (
+        <SpreadsheetSelectorModal
         open={isSpreadsheetPickerOpen}
         onOpenChange={setIsSpreadsheetPickerOpen}
         documentId={mainDoc.id}
@@ -1210,8 +1214,10 @@ export default function SecFilingsPage() {
           assignSpreadsheet(sheetId);
         }}
       />
+      )}
 
-      <ImportDocumentModal
+      {isImportModalOpen && (
+        <ImportDocumentModal
         open={isImportModalOpen}
         onOpenChange={setIsImportModalOpen}
         currentDocTitle={mainDoc.title}
@@ -1219,6 +1225,7 @@ export default function SecFilingsPage() {
         activeSection={sectionFilter !== 'ALL' ? sectionFilter : undefined}
         onInsertBlocks={handleInsertImportedBlocks}
       />
+      )}
 
       {isMergeModalOpen && reviewProposal && (
         <MergeReviewModal
@@ -1237,7 +1244,8 @@ export default function SecFilingsPage() {
         />
       )}
 
-      <VersionHistoryModal
+      {isHistoryModalOpen && (
+        <VersionHistoryModal
         open={isHistoryModalOpen}
         onOpenChange={setIsHistoryModalOpen}
         history={versionHistory}
@@ -1245,15 +1253,19 @@ export default function SecFilingsPage() {
         onRestore={handleRestoreVersion}
         isLeadController={activeRole === 'LEAD_CONTROLLER'}
       />
+      )}
 
-      <NewProposalModal
+      {isNewProposalModalOpen && (
+        <NewProposalModal
         open={isNewProposalModalOpen}
         onOpenChange={setIsNewProposalModalOpen}
         onCreate={(title, desc) => handleCreateProposal(title, desc)}
         baseVersion={mainDoc.version}
       />
+      )}
 
-      <ContributorInviteModal
+      {isInviteModalOpen && (
+        <ContributorInviteModal
         open={isInviteModalOpen}
         onOpenChange={setIsInviteModalOpen}
         mainDoc={mainDoc}
@@ -1266,19 +1278,24 @@ export default function SecFilingsPage() {
         }}
         onForkProposal={handleForkProposal}
       />
+      )}
 
-      <SubmitProposalModal
+      {isSubmitProposalModalOpen && (
+        <SubmitProposalModal
         open={isSubmitProposalModalOpen}
         onOpenChange={setIsSubmitProposalModalOpen}
         proposal={activeProposal}
         diffs={activeDiffs}
         onSubmit={handleSubmitForReview}
       />
+      )}
 
-      <MediaBucketModal
+      {isMediaBucketOpen && (
+        <MediaBucketModal
         isOpen={isMediaBucketOpen}
         onClose={() => setIsMediaBucketOpen(false)}
       />
+      )}
     </div>
   );
 }

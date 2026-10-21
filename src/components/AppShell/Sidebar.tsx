@@ -212,6 +212,15 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
                               <Link
                                 key={sub.path}
                                 to={sub.path}
+                                onMouseEnter={() => {
+                                  if (sub.path === '/sec-filings/editor') {
+                                    import('../../pages/SecFilings/SecFilingsPage');
+                                  } else if (sub.path === '/sec-filings') {
+                                    import('../../pages/SecFilings/CreateSecFilingPage');
+                                  } else if (sub.path === '/sec-filings/spreadsheets') {
+                                    import('../../pages/SecFilings/SpreadsheetHubPage');
+                                  }
+                                }}
                                 className={`
                                   flex items-center justify-between h-7.5 px-2.5 rounded-md text-xs font-medium transition-all duration-200
                                   ${
