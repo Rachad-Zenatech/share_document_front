@@ -4,7 +4,6 @@ import {
   Copy,
   Check,
   ExternalLink,
-  Sparkles,
   ShieldAlert,
   ShieldCheck,
   Users,
@@ -97,7 +96,7 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
   onForkProposal
 }) => {
   const [activeTab, setActiveTab] = useState<'create' | 'existing'>('create');
-  const [sourceMode, setSourceMode] = useState<'presets' | 'system' | 'custom'>('presets');
+  const [sourceMode, setSourceMode] = useState<'system' | 'custom'>('system');
 
   // Form states
   const [contributorName, setContributorName] = useState('');
@@ -245,20 +244,7 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
     }
   };
 
-  const applyPreset = (preset: {
-    name: string;
-    role: string;
-    email: string;
-    title: string;
-    section: string;
-  }) => {
-    setContributorName(preset.name);
-    setContributorRole(preset.role);
-    setContributorEmail(preset.email);
-    setTaskTitle(preset.title);
-    setAssignedSection(preset.section);
-    setGeneratedInvite(null);
-  };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -331,20 +317,7 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
                 </div>
 
                 {/* Source Mode Switcher */}
-                <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-xl border border-slate-200 dark:border-zinc-700">
-                  <button
-                    type="button"
-                    onClick={() => setSourceMode('presets')}
-                    className={`py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                      sourceMode === 'presets'
-                        ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-2xs font-semibold'
-                        : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900'
-                    }`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Quick Presets</span>
-                  </button>
-
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-xl border border-slate-200 dark:border-zinc-700">
                   <button
                     type="button"
                     onClick={() => setSourceMode('system')}
@@ -375,53 +348,6 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
                   </button>
                 </div>
 
-                {/* Sub-view: Quick Presets */}
-                {sourceMode === 'presets' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 animate-in fade-in duration-150">
-                    {[
-                      {
-                        label: 'External Legal Counsel',
-                        name: 'Sarah Jenkins',
-                        role: 'Senior Legal Partner',
-                        email: 's.jenkins@lawcorp.com',
-                        title: 'Note 7 Debt Covenants & Legal Disclosures',
-                        section: 'LOANS PAYABLE'
-                      },
-                      {
-                        label: 'Tax Specialist',
-                        name: 'David Chen, CPA',
-                        role: 'Director of Taxation',
-                        email: 'd.chen@zenatech.com',
-                        title: 'Q2 Deferred Tax & Loss Carryforward Revision',
-                        section: 'INCOME TAXES'
-                      },
-                      {
-                        label: 'Independent Auditor',
-                        name: 'Michael Vance, CA',
-                        role: 'Audit Partner (External)',
-                        email: 'm.vance@auditfirm.com',
-                        title: 'Interim Review Notice & Signatures',
-                        section: 'Auditor Report & Cover'
-                      }
-                    ].map((p) => (
-                      <button
-                        key={p.label}
-                        type="button"
-                        onClick={() => applyPreset(p)}
-                        className={`p-2.5 text-left rounded-xl border transition-all group cursor-pointer ${
-                          contributorName === p.name
-                            ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/40 ring-1 ring-blue-500'
-                            : 'border-slate-200 dark:border-zinc-700 bg-slate-50/70 dark:bg-zinc-800/40 hover:border-blue-500 hover:bg-blue-50/30 dark:hover:bg-blue-950/30'
-                        }`}
-                      >
-                        <div className="font-semibold text-slate-800 dark:text-zinc-200 group-hover:text-blue-600">
-                          {p.label}
-                        </div>
-                        <div className="text-[10px] text-slate-400 truncate">{p.name}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
 
                 {/* Sub-view: System & Security Directory */}
                 {sourceMode === 'system' && (
