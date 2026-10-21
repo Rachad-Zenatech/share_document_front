@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import {
   Dialog,
   DialogContent,
@@ -33,7 +32,8 @@ import {
   Columns,
   Rows,
   CornerDownLeft,
-  X
+  X,
+  Table2,
 } from 'lucide-react';
 import type { AttachedSpreadsheet, SecBlock } from '../../../types/secFiling';
 import {
@@ -240,8 +240,14 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const isPickerMode = mode === 'picker';
   const [activeTab, setActiveTab] = useState<'grid' | 'variables'>('grid');
 
-  // Multi-Tab state resolution
-  const spreadsheet = useMemo(() => ensureSpreadsheetTabs(rawSpreadsheet), [rawSpreadsheet]);
+  const modalContentRef = useRef<HTMLDivElement>(null);
+
+  // Multi-Tab state resolution with local optimistic state for instant UI reaction
+  const [localSpreadsheet, setLocalSpreadsheet] = useState<AttachedSpreadsheet>(() => ensureSpreadsheetTabs(rawSpreadsheet));
+  useEffect(() => {
+    setLocalSpreadsheet(ensureSpreadsheetTabs(rawSpreadsheet));
+  }, [rawSpreadsheet]);
+  const spreadsheet = localSpreadsheet;
   const safeSheet = spreadsheet;
   const tabs = safeSheet.tabs || [];
   const currentTab = tabs.find((t) => t.id === safeSheet.activeTabId) || tabs[0];
@@ -305,6 +311,18 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const [containerWidth, setContainerWidth] = useState<number>(1200);
   const [jumpRowInput, setJumpRowInput] = useState<string>('');
   const rafIdRef = useRef<number | null>(null);
+
+  const getContextMenuCoords = useCallback((e: React.MouseEvent) => {
+    const rect = modalContentRef.current?.getBoundingClientRect();
+    const offsetX = rect ? e.clientX - rect.left : e.clientX;
+    const offsetY = rect ? e.clientY - rect.top : e.clientY;
+    const maxX = (rect?.width || window.innerWidth) - 224;
+    const maxY = (rect?.height || window.innerHeight) - 440;
+    return {
+      x: Math.max(8, Math.min(offsetX, maxX)),
+      y: Math.max(8, Math.min(offsetY, maxY))
+    };
+  }, []);
 
   // Right-click Context Menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -382,14 +400,19 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   useEffect(() => {
     if (!contextMenu?.open) return;
     const handleCloseContextMenu = () => setContextMenu(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
     const timerId = setTimeout(() => {
       window.addEventListener('click', handleCloseContextMenu);
       window.addEventListener('contextmenu', handleCloseContextMenu);
+      window.addEventListener('keydown', handleKeyDown);
     }, 0);
     return () => {
       clearTimeout(timerId);
       window.removeEventListener('click', handleCloseContextMenu);
       window.removeEventListener('contextmenu', handleCloseContextMenu);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [contextMenu?.open]);
 
@@ -779,6 +802,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     const cleanRef = ref.toUpperCase();
     const nextCells = { ...currentCells, [cleanRef]: parsed };
     const next = updateActiveTabCells(spreadsheet, nextCells);
+    setLocalSpreadsheet(next);
 
     // Invalidate formula cache on cell edit
     formulaCacheRef.current.clear();
@@ -927,6 +951,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
       setEditingValue(newRaw !== undefined && newRaw !== null ? String(newRaw) : '');
     }
 
+    setLocalSpreadsheet(nextSpreadsheet);
     onUpdateSpreadsheet(nextSpreadsheet, updatedBlocks);
 
     if (shiftedCount > 0) {
@@ -1933,7 +1958,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[96vw] xl:max-w-[1440px] h-[92vh] p-0 gap-0 overflow-hidden flex flex-col bg-white dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 shadow-2xl">
+      <DialogContent ref={modalContentRef} className="relative w-[96vw] max-w-[96vw] sm:max-w-[96vw] xl:max-w-[1440px] h-[92vh] p-0 gap-0 overflow-hidden flex flex-col bg-white dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 shadow-2xl">
         {/* Interactive Cell Picker Banner */}
         {isPickerMode && (
           <div className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white flex items-center justify-between text-xs shadow-inner">
@@ -2804,13 +2829,15 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                             }}
                             onContextMenu={(e) => {
                               e.preventDefault();
+                              e.stopPropagation();
                               const newRef = `${col}${selectedRow || 1}`;
                               handleSelectCell(newRef);
                               const parsed = parseCellRef(newRef);
+                              const coords = getContextMenuCoords(e);
                               setContextMenu({
                                 open: true,
-                                x: Math.min(e.clientX, window.innerWidth - 220),
-                                y: Math.min(e.clientY, window.innerHeight - 260),
+                                x: coords.x,
+                                y: coords.y,
                                 cellRef: newRef,
                                 rowIndex: selectedRow || 1,
                                 colIndex: parsed?.colIndex || 1
@@ -2935,15 +2962,17 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
+                      e.stopPropagation();
                       const td = (e.target as HTMLElement).closest<HTMLTableCellElement>('[data-cell-ref]');
                       if (td && td.dataset.cellRef) {
                         const ref = td.dataset.cellRef;
                         handleSelectCell(ref);
                         const parsed = parseCellRef(ref);
+                        const coords = getContextMenuCoords(e);
                         setContextMenu({
                           open: true,
-                          x: Math.min(e.clientX, window.innerWidth - 220),
-                          y: Math.min(e.clientY, window.innerHeight - 260),
+                          x: coords.x,
+                          y: coords.y,
                           cellRef: ref,
                           rowIndex: parsed?.rowIndex || 1,
                           colIndex: parsed?.colIndex || 1
@@ -2975,13 +3004,15 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                           }}
                           onContextMenu={(e) => {
                             e.preventDefault();
+                            e.stopPropagation();
                             const newRef = `${selectedColLetter || 'A'}${row}`;
                             handleSelectCell(newRef);
                             const parsed = parseCellRef(newRef);
+                            const coords = getContextMenuCoords(e);
                             setContextMenu({
                               open: true,
-                              x: Math.min(e.clientX, window.innerWidth - 220),
-                              y: Math.min(e.clientY, window.innerHeight - 260),
+                              x: coords.x,
+                              y: coords.y,
                               cellRef: newRef,
                               rowIndex: row,
                               colIndex: parsed?.colIndex || 1
@@ -3525,10 +3556,12 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
         {/* SPREADSHEET RIGHT-CLICK CONTEXT MENU — rendered via portal to document.body so it is
              fully outside the Dialog's CSS transform stacking context. This fixes the bug
              where position:fixed coords (e.clientX/Y) were offset by the dialog's origin. */}
-        {contextMenu?.open && createPortal(
+        {contextMenu?.open && (
           <div
             style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-            className="fixed z-[9999] w-52 bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-md shadow-2xl p-1 text-xs select-none animate-in fade-in zoom-in-95 duration-75"
+            className="absolute z-[9999] w-52 bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-md shadow-2xl p-1 text-xs select-none animate-in fade-in zoom-in-95 duration-75"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.preventDefault()}
           >
@@ -3540,7 +3573,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             {/* Insert Row Above */}
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 const row = contextMenu.rowIndex;
                 setContextMenu(null);
                 handleInsertRowAbove(row);
@@ -3557,7 +3592,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             {/* Insert Row Below */}
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 const row = contextMenu.rowIndex;
                 setContextMenu(null);
                 handleInsertRowBelow(row);
@@ -3576,7 +3613,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             {/* Insert Column Left */}
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 const col = contextMenu.colIndex;
                 setContextMenu(null);
                 handleInsertColLeft(col);
@@ -3593,7 +3632,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             {/* Insert Column Right */}
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 const col = contextMenu.colIndex;
                 setContextMenu(null);
                 handleInsertColRight(col);
@@ -3612,7 +3653,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             {/* Delete Row */}
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 const row = contextMenu.rowIndex;
                 setContextMenu(null);
                 handleDeleteSelectedRow(row);
@@ -3628,7 +3671,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             {/* Delete Column */}
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 const col = contextMenu.colIndex;
                 setContextMenu(null);
                 handleDeleteSelectedCol(col);
@@ -3643,7 +3688,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 setContextMenu(null);
                 setDeleteOption('entire_row');
                 setIsDeleteDialogOpen(true);
@@ -3659,7 +3706,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 const ref = contextMenu.cellRef;
                 setContextMenu(null);
                 handleCopyCell(ref);
@@ -3676,7 +3725,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             <button
               type="button"
               disabled={!copiedCell}
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 const ref = contextMenu.cellRef;
                 setContextMenu(null);
                 handlePasteCell(ref);
@@ -3692,7 +3743,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 setContextMenu(null);
                 handleFillDown();
               }}
@@ -3707,7 +3760,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 setContextMenu(null);
                 handleFillRight();
               }}
@@ -3725,7 +3780,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             {/* Link Cell directly into Document */}
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 const ref = contextMenu.cellRef;
                 setContextMenu(null);
                 handleSelectCell(ref);
@@ -3758,7 +3815,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             {/* Copy Formula Token */}
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 const ref = contextMenu.cellRef;
                 setContextMenu(null);
                 const val = currentCells[ref];
@@ -3781,7 +3840,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 setContextMenu(null);
                 if (navigator?.clipboard) {
                   navigator.clipboard.writeText(contextMenu.cellRef);
@@ -3796,7 +3857,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
             <button
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 setContextMenu(null);
                 handleClearSelectedCell();
               }}
@@ -3805,8 +3868,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               <X className="w-3.5 h-3.5 text-slate-400" />
               <span>Clear Contents</span>
             </button>
-          </div>,
-          document.body
+          </div>
         )}
 
         {/* ------------------------------------------------------------- */}
