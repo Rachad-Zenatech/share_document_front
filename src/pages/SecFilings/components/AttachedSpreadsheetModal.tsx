@@ -1779,7 +1779,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent ref={modalContentRef} className="relative w-[96vw] max-w-[96vw] sm:max-w-[96vw] xl:max-w-[1440px] h-[92vh] p-0 gap-0 overflow-hidden flex flex-col bg-white dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 shadow-2xl">
+      <DialogContent ref={modalContentRef} className="w-[96vw] max-w-[96vw] sm:max-w-[96vw] xl:max-w-[1440px] h-[92vh] p-0 gap-0 overflow-hidden flex flex-col bg-white dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 shadow-2xl">
         {/* Interactive Cell Picker Banner */}
         {isPickerMode && (
           <div className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white flex items-center justify-between text-xs shadow-inner">
