@@ -2705,6 +2705,25 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               <>
                 <Button
                   type="button"
+                  size="sm"
+                  onClick={handleConfirmInsert}
+                  className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1 shadow-sm cursor-pointer"
+                  title="Link selected cell into document"
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  <span>
+                    Link{' '}
+                    {createCellVariableToken(
+                      selectedCellRef,
+                      undefined,
+                      currentTab?.name,
+                      isMultiTab
+                    )}{' '}
+                    to Document
+                  </span>
+                </Button>
+                <Button
+                  type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => handleCopyVar(false)}
@@ -3703,6 +3722,63 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
             <div className="h-px bg-slate-200 dark:bg-zinc-800 my-1" />
 
+            {/* Link Cell directly into Document */}
+            <button
+              type="button"
+              onClick={() => {
+                const ref = contextMenu.cellRef;
+                setContextMenu(null);
+                handleSelectCell(ref);
+                const val = currentCells[ref];
+                const token = createCellVariableToken(
+                  ref,
+                  formatCellValue(val),
+                  currentTab?.name,
+                  isMultiTab
+                );
+                if (onInsertVariable) {
+                  onInsertVariable(token, formatCellValue(val));
+                  onOpenChange(false);
+                  toast.success(`Linked ${token} into document!`);
+                } else {
+                  if (navigator?.clipboard) {
+                    navigator.clipboard.writeText(token);
+                  }
+                  toast.success(`Copied formula link: ${token}`, {
+                    description: 'Paste into any table cell or document block to link live data.'
+                  });
+                }
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded bg-emerald-50/80 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-left text-emerald-800 dark:text-emerald-200 font-semibold cursor-pointer border border-emerald-200/80 dark:border-emerald-800/80 mb-1"
+            >
+              <Link2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Link Cell ({contextMenu.cellRef}) to Document</span>
+            </button>
+
+            {/* Copy Formula Token */}
+            <button
+              type="button"
+              onClick={() => {
+                const ref = contextMenu.cellRef;
+                setContextMenu(null);
+                const val = currentCells[ref];
+                const token = createCellVariableToken(
+                  ref,
+                  formatCellValue(val),
+                  currentTab?.name,
+                  isMultiTab
+                );
+                if (navigator?.clipboard) {
+                  navigator.clipboard.writeText(token);
+                  toast.success(`Copied formula token: ${token}`);
+                }
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
+            >
+              <Table2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Copy Formula Token (@{contextMenu.cellRef})</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -3714,8 +3790,8 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               }}
               className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-left text-slate-700 dark:text-zinc-300 cursor-pointer"
             >
-              <Copy className="w-3.5 h-3.5 text-slate-400" />
-              <span>Copy Cell Ref ({contextMenu.cellRef})</span>
+              <Copy className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>Copy Cell Coordinate ({contextMenu.cellRef})</span>
             </button>
 
             <button

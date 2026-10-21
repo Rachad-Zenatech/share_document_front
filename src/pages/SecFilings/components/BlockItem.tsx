@@ -622,7 +622,7 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
                 e.stopPropagation();
                 if (onOpenCellPicker) {
                   onOpenCellPicker((cellRef, displayVal) => {
-                    const token = `@${cellRef}{${displayVal}}`;
+                    const token = cellRef.startsWith("@") ? cellRef : `@${cellRef}{${displayVal}}`;
                     const curText = (block as any).text || (block as any).content || '';
                     if (block.type === 'heading' || block.type === 'paragraph') {
                       onUpdate({ text: curText ? `${curText} ${token}` : token } as any);
@@ -1166,7 +1166,7 @@ const HeadingBlockEditor: React.FC<{
     const end = el ? el.selectionEnd : localText.length;
 
     onOpenCellPicker((cellRef, displayVal) => {
-      const token = `@${cellRef}{${displayVal}}`;
+      const token = cellRef.startsWith("@") ? cellRef : `@${cellRef}{${displayVal}}`;
       const before = localText.substring(0, start);
       const after = localText.substring(end);
       const nextText = `${before}${token}${after}`;
@@ -1209,7 +1209,7 @@ const HeadingBlockEditor: React.FC<{
   const defaultFontSize =
     block.level === 1 ? 20 : block.level === 2 ? 16 : block.level === 3 ? 14.5 : 13.5;
   const effectiveFontSize = block.fontSize || defaultFontSize;
-  const hasVariables = /@[A-Za-z]{1,3}\d{1,4}/.test(localText);
+  const hasVariables = hasDocumentVariables(localText);
 
   return (
     <div className="group/head relative m-0 p-0">
@@ -1352,7 +1352,7 @@ const ParagraphBlockEditor: React.FC<{
     const end = el ? el.selectionEnd : localText.length;
 
     onOpenCellPicker((cellRef, displayVal) => {
-      const token = `@${cellRef}{${displayVal}}`;
+      const token = cellRef.startsWith("@") ? cellRef : `@${cellRef}{${displayVal}}`;
       const before = localText.substring(0, start);
       const after = localText.substring(end);
       const nextText = `${before}${token}${after}`;
@@ -1393,7 +1393,7 @@ const ParagraphBlockEditor: React.FC<{
   }, [localText, block.fontSize, block.fontFamily]);
 
   const effectiveFontSize = block.fontSize || 14;
-  const hasVariables = /@[A-Za-z]{1,3}\d{1,4}/.test(localText);
+  const hasVariables = hasDocumentVariables(localText);
 
   return (
     <div className="relative group/p m-0 p-0">
@@ -1683,15 +1683,17 @@ const TableCellInput: React.FC<{
       )}
 
       {/* Quick link button on hover or focus if cell is not yet linked */}
-      {!isVariable && isFocused && onOpenCellPicker && (
+      {!isVariable && onOpenCellPicker && (
         <button
           type="button"
           onMouseDown={(e) => {
             e.preventDefault();
             handleLinkCell();
           }}
-          title="Link cell from spreadsheet"
-          className="absolute -top-2 right-0 text-[8px] font-mono font-bold px-1 rounded bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-800 dark:bg-zinc-800 dark:text-zinc-300 border border-slate-300 dark:border-zinc-700 shadow-2xs cursor-pointer z-10 flex items-center gap-0.5"
+          title="Link cell from attached spreadsheet"
+          className={`absolute -top-2 right-0 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 dark:bg-zinc-800 dark:hover:bg-emerald-950 dark:text-zinc-200 border border-slate-300 dark:border-zinc-600 hover:border-emerald-500 shadow-xs cursor-pointer z-20 flex items-center gap-0.5 transition-all ${
+            isFocused ? 'opacity-100' : 'opacity-0 group-hover/cell:opacity-100'
+          }`}
         >
           <Table2 className="w-2.5 h-2.5 text-emerald-600" />
           <span>fx</span>

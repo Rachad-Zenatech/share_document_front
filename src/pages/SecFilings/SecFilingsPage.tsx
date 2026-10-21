@@ -1164,7 +1164,30 @@ export default function SecFilingsPage() {
         onUpdateCell={updateSpreadsheetCell}
         blocks={workingBlocks}
         mode={spreadsheetModalMode}
-        onInsertVariable={pickerCallback || undefined}
+        onInsertVariable={pickerCallback || ((token: string) => {
+          if (selectedBlockId) {
+            const b = workingBlocks.find((block) => block.id === selectedBlockId);
+            if (b) {
+              if (b.type === 'heading' || b.type === 'paragraph') {
+                const cur = (b as any).text || '';
+                updateBlock(b.id, { text: cur ? `${cur} ${token}` : token });
+                toast.success(`Linked ${token} to selected ${b.type}!`);
+                return;
+              } else if (b.type === 'callout') {
+                const cur = (b as any).content || '';
+                updateBlock(b.id, { content: cur ? `${cur} ${token}` : token });
+                toast.success(`Linked ${token} to callout disclosure!`);
+                return;
+              }
+            }
+          }
+          if (navigator?.clipboard) {
+            navigator.clipboard.writeText(token);
+            toast.success(`Copied formula link: ${token}`, {
+              description: 'Paste into any table cell or document block to link live spreadsheet data.'
+            });
+          }
+        })}
         targetBlockTitle={pickerBlockTitle}
         initialCellRef={targetSpreadsheetCell}
         initialTabName={targetSpreadsheetTab}
