@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import {
   ChevronUp,
   ChevronDown,
@@ -1199,12 +1199,28 @@ const HeadingBlockEditor: React.FC<{
     }
   };
 
+  const adjustHeight = useCallback((el: HTMLTextAreaElement | null) => {
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = `${Math.max(28, el.scrollHeight)}px`;
+    }
+  }, []);
+
+  const setTextareaRef = useCallback(
+    (el: HTMLTextAreaElement | null) => {
+      (textareaRef as any).current = el;
+      if (el) {
+        adjustHeight(el);
+      }
+    },
+    [adjustHeight]
+  );
+
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      adjustHeight(textareaRef.current);
     }
-  }, [localText, block.fontSize, block.fontFamily]);
+  }, [localText, block.fontSize, block.fontFamily, isFocused, adjustHeight]);
 
   const defaultFontSize =
     block.level === 1 ? 20 : block.level === 2 ? 16 : block.level === 3 ? 14.5 : 13.5;
@@ -1219,8 +1235,11 @@ const HeadingBlockEditor: React.FC<{
             onClick={() => {
               setIsFocused(true);
               setTimeout(() => {
-                textareaRef.current?.focus();
-              }, 20);
+                if (textareaRef.current) {
+                  textareaRef.current.focus();
+                  adjustHeight(textareaRef.current);
+                }
+              }, 10);
             }}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -1248,7 +1267,7 @@ const HeadingBlockEditor: React.FC<{
           </div>
         ) : (
           <textarea
-            ref={textareaRef}
+            ref={setTextareaRef}
             rows={1}
             value={localText}
             onChange={handleChange}
@@ -1385,12 +1404,28 @@ const ParagraphBlockEditor: React.FC<{
     }
   };
 
+  const adjustHeight = useCallback((el: HTMLTextAreaElement | null) => {
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = `${Math.max(28, el.scrollHeight)}px`;
+    }
+  }, []);
+
+  const setTextareaRef = useCallback(
+    (el: HTMLTextAreaElement | null) => {
+      (textareaRef as any).current = el;
+      if (el) {
+        adjustHeight(el);
+      }
+    },
+    [adjustHeight]
+  );
+
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      adjustHeight(textareaRef.current);
     }
-  }, [localText, block.fontSize, block.fontFamily]);
+  }, [localText, block.fontSize, block.fontFamily, isFocused, adjustHeight]);
 
   const effectiveFontSize = block.fontSize || 14;
   const hasVariables = hasDocumentVariables(localText);
@@ -1403,8 +1438,11 @@ const ParagraphBlockEditor: React.FC<{
             onClick={() => {
               setIsFocused(true);
               setTimeout(() => {
-                textareaRef.current?.focus();
-              }, 20);
+                if (textareaRef.current) {
+                  textareaRef.current.focus();
+                  adjustHeight(textareaRef.current);
+                }
+              }, 10);
             }}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -1432,7 +1470,7 @@ const ParagraphBlockEditor: React.FC<{
           </div>
         ) : (
           <textarea
-            ref={textareaRef}
+            ref={setTextareaRef}
             rows={1}
             value={localText}
             onChange={handleChange}
