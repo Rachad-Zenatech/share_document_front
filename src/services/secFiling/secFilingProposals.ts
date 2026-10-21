@@ -17,6 +17,7 @@ import {
   setSaveProposalsTimer
 } from './secFilingStorage';
 import { sanitizeAndCompactBlocks } from './secFilingSanitizer';
+import { addDocumentInvitee } from './secFilingCore';
 import { calculateDiffs } from './secFilingDiff';
 import {
   getMainDocument,
@@ -185,6 +186,11 @@ export function createContributorInvite(params: {
     proposals.unshift(newProposal);
     saveProposals(proposals);
 
+    // Register invited contributor on the document for access permission
+    if (params.baseDoc?.id && author.email) {
+      addDocumentInvitee(params.baseDoc.id, author.email);
+    }
+
     const inviteUrl = getProposalInviteUrl(newProposal);
 
     broadcastSync("CONTRIBUTOR_INVITED", { proposalId: newProposal.id, name: params.contributorName });
@@ -241,6 +247,11 @@ export function getOrCreateContributorProposal(params: {
 
     proposals.unshift(newProposal);
     saveProposals(proposals);
+
+    // Register invited contributor on the document for access permission
+    if (mainDoc.id && author.email) {
+      addDocumentInvitee(mainDoc.id, author.email);
+    }
     return newProposal;
 }
 

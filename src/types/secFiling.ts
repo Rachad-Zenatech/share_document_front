@@ -300,6 +300,11 @@ export interface SecFilingDocument {
   lockedBy?: string | null;
   attachedSpreadsheetId?: string;
   attachedSpreadsheet?: AttachedSpreadsheet | null;
+  owner?: string;
+  ownerId?: string;
+  ownerEmail?: string;
+  invitedUserIds?: string[];
+  invitedEmails?: string[];
 }
 
 export interface SpreadsheetCellDiff {
@@ -415,6 +420,10 @@ export interface SecDocumentSummary {
   updatedAt: string;
   createdAt: string;
   owner: string;
+  ownerId?: string;
+  ownerEmail?: string;
+  invitedUserIds?: string[];
+  invitedEmails?: string[];
   isShared: boolean;
   version: string;
   versionNumber?: number;

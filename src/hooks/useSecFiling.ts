@@ -17,6 +17,7 @@ import type {
 import { secFilingService, setStorageFailureListener, getProposalInviteUrl } from '../services/secFilingService';
 import { queryKeys } from '../services/queryKeys';
 import { useAuth } from '../lib/AuthContext';
+import { canUserAccessDocument } from '../services/secFilingService';
 import { toast } from 'sonner';
 import { ZENATECH_LOGO_DATA_URL } from '../data/zenatechLogoAsset';
 import { blockMatchesQuery } from '../utils/secFilingSearch';
@@ -58,6 +59,11 @@ export function useSecFiling() {
 
   const [undoStack, setUndoStack] = useState<SecBlock[][]>([]);
   const [redoStack, setRedoStack] = useState<SecBlock[][]>([]);
+
+  // Document security verification: Owner, Invited Contributor, or Super Admin
+  const isAccessGranted = useMemo(() => {
+    return canUserAccessDocument(mainDoc, user, proposals);
+  }, [mainDoc, user, proposals]);
   const isUndoRedoActionRef = useRef<boolean>(false);
 
   // --------------------------------------------------------------------------
@@ -1424,6 +1430,7 @@ export function useSecFiling() {
     updateAttachedSpreadsheet: handleUpdateAttachedSpreadsheet,
     updateSpreadsheetCell: handleUpdateSpreadsheetCell,
     assignSpreadsheet: handleAssignSpreadsheet,
-    setWorkingBlocks
+    setWorkingBlocks,
+    isAccessGranted
   };
 }

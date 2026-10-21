@@ -56,7 +56,16 @@ import {
 } from './secFiling/secFilingProposals';
 
 // 5. Core Document Operations
+export {
+  canUserAccessDocument,
+  isDocumentOwner,
+  addDocumentInvitee
+} from './secFiling/secFilingCore';
+
 import {
+  canUserAccessDocument,
+  isDocumentOwner,
+  addDocumentInvitee,
   getMainDocument,
   saveMainDocument,
   getDocumentsList,
@@ -114,6 +123,9 @@ import {
  * Preserves 100% backwards compatibility with all existing callers.
  */
 export const secFilingService = {
+  canUserAccessDocument,
+  isDocumentOwner,
+  addDocumentInvitee,
   flushPendingSaves,
   cleanupStorageQuota,
 

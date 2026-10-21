@@ -475,7 +475,11 @@ export function openDocument(id: string): SecFilingDocument {
 }
 
 
-export function createDocumentFromTemplate(templateId: string, customTitle?: string): SecFilingDocument {
+export function createDocumentFromTemplate(
+  templateId: string,
+  customTitle?: string,
+  ownerInfo?: { ownerId?: string; ownerEmail?: string; ownerName?: string }
+): SecFilingDocument {
     let newDoc: SecFilingDocument;
     const title = customTitle || (templateId === 'blank' ? 'Untitled Document' : `New ${templateId.toUpperCase()} Document`);
 
@@ -512,6 +516,9 @@ export function createDocumentFromTemplate(templateId: string, customTitle?: str
 
     // Add to documents list
     const list = getDocumentsList();
+    if (ownerInfo?.ownerId) newDoc.ownerId = ownerInfo.ownerId;
+    if (ownerInfo?.ownerEmail) newDoc.ownerEmail = ownerInfo.ownerEmail;
+
     const summary: SecDocumentSummary = {
       id: newDoc.id,
       title: newDoc.title,
@@ -519,7 +526,9 @@ export function createDocumentFromTemplate(templateId: string, customTitle?: str
       period: newDoc.period,
       updatedAt: newDoc.updatedAt,
       createdAt: newDoc.createdAt,
-      owner: 'me',
+      owner: ownerInfo?.ownerName || 'me',
+      ownerId: ownerInfo?.ownerId,
+      ownerEmail: ownerInfo?.ownerEmail,
       isShared: false,
       version: newDoc.version,
       blocksCount: newDoc.blocks.length,
@@ -776,4 +785,125 @@ export function resetToDefault(): void {
     localStorage.removeItem(STORAGE_KEYS.PROPOSALS);
     localStorage.removeItem(STORAGE_KEYS.VERSION_HISTORY);
     safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(INITIAL_SEC_FILING_DOC));
+}
+export interface DocumentAuthUser {
+  id?: string;
+  email?: string;
+  full_name?: string;
+  is_super_admin?: boolean;
+}
+
+/**
+ * Checks whether a user is authorized to view/access a document.
+ * 1. Super Admins (is_super_admin === true) have full access to all documents.
+ * 2. Document owners have access to their documents.
+ * 3. Users explicitly added to invitedUserIds or invitedEmails have access.
+ * 4. Users with an active change proposal on this document have access.
+ * All others are denied access.
+ */
+export function canUserAccessDocument(
+  doc: SecDocumentSummary | SecFilingDocument,
+  user: DocumentAuthUser | null,
+  proposals?: any[]
+): boolean {
+  if (!user) return false;
+  if (user.is_super_admin) return true;
+
+  const userEmail = (user.email || '').trim().toLowerCase();
+  const userId = user.id;
+
+  // 1. Owner check
+  if (doc.ownerId && userId && doc.ownerId === userId) return true;
+  if (doc.ownerEmail && userEmail && doc.ownerEmail.trim().toLowerCase() === userEmail) return true;
+  if (!doc.ownerId && !doc.ownerEmail) {
+    const docOwner = (doc as any).owner;
+  if (docOwner === 'me' || (userEmail && docOwner?.toLowerCase() === userEmail)) return true;
+  }
+
+  // 2. Direct invitee check
+  if (userId && doc.invitedUserIds?.includes(userId)) return true;
+  if (userEmail && doc.invitedEmails?.some((e) => e.trim().toLowerCase() === userEmail)) return true;
+
+  // 3. Proposal contributor check
+  if (!proposals && typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.PROPOSALS);
+      if (raw) proposals = JSON.parse(raw);
+    } catch {
+      // ignore
+    }
+  }
+
+  if (Array.isArray(proposals)) {
+    const isContributor = proposals.some((p: any) => {
+      if (p.documentId && p.documentId !== doc.id) return false;
+      const authorEmail = p.author?.email?.trim().toLowerCase();
+      const authorId = p.author?.id;
+      return (userId && authorId === userId) || (userEmail && authorEmail === userEmail);
+    });
+    if (isContributor) return true;
+  }
+
+  return false;
+}
+
+export function isDocumentOwner(
+  doc: SecDocumentSummary | SecFilingDocument,
+  user: DocumentAuthUser | null
+): boolean {
+  if (!user) return false;
+  const userEmail = (user.email || '').trim().toLowerCase();
+  const userId = user.id;
+
+  if (doc.ownerId && userId && doc.ownerId === userId) return true;
+  if (doc.ownerEmail && userEmail && doc.ownerEmail.trim().toLowerCase() === userEmail) return true;
+  if (!doc.ownerId && !doc.ownerEmail && (doc as any).owner === 'me') return true;
+  return false;
+}
+
+export function addDocumentInvitee(
+  docId: string,
+  inviteeEmail: string,
+  inviteeUserId?: string
+): void {
+  const cleanEmail = (inviteeEmail || '').trim().toLowerCase();
+  if (!cleanEmail && !inviteeUserId) return;
+
+  const list = getDocumentsList();
+  const targetDoc = list.find((d) => d.id === docId);
+  if (targetDoc) {
+    const emails = new Set(targetDoc.invitedEmails || []);
+    if (cleanEmail) emails.add(cleanEmail);
+    targetDoc.invitedEmails = Array.from(emails);
+
+    if (inviteeUserId) {
+      const uids = new Set(targetDoc.invitedUserIds || []);
+      uids.add(inviteeUserId);
+      targetDoc.invitedUserIds = Array.from(uids);
+    }
+    targetDoc.isShared = true;
+    saveDocumentsList(list);
+  }
+
+  const customKey = `sec_doc_content_${docId}`;
+  if (typeof localStorage !== 'undefined') {
+    const raw = localStorage.getItem(customKey);
+    if (raw) {
+      try {
+        const parsed: SecFilingDocument = JSON.parse(raw);
+        const emails = new Set(parsed.invitedEmails || []);
+        if (cleanEmail) emails.add(cleanEmail);
+        parsed.invitedEmails = Array.from(emails);
+
+        if (inviteeUserId) {
+          const uids = new Set(parsed.invitedUserIds || []);
+          uids.add(inviteeUserId);
+          parsed.invitedUserIds = Array.from(uids);
+        }
+        localStorage.setItem(customKey, JSON.stringify(parsed));
+      } catch {
+        // ignore
+      }
+    }
+  }
 }

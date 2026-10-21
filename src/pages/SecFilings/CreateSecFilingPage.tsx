@@ -1,6 +1,7 @@
 import { paginateBlocks } from '../../utils/secFilingPagination';
 import { useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/lib/AuthContext';
 import {
   Search,
   MoreVertical,
@@ -52,7 +53,7 @@ import { Label } from '../../components/ui/label';
 import { Checkbox } from '../../components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
-import { secFilingService } from '../../services/secFilingService';
+import { secFilingService, canUserAccessDocument, isDocumentOwner } from '../../services/secFilingService';
 import { DOCUMENT_TEMPLATES } from '../../data/secDocumentTemplates';
 import type { DocumentTemplateDefinition } from '../../data/secDocumentTemplates';
 import type { SecDocumentSummary, SecFilingDocument, SecBlock } from '../../types/secFiling';
@@ -233,6 +234,7 @@ function DocumentThumbnailPreview({ doc }: { doc: SecDocumentSummary }) {
 
 export default function CreateSecFilingPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Documents list state
   const [documents, setDocuments] = useState<SecDocumentSummary[]>(() =>
@@ -296,6 +298,9 @@ export default function CreateSecFilingPage() {
   const filteredDocuments = useMemo(() => {
     let list = [...documents];
 
+    // Strict security gate: only documents user is authorized to access (Super Admin, Owner, or Invited Contributor)
+    list = list.filter((d) => canUserAccessDocument(d, user));
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
@@ -307,9 +312,9 @@ export default function CreateSecFilingPage() {
     }
 
     if (ownershipFilter === 'me') {
-      list = list.filter((d) => d.owner === 'me');
+      list = list.filter((d) => isDocumentOwner(d, user));
     } else if (ownershipFilter === 'not_me') {
-      list = list.filter((d) => d.owner !== 'me');
+      list = list.filter((d) => !isDocumentOwner(d, user));
     }
 
     if (sortBy === 'title') {
@@ -319,7 +324,7 @@ export default function CreateSecFilingPage() {
     }
 
     return list;
-  }, [documents, searchQuery, ownershipFilter, sortBy]);
+  }, [documents, user, searchQuery, ownershipFilter, sortBy]);
 
   // Handlers
   const handleOpenDoc = (id: string) => {
@@ -328,13 +333,21 @@ export default function CreateSecFilingPage() {
   };
 
   const handleCreateFromTemplate = (template: DocumentTemplateDefinition) => {
-    const doc = secFilingService.createDocumentFromTemplate(template.id);
+    const doc = secFilingService.createDocumentFromTemplate(template.id, undefined, {
+      ownerId: user?.id,
+      ownerEmail: user?.email,
+      ownerName: user?.full_name || user?.email || 'Me'
+    });
     toast.success(`Created "${doc.title}"`);
     navigate('/sec-filings/editor');
   };
 
   const handleStartBlank = () => {
-    secFilingService.createDocumentFromTemplate('blank', 'Untitled Document');
+    secFilingService.createDocumentFromTemplate('blank', 'Untitled Document', {
+      ownerId: user?.id,
+      ownerEmail: user?.email,
+      ownerName: user?.full_name || user?.email || 'Me'
+    });
     toast.success('Created blank document');
     navigate('/sec-filings/editor');
   };
@@ -438,7 +451,9 @@ export default function CreateSecFilingPage() {
         period: parsedDoc.period,
         updatedAt: parsedDoc.updatedAt,
         createdAt: parsedDoc.createdAt,
-        owner: 'me',
+        owner: user?.full_name || user?.email || 'me',
+        ownerId: user?.id,
+        ownerEmail: user?.email,
         isShared: true,
         version: parsedDoc.version || 'v1.0.0 (Locked Baseline)',
         blocksCount: parsedDoc.blocks.length,
@@ -594,7 +609,9 @@ export default function CreateSecFilingPage() {
       period: newDoc.period,
       updatedAt: newDoc.updatedAt,
       createdAt: newDoc.createdAt,
-      owner: 'me',
+      owner: user?.full_name || user?.email || 'me',
+      ownerId: user?.id,
+      ownerEmail: user?.email,
       isShared: true,
       version: newDoc.version,
       blocksCount: newDoc.blocks.length,

@@ -23,7 +23,8 @@ import {
   Layers,
   ExternalLink,
   Unlink,
-  Upload
+  Upload,
+  ShieldAlert
 } from 'lucide-react';
 import type { SecBlock } from '../../types/secFiling';
 import { useSecFiling } from '../../hooks/useSecFiling';
@@ -114,7 +115,8 @@ export default function SecFilingsPage() {
     updateAttachedSpreadsheet,
     updateSpreadsheetCell,
     assignSpreadsheet,
-    setWorkingBlocks
+    setWorkingBlocks,
+    isAccessGranted
   } = useSecFiling();
 
   const [activeMatchIdx, setActiveMatchIdx] = useState<number>(0);
@@ -384,6 +386,31 @@ export default function SecFilingsPage() {
   const pendingProposalsCount = proposals.filter((p) => p.status === 'pending_review').length;
   const [showOutline, setShowOutline] = useState(true);
   const [showInspector, setShowInspector] = useState(false);
+
+  if (isAccessGranted === false) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-6 bg-slate-50 dark:bg-zinc-950">
+        <div className="max-w-md w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-8 text-center shadow-xl">
+          <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/60 flex items-center justify-center mx-auto mb-4 text-amber-600 dark:text-amber-400">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+            Document Access Restricted
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-zinc-400 mb-6 leading-relaxed">
+            You do not have permission to view or edit <span className="font-semibold text-slate-800 dark:text-zinc-200">"{mainDoc?.title || 'this filing'}"</span>. Only the document owner, explicitly invited contributors, and Super Administrators can access this filing.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/sec-filings')}
+            className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition-colors shadow-sm cursor-pointer"
+          >
+            ← Return to Document Hub
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-100/70 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 pb-16">
