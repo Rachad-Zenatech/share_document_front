@@ -410,23 +410,25 @@ export function mergeSelectiveChanges(
       const baseTabs = baseSheet.tabs || [];
       const propTabs = proposal.attachedSpreadsheet.tabs || [];
 
-      const mergedTabs = propTabs.length > 0 ? propTabs.map(pTab => {
-        const matchingBaseTab = baseTabs.find(b => b.id === pTab.id || b.name === pTab.name);
-        return {
+      // Proposed tabs represent the authoritative new structure (rows, columns, headers, cells)
+      // for the workbook. Any tabs present in proposal take full precedence, while any
+      // unreferenced legacy tabs in base are preserved.
+      const propTabIds = new Set(propTabs.map(t => t.id || t.name));
+      const untouchedBaseTabs = baseTabs.filter(b => !propTabIds.has(b.id) && !propTabIds.has(b.name));
+
+      const mergedTabs = [
+        ...propTabs.map(pTab => ({
           ...pTab,
-          cells: {
-            ...(matchingBaseTab?.cells || {}),
-            ...(pTab.cells || {})
-          }
-        };
-      }) : baseTabs;
+          cells: { ...(pTab.cells || {}) }
+        })),
+        ...untouchedBaseTabs
+      ];
 
       mergedSpreadsheet = {
         ...baseSheet,
         ...proposal.attachedSpreadsheet,
         cells: {
-          ...(baseSheet.cells || {}),
-          ...(proposal.attachedSpreadsheet.cells || {})
+          ...(proposal.attachedSpreadsheet.cells || propTabs[0]?.cells || {})
         },
         tabs: mergedTabs.length > 0 ? mergedTabs : proposal.attachedSpreadsheet.tabs || baseSheet.tabs,
         updatedAt: new Date().toISOString()

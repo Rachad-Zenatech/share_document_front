@@ -20,6 +20,7 @@ import {
   MoveVertical,
   Type,
   Table,
+  FileSpreadsheet,
   FolderTree,
   Edit3,
   Plus,
@@ -313,6 +314,42 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
     () => changedDiffs.filter((d) => d.changeCategories?.includes('financial_data')).length,
     [changedDiffs]
   );
+
+  const spreadsheetStructureSummary = useMemo(() => {
+    if (!proposal?.attachedSpreadsheet) return null;
+    const baseSheet = mainDoc.attachedSpreadsheet || secFilingService.getAttachedSpreadsheet(mainDoc.id);
+    if (!baseSheet) return null;
+
+    const baseTabs = baseSheet.tabs || [];
+    const propTabs = proposal.attachedSpreadsheet.tabs || [];
+
+    let totalRowDiff = 0;
+    let totalColDiff = 0;
+    let totalHeaderDiffs = 0;
+
+    for (const pTab of propTabs) {
+      const bTab = baseTabs.find((b) => b.id === pTab.id || b.name.toLowerCase() === pTab.name.toLowerCase());
+      if (bTab) {
+        if (bTab.rowCount && pTab.rowCount) totalRowDiff += (pTab.rowCount - bTab.rowCount);
+        if (bTab.colCount && pTab.colCount) totalColDiff += (pTab.colCount - bTab.colCount);
+        if (bTab.headers && pTab.headers) {
+          const maxLen = Math.max(bTab.headers.length, pTab.headers.length);
+          for (let i = 0; i < maxLen; i++) {
+            if ((bTab.headers[i] || '') !== (pTab.headers[i] || '')) {
+              totalHeaderDiffs++;
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      totalRowDiff,
+      totalColDiff,
+      totalHeaderDiffs,
+      hasStructureChanges: totalRowDiff !== 0 || totalColDiff !== 0 || totalHeaderDiffs > 0
+    };
+  }, [mainDoc, proposal]);
 
   const sheetWidthClass =
     docWidth === 'full'
@@ -745,6 +782,25 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                   >
                     <Table className="w-2.5 h-2.5 text-amber-600" />
                     {spreadsheetDiffs.length} Excel Cells
+                  </button>
+                )}
+                {spreadsheetStructureSummary?.hasStructureChanges && (
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('spreadsheet-diffs')}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-950 dark:text-emerald-200 font-bold border border-emerald-300 text-[10px] cursor-pointer hover:bg-emerald-200 transition-colors"
+                    title="View Spreadsheet Grid Row / Column / Header Structure Changes"
+                  >
+                    <FileSpreadsheet className="w-2.5 h-2.5 text-emerald-600" />
+                    {spreadsheetStructureSummary.totalRowDiff !== 0 && (
+                      <span>{spreadsheetStructureSummary.totalRowDiff > 0 ? `+${spreadsheetStructureSummary.totalRowDiff} Rows` : `${spreadsheetStructureSummary.totalRowDiff} Rows`}</span>
+                    )}
+                    {spreadsheetStructureSummary.totalColDiff !== 0 && (
+                      <span>{spreadsheetStructureSummary.totalColDiff > 0 ? `+${spreadsheetStructureSummary.totalColDiff} Cols` : `${spreadsheetStructureSummary.totalColDiff} Cols`}</span>
+                    )}
+                    {spreadsheetStructureSummary.totalHeaderDiffs > 0 && (
+                      <span>{spreadsheetStructureSummary.totalHeaderDiffs} Hdr</span>
+                    )}
                   </button>
                 )}
               </div>
@@ -1653,6 +1709,52 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
             /* 4. SUMMARY CARDS LIST VIEW                                                */
             /* ========================================================================= */
             <div className="w-full max-w-[1380px] space-y-3">
+              {(spreadsheetDiffs.length > 0 || spreadsheetStructureSummary?.hasStructureChanges) && (
+                <div className="p-4 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/25 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-[#107C41] flex items-center justify-center text-white shadow-2xs shrink-0">
+                        <FileSpreadsheet className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2 flex-wrap">
+                          <span>Attached Spreadsheet & Grid Modifications</span>
+                          <Badge className="bg-emerald-600 text-white font-mono text-[10px]">
+                            {proposal?.attachedSpreadsheet?.fileName || 'Workbook.xlsx'}
+                          </Badge>
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-zinc-400 flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span>{spreadsheetDiffs.length} modified cell(s)</span>
+                          {spreadsheetStructureSummary?.totalRowDiff !== 0 && (
+                            <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                              • {spreadsheetStructureSummary!.totalRowDiff > 0 ? `+${spreadsheetStructureSummary!.totalRowDiff}` : spreadsheetStructureSummary!.totalRowDiff} row(s)
+                            </span>
+                          )}
+                          {spreadsheetStructureSummary?.totalColDiff !== 0 && (
+                            <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                              • {spreadsheetStructureSummary!.totalColDiff > 0 ? `+${spreadsheetStructureSummary!.totalColDiff}` : spreadsheetStructureSummary!.totalColDiff} column(s)
+                            </span>
+                          )}
+                          {spreadsheetStructureSummary && spreadsheetStructureSummary.totalHeaderDiffs > 0 && (
+                            <span className="font-semibold text-purple-700 dark:text-purple-300">
+                              • {spreadsheetStructureSummary.totalHeaderDiffs} header(s) renamed
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('spreadsheet-diffs')}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>Inspect Spreadsheet View</span>
+                    </button>
+                  </div>
+                </div>
+              )}
               {changedDiffs.map((diff, idx) => {
                 const isAccepted = acceptedBlockIds.includes(diff.blockId);
                 return (

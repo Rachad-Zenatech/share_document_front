@@ -118,6 +118,71 @@ export const EmbeddedSpreadsheetDiffViewer: React.FC<EmbeddedSpreadsheetDiffView
   const tabDiffCellRefs = useMemo(() => Array.from(tabDiffMap.keys()), [tabDiffMap]);
   const [currentDiffIdx, setCurrentDiffIdx] = useState(0);
 
+  // Baseline tab comparison for detecting structural (row / col / header) modifications
+  const matchingBaseTab = useMemo(() => {
+    if (!baseSheet?.tabs || baseSheet.tabs.length === 0) return null;
+    return (
+      baseSheet.tabs.find((b) => b.id === currentTab.id) ||
+      baseSheet.tabs.find((b) => b.name.trim().toLowerCase() === currentTabName.trim().toLowerCase()) ||
+      (baseSheet.tabs.length === 1 && tabs.length === 1 ? baseSheet.tabs[0] : null)
+    );
+  }, [baseSheet, currentTab, currentTabName, tabs.length]);
+
+  const baseRowCount = matchingBaseTab?.rowCount ?? null;
+  const propRowCount = currentTab?.rowCount || 30;
+  const rowCountDiff = baseRowCount !== null ? propRowCount - baseRowCount : 0;
+
+  const baseColCount = matchingBaseTab?.colCount ?? null;
+  const propColCount = currentTab?.colCount || 15;
+  const colCountDiff = baseColCount !== null ? propColCount - baseColCount : 0;
+
+  const headerChanges = useMemo(() => {
+    if (!matchingBaseTab?.headers) return [];
+    const changes: Array<{ colIndex: number; colLetter: string; oldHdr: string; newHdr: string }> = [];
+    const maxLen = Math.max(matchingBaseTab.headers.length, (currentTab?.headers || []).length);
+    for (let i = 0; i < maxLen; i++) {
+      const oldHdr = matchingBaseTab.headers[i] || '';
+      const newHdr = (currentTab?.headers || [])[i] || '';
+      if (oldHdr !== newHdr) {
+        changes.push({
+          colIndex: i,
+          colLetter: colToLetter(i + 1),
+          oldHdr,
+          newHdr
+        });
+      }
+    }
+    return changes;
+  }, [matchingBaseTab, currentTab]);
+
+  const modifiedRowsSet = useMemo(() => {
+    const rows = new Set<number>();
+    for (const diff of spreadsheetDiffs) {
+      const diffTab = diff.tabName ? diff.tabName.trim().toLowerCase() : '';
+      const curTab = currentTabName.trim().toLowerCase();
+      if (!diffTab || diffTab === curTab || tabs.length === 1) {
+        const cleanRef = diff.cellRef.replace(/^.*!/, '').replace(/^@+/, '').trim().toUpperCase();
+        const parsed = parseCellRef(cleanRef);
+        if (parsed) rows.add(parsed.rowIndex);
+      }
+    }
+    return rows;
+  }, [spreadsheetDiffs, currentTabName, tabs.length]);
+
+  const modifiedColsSet = useMemo(() => {
+    const cols = new Set<string>();
+    for (const diff of spreadsheetDiffs) {
+      const diffTab = diff.tabName ? diff.tabName.trim().toLowerCase() : '';
+      const curTab = currentTabName.trim().toLowerCase();
+      if (!diffTab || diffTab === curTab || tabs.length === 1) {
+        const cleanRef = diff.cellRef.replace(/^.*!/, '').replace(/^@+/, '').trim().toUpperCase();
+        const parsed = parseCellRef(cleanRef);
+        if (parsed) cols.add(parsed.colLetter);
+      }
+    }
+    return cols;
+  }, [spreadsheetDiffs, currentTabName, tabs.length]);
+
   // Grid dimensions
   const totalRows = Math.max(30, currentTab?.rowCount || 30);
   const totalCols = Math.max(15, currentTab?.colCount || 15);
@@ -266,6 +331,37 @@ export const EmbeddedSpreadsheetDiffViewer: React.FC<EmbeddedSpreadsheetDiffView
               <Badge variant="outline" className="font-mono text-[10px] text-slate-600 dark:text-zinc-400">
                 Tab: {currentTabName} ({totalRows} rows × {totalCols} cols)
               </Badge>
+              {rowCountDiff !== 0 && (
+                <Badge
+                  className={`font-mono font-bold text-[10px] px-2 py-0.5 shadow-2xs ${
+                    rowCountDiff > 0
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-red-600 hover:bg-red-700 text-white'
+                  }`}
+                  title={`Rows changed from baseline ${baseRowCount} to proposed ${propRowCount}`}
+                >
+                  {rowCountDiff > 0 ? `+${rowCountDiff} Row(s) Inserted` : `${rowCountDiff} Row(s) Deleted`}
+                  {baseRowCount !== null && ` (${baseRowCount} → ${propRowCount})`}
+                </Badge>
+              )}
+              {colCountDiff !== 0 && (
+                <Badge
+                  className={`font-mono font-bold text-[10px] px-2 py-0.5 shadow-2xs ${
+                    colCountDiff > 0
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-red-600 hover:bg-red-700 text-white'
+                  }`}
+                  title={`Columns changed from baseline ${baseColCount} to proposed ${propColCount}`}
+                >
+                  {colCountDiff > 0 ? `+${colCountDiff} Col(s) Inserted` : `${colCountDiff} Col(s) Deleted`}
+                  {baseColCount !== null && ` (${baseColCount} → ${propColCount})`}
+                </Badge>
+              )}
+              {headerChanges.length > 0 && (
+                <Badge className="bg-purple-600 hover:bg-purple-700 text-white font-mono font-bold text-[10px] px-2 py-0.5 shadow-2xs">
+                  {headerChanges.length} Header{headerChanges.length === 1 ? '' : 's'} Renamed
+                </Badge>
+              )}
               {spreadsheetDiffs.length > 0 ? (
                 <Badge className="bg-amber-500 hover:bg-amber-600 text-amber-950 font-bold text-[10px] px-2 py-0.5 shadow-2xs">
                   {spreadsheetDiffs.length} Changed Cell{spreadsheetDiffs.length === 1 ? '' : 's'}
@@ -535,12 +631,21 @@ export const EmbeddedSpreadsheetDiffViewer: React.FC<EmbeddedSpreadsheetDiffView
               )}
               {visibleColIndices.map((cIdx) => {
                 const colLetter = colLetters[cIdx];
+                const hasColDiff = modifiedColsSet.has(colLetter);
                 return (
                   <th
                     key={colLetter}
-                    className="w-32 min-w-[120px] max-w-[120px] h-7 px-2 border-r border-b border-slate-300 dark:border-zinc-700 text-center font-mono font-bold text-[11px] text-slate-700 dark:text-zinc-300 bg-slate-100 dark:bg-zinc-900"
+                    className={`w-32 min-w-[120px] max-w-[120px] h-7 px-2 border-r border-b text-center font-mono font-bold text-[11px] transition-colors ${
+                      hasColDiff
+                        ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-950 dark:text-amber-200 border-b-2 border-b-amber-500 font-extrabold'
+                        : 'bg-slate-100 dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 border-slate-300 dark:border-zinc-700'
+                    }`}
+                    title={hasColDiff ? `Column ${colLetter} has cell modifications in proposal` : undefined}
                   >
-                    {colLetter}
+                    <div className="flex items-center justify-center gap-1">
+                      {hasColDiff && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                      <span>{colLetter}</span>
+                    </div>
                   </th>
                 );
               })}
@@ -566,13 +671,21 @@ export const EmbeddedSpreadsheetDiffViewer: React.FC<EmbeddedSpreadsheetDiffView
                 )}
                 {visibleColIndices.map((cIdx) => {
                   const hdr = headers[cIdx] || '';
+                  const hdrChange = headerChanges.find((h) => h.colIndex === cIdx);
                   return (
                     <th
                       key={`hdr-${cIdx}`}
-                      className="w-32 min-w-[120px] max-w-[120px] h-7 px-2 border-r border-b border-slate-300 dark:border-zinc-700 text-left font-sans font-semibold text-[11px] text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-900 truncate"
-                      title={hdr}
+                      className={`w-32 min-w-[120px] max-w-[120px] h-7 px-2 border-r border-b text-left font-sans font-semibold text-[11px] truncate transition-colors ${
+                        hdrChange
+                          ? 'bg-purple-100 dark:bg-purple-950/80 text-purple-950 dark:text-purple-200 border-b-2 border-b-purple-500 font-bold'
+                          : 'bg-slate-50 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-300 dark:border-zinc-700'
+                      }`}
+                      title={hdrChange ? `Renamed Header: was "${hdrChange.oldHdr}" → now "${hdrChange.newHdr}"` : hdr}
                     >
-                      {hdr}
+                      <div className="flex items-center gap-1 truncate">
+                        {hdrChange && <span className="w-1.5 h-1.5 rounded-full bg-purple-600 shrink-0" />}
+                        <span className="truncate">{hdr}</span>
+                      </div>
                     </th>
                   );
                 })}
@@ -595,9 +708,24 @@ export const EmbeddedSpreadsheetDiffViewer: React.FC<EmbeddedSpreadsheetDiffView
               return (
                 <tr key={rowNumber}>
                   {/* Sticky Row Number Column */}
-                  <td className="sticky left-0 z-20 w-12 min-w-[48px] max-w-[48px] h-7 bg-slate-100 dark:bg-zinc-900 border-r border-b border-slate-300 dark:border-zinc-700 text-center font-mono text-[10px] text-slate-500 font-semibold select-none">
-                    {rowNumber}
-                  </td>
+                  {(() => {
+                    const hasRowDiff = modifiedRowsSet.has(rowNumber);
+                    return (
+                      <td
+                        className={`sticky left-0 z-20 w-12 min-w-[48px] max-w-[48px] h-7 border-r border-b border-slate-300 dark:border-zinc-700 text-center font-mono text-[10px] select-none transition-colors ${
+                          hasRowDiff
+                            ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-950 dark:text-amber-200 font-bold border-l-2 border-l-amber-500 shadow-2xs'
+                            : 'bg-slate-100 dark:bg-zinc-900 text-slate-500 font-semibold'
+                        }`}
+                        title={hasRowDiff ? `Row ${rowNumber} contains modified cells in proposal` : undefined}
+                      >
+                        <div className="flex items-center justify-center gap-0.5">
+                          {hasRowDiff && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />}
+                          <span>{rowNumber}</span>
+                        </div>
+                      </td>
+                    );
+                  })()}
 
                   {/* Left spacer for horizontal virtualization */}
                   {leftSpacerWidth > 0 && (
