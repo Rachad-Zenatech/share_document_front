@@ -1656,8 +1656,6 @@ const TableCellInput: React.FC<{
         className={`${className} ${
           isCellSearchMatch
             ? 'ring-2 ring-amber-400 bg-amber-100/80 dark:bg-amber-950/70 text-amber-950 dark:text-amber-100 font-bold'
-            : isVariable && !isFocused
-            ? 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200 border-b border-emerald-500/80 font-semibold'
             : ''
         }`}
         title={

@@ -116,11 +116,14 @@ export const DocumentVariableRenderer: React.FC<DocumentVariableRendererProps> =
                   onCellClick?.(cellRef, tabName);
                 }
               }}
-              className="inline-flex items-baseline px-1.5 py-0.5 mx-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 font-semibold border border-emerald-400/80 hover:border-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 transition-all cursor-pointer select-text group/var shadow-2xs"
+              className="inline cursor-pointer select-text group/var align-baseline"
               title={`Linked Cell: @${fullRefLabel} (${displayVal}) - Click to inspect in spreadsheet`}
             >
-              <span>{renderHighlightedText(displayVal, highlightQuery)}</span>
-              <span className="ml-1 text-[10px] font-mono text-emerald-600 dark:text-emerald-400 opacity-70 group-hover/var:opacity-100 select-none font-bold">
+              <span className="font-inherit text-inherit">{renderHighlightedText(displayVal, highlightQuery)}</span>
+              <span
+                className="inline-flex items-center justify-center ml-0.5 px-0.5 py-0 rounded text-[10px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300/70 hover:bg-emerald-100 group-hover/var:border-emerald-500 opacity-80 group-hover/var:opacity-100 select-none font-bold align-baseline transition-all"
+                title={`Linked to @${fullRefLabel}`}
+              >
                 ↗
               </span>
             </span>
