@@ -88,10 +88,234 @@ export function createCellVariableToken(
  * Resolves a cell reference like 'A1', '$A$1', 'Sheet1!B8', or ''06.30.26 TB'!$C$12'
  * from an attached spreadsheet.
  */
+/**
+ * Evaluates an Excel-style formula string (e.g. "=E8+B8", "=SUM(A1:A5)", "=AVERAGE(B2:B10)")
+ * using the cells of an AttachedSpreadsheet and returns the calculated number or string.
+ */
+export function evaluateSpreadsheetFormula(
+  formula: string,
+  spreadsheet?: AttachedSpreadsheet | null,
+  activeTabName?: string,
+  depth = 0,
+  formulaCache?: Map<string, string | number>
+): string | number {
+  if (!formula || typeof formula !== 'string' || !formula.startsWith('=')) return formula;
+  if (depth > 30) return '#CYCLE!';
+  if (formulaCache?.has(formula)) return formulaCache.get(formula)!;
+
+  const expr = formula.slice(1).trim();
+
+  // Find default cells for the active tab or top-level spreadsheet
+  let defaultCells: Record<string, any> = spreadsheet?.cells || {};
+  if (spreadsheet?.tabs && spreadsheet.tabs.length > 0) {
+    if (activeTabName) {
+      const cleanActive = activeTabName.trim().toLowerCase();
+      const tab = spreadsheet.tabs.find(
+        (t) => t.name.trim().toLowerCase() === cleanActive || t.id.toLowerCase() === cleanActive
+      );
+      if (tab?.cells) defaultCells = tab.cells;
+    } else {
+      const activeTab =
+        spreadsheet.tabs.find((t) => t.id === spreadsheet.activeTabId) || spreadsheet.tabs[0];
+      if (activeTab?.cells) defaultCells = activeTab.cells;
+    }
+  }
+
+  // Resolve a single cell ref like A1, $A$1, 'Sheet1'!A1, Sheet1!$B$5 => its numeric value
+  const resolveCell = (rawRef: string): number => {
+    let tabName: string | undefined;
+    let cleanRef = rawRef.trim();
+
+    const tabMatch = cleanRef.match(/^(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!(.*)$/);
+    if (tabMatch) {
+      tabName = tabMatch[1] || tabMatch[2];
+      cleanRef = tabMatch[3].trim();
+    }
+
+    cleanRef = cleanRef.replace(/\$/g, '').toUpperCase();
+
+    let targetCells = defaultCells;
+    if (tabName && spreadsheet?.tabs) {
+      const cleanTab = tabName.trim().toLowerCase();
+      const foundTab = spreadsheet.tabs.find(
+        (t) => t.name.trim().toLowerCase() === cleanTab || t.id.toLowerCase() === cleanTab
+      );
+      if (foundTab?.cells) {
+        targetCells = foundTab.cells;
+      }
+    }
+
+    const v = targetCells[cleanRef];
+    if (v === undefined || v === null || v === '') return 0;
+    if (typeof v === 'number') return v;
+    if (typeof v === 'boolean') return v ? 1 : 0;
+    if (typeof v === 'string') {
+      if (v.startsWith('=')) {
+        if (v === formula) return 0;
+        const sub = evaluateSpreadsheetFormula(
+          v,
+          spreadsheet,
+          tabName || activeTabName,
+          depth + 1,
+          formulaCache
+        );
+        const subNum = Number(String(sub).replace(/[$,\s%]/g, ''));
+        return isNaN(subNum) ? 0 : subNum;
+      }
+      const cleaned = v.replace(/[$,\s%]/g, '');
+      const n = Number(cleaned);
+      return isNaN(n) ? 0 : n;
+    }
+    return 0;
+  };
+
+  // Expand a range like A1:B3 or $A$1:$B$3 or 'Sheet1'!A1:B3 into individual ref values
+  const expandRange = (rangeStr: string): number[] => {
+    let tabName: string | undefined;
+    let cleanRange = rangeStr.trim();
+    const tabMatch = cleanRange.match(/^(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!(.*)$/);
+    if (tabMatch) {
+      tabName = tabMatch[1] || tabMatch[2];
+      cleanRange = tabMatch[3].trim();
+    }
+
+    const m = cleanRange.match(/^(\s*\$?)([A-Z]+)(\$?)([0-9]+):(\$?)([A-Z]+)(\$?)([0-9]+)$/i);
+    if (!m) return [resolveCell(rangeStr)];
+
+    const startCol = m[2].toUpperCase(); const startRow = parseInt(m[4], 10);
+    const endCol = m[6].toUpperCase(); const endRow = parseInt(m[8], 10);
+    const sc = letterToCol(startCol); const ec = letterToCol(endCol);
+    const minCol = Math.min(sc, ec); const maxCol = Math.max(sc, ec);
+    const minRow = Math.min(startRow, endRow); const maxRow = Math.max(startRow, endRow);
+
+    const tabPrefix = tabName ? `'${tabName}'!` : '';
+    const vals: number[] = [];
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        vals.push(resolveCell(`${tabPrefix}${colToLetter(c)}${r}`));
+      }
+    }
+    return vals;
+  };
+
+  // Parse comma-separated args, respecting nested parens
+  const splitArgs = (s: string): string[] => {
+    const args: string[] = []; let d = 0; let cur = '';
+    for (const ch of s) {
+      if (ch === '(') d++;
+      else if (ch === ')') d--;
+      if (ch === ',' && d === 0) { args.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    if (cur.trim()) args.push(cur.trim());
+    return args;
+  };
+
+  // Recursively evaluate sub-expression
+  const evalExpr = (e: string): number | string => {
+    e = e.trim();
+    if ((e.startsWith('"') && e.endsWith('"')) || (e.startsWith("'") && e.endsWith("'"))) {
+      return e.slice(1, -1);
+    }
+    if (/^-?[0-9]+(?:\.[0-9]+)?$/.test(e)) return parseFloat(e);
+    if (/^(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Z]+\$?[0-9]+$/i.test(e)) {
+      return resolveCell(e);
+    }
+    if (/^(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Z]+\$?[0-9]+:\$?[A-Z]+\$?[0-9]+$/i.test(e)) {
+      return expandRange(e)[0] ?? 0;
+    }
+
+    const fnMatch = e.match(/^([A-Z_]+)\((.*)\)$/i);
+    if (fnMatch) {
+      const fn = fnMatch[1].toUpperCase();
+      const innerArgs = splitArgs(fnMatch[2]);
+      const numArgs = innerArgs.flatMap((a) =>
+        /^(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Z]+\$?[0-9]+:\$?[A-Z]+\$?[0-9]+$/i.test(a.trim())
+          ? expandRange(a.trim())
+          : [Number(evalExpr(a))]
+      );
+      switch (fn) {
+        case 'SUM':     return numArgs.reduce((s, v) => s + v, 0);
+        case 'AVERAGE': return numArgs.length ? numArgs.reduce((s, v) => s + v, 0) / numArgs.length : 0;
+        case 'MIN':     return numArgs.length ? Math.min(...numArgs) : 0;
+        case 'MAX':     return numArgs.length ? Math.max(...numArgs) : 0;
+        case 'PRODUCT': return numArgs.length ? numArgs.reduce((s, v) => s * v, 1) : 0;
+        case 'COUNT':   return numArgs.filter((v) => !isNaN(v)).length;
+        case 'COUNTA':  return innerArgs.flatMap((a) => /^(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Z]+\$?[0-9]+:\$?[A-Z]+\$?[0-9]+$/i.test(a.trim()) ? expandRange(a.trim()) : [evalExpr(a)]).filter((v) => v !== '' && v !== 0).length;
+        case 'ROUND':   return Math.round(Number(evalExpr(innerArgs[0])) * Math.pow(10, Number(evalExpr(innerArgs[1] ?? '0')))) / Math.pow(10, Number(evalExpr(innerArgs[1] ?? '0')));
+        case 'ABS':     return Math.abs(Number(evalExpr(innerArgs[0])));
+        case 'SQRT':    return Math.sqrt(Number(evalExpr(innerArgs[0])));
+        case 'INT':     return Math.floor(Number(evalExpr(innerArgs[0])));
+        case 'POWER':   return Math.pow(Number(evalExpr(innerArgs[0])), Number(evalExpr(innerArgs[1] ?? '1')));
+        case 'MOD':     return ((Number(evalExpr(innerArgs[0])) % Number(evalExpr(innerArgs[1]))) + Number(evalExpr(innerArgs[1]))) % Number(evalExpr(innerArgs[1]));
+        case 'MEDIAN': {
+          if (numArgs.length === 0) return 0;
+          const sorted = [...numArgs].sort((a, b) => a - b);
+          const mid = Math.floor(sorted.length / 2);
+          return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+        }
+        case 'IF': {
+          const cond = innerArgs[0];
+          const condVal = cond.includes('>=')
+            ? Number(evalExpr(cond.split('>=')[0])) >= Number(evalExpr(cond.split('>=')[1]))
+            : cond.includes('<=')
+            ? Number(evalExpr(cond.split('<=')[0])) <= Number(evalExpr(cond.split('<=')[1]))
+            : cond.includes('>')
+            ? Number(evalExpr(cond.split('>')[0])) > Number(evalExpr(cond.split('>')[1]))
+            : cond.includes('<')
+            ? Number(evalExpr(cond.split('<')[0])) < Number(evalExpr(cond.split('<')[1]))
+            : cond.includes('<>')
+            ? evalExpr(cond.split('<>')[0]) !== evalExpr(cond.split('<>')[1])
+            : cond.includes('=')
+            ? evalExpr(cond.split('=')[0]) === evalExpr(cond.split('=')[1])
+            : Boolean(evalExpr(cond));
+          return condVal ? evalExpr(innerArgs[1] ?? '0') : evalExpr(innerArgs[2] ?? '0');
+        }
+        case 'CONCATENATE': return innerArgs.map((a) => String(evalExpr(a))).join('');
+        default: return '#NAME?';
+      }
+    }
+
+    let withRefs = e.replace(/(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Za-z]+\$?[0-9]+/gi, (match) => String(resolveCell(match)));
+    withRefs = withRefs.replace(/([0-9.]+)\s*%/g, '($1/100)');
+    withRefs = withRefs.replace(/\^/g, '**');
+
+    try {
+      if (/^[0-9+\-*/().\s*]+$/.test(withRefs)) {
+        // eslint-disable-next-line no-new-func
+        return Function(`"use strict"; return (${withRefs})`)() as number;
+      }
+    } catch { /**/ }
+    return '#ERROR';
+  };
+
+  try {
+    const result = evalExpr(expr);
+    let finalResult: number | string;
+    if (typeof result === 'number') {
+      if (!isFinite(result)) finalResult = '#DIV/0!';
+      else finalResult = parseFloat(result.toFixed(10));
+    } else {
+      finalResult = String(result);
+    }
+    formulaCache?.set(formula, finalResult);
+    return finalResult;
+  } catch {
+    formulaCache?.set(formula, '#ERROR');
+    return '#ERROR';
+  }
+}
+
+/**
+ * Resolves a cell reference like 'A1', '$A$1', 'Sheet1!B8', or ''06.30.26 TB'!$C$12'
+ * from an attached spreadsheet. Automatically evaluates formula cells (e.g. "=E8+B8")
+ * so calling code receives the computed numeric/string value.
+ */
 export function getCellValue(
   cellRef: string,
   spreadsheet?: AttachedSpreadsheet | null,
-  specifiedTabName?: string
+  specifiedTabName?: string,
+  evaluateFormulas = true
 ): any {
   if (!spreadsheet) return undefined;
 
@@ -110,6 +334,8 @@ export function getCellValue(
   // Normalize cell coordinate: strip any $ absolute reference indicators so $B$8 maps to B8
   const upperCell = targetCell.toUpperCase().replace(/\$/g, '');
 
+  let rawVal: any;
+
   // 1. If tabName specified, find that tab
   if (targetTabName && spreadsheet.tabs && spreadsheet.tabs.length > 0) {
     const cleanTarget = targetTabName.trim().toLowerCase();
@@ -117,25 +343,31 @@ export function getCellValue(
       (t) => t.name.trim().toLowerCase() === cleanTarget || t.id.toLowerCase() === cleanTarget
     );
     if (foundTab && foundTab.cells && foundTab.cells[upperCell] !== undefined) {
-      return foundTab.cells[upperCell];
+      rawVal = foundTab.cells[upperCell];
     }
   }
 
   // 2. Search active tab if tabs exist
-  if (spreadsheet.tabs && spreadsheet.tabs.length > 0) {
+  if (rawVal === undefined && spreadsheet.tabs && spreadsheet.tabs.length > 0) {
     const activeTab =
       spreadsheet.tabs.find((t) => t.id === spreadsheet.activeTabId) || spreadsheet.tabs[0];
     if (activeTab && activeTab.cells && activeTab.cells[upperCell] !== undefined) {
-      return activeTab.cells[upperCell];
+      rawVal = activeTab.cells[upperCell];
     }
   }
 
   // 3. Fallback to top-level cells object
-  if (spreadsheet.cells && spreadsheet.cells[upperCell] !== undefined) {
-    return spreadsheet.cells[upperCell];
+  if (rawVal === undefined && spreadsheet.cells && spreadsheet.cells[upperCell] !== undefined) {
+    rawVal = spreadsheet.cells[upperCell];
   }
 
-  return undefined;
+  if (rawVal === undefined) return undefined;
+
+  if (evaluateFormulas && typeof rawVal === 'string' && rawVal.startsWith('=')) {
+    return evaluateSpreadsheetFormula(rawVal, spreadsheet, targetTabName);
+  }
+
+  return rawVal;
 }
 
 /**

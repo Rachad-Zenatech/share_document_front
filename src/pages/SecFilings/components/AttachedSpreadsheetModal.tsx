@@ -38,10 +38,10 @@ import {
 import type { AttachedSpreadsheet, SecBlock } from '../../../types/secFiling';
 import {
   colToLetter,
-  letterToCol,
   parseCellRef,
   shiftSingleCellRef,
   formatCellValue,
+  evaluateSpreadsheetFormula,
   CELL_VARIABLE_REGEX,
   parseExcelFileToSpreadsheet,
   exportSpreadsheetToExcel,
@@ -777,9 +777,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const handleCellDoubleClick = (ref: string) => {
     if (isPickerMode && onInsertVariable) {
       handleSelectCell(ref);
-      const val = currentCells[ref];
-      const token = createCellVariableToken(ref, formatCellValue(val), currentTab?.name, isMultiTab);
-      onInsertVariable(token, formatCellValue(val));
+      const { display: cellDisplay } = resolveCellDisplay(ref);
+      const token = createCellVariableToken(ref, cellDisplay, currentTab?.name, isMultiTab);
+      onInsertVariable(token, cellDisplay);
       onOpenChange(false);
       toast.success(`Linked ${token} to document!`);
     } else {
@@ -969,187 +969,8 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   //   absolute references like $A$1, ranges like A1:A5 or $A$1:$B$5, cross-tab refs)
   // -----------------------------------------------------------------------
   const evaluateFormula = useCallback((formula: string, depth = 0): string | number => {
-    if (!formula.startsWith('=')) return formula;
-    if (depth > 30) return '#CYCLE!';
-    const cached = formulaCacheRef.current.get(formula);
-    if (cached !== undefined) return cached;
-
-    const expr = formula.slice(1).trim();
-    const cells = currentCells;
-
-    // Resolve a single cell ref like A1, $A$1, 'Sheet1'!A1, Sheet1!$B$5 => its numeric value
-    const resolveCell = (rawRef: string): number => {
-      let tabName: string | undefined;
-      let cleanRef = rawRef.trim();
-
-      const tabMatch = cleanRef.match(/^(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!(.*)$/);
-      if (tabMatch) {
-        tabName = tabMatch[1] || tabMatch[2];
-        cleanRef = tabMatch[3].trim();
-      }
-
-      cleanRef = cleanRef.replace(/\$/g, '').toUpperCase();
-
-      let targetCells = cells;
-      if (tabName && spreadsheet.tabs) {
-        const foundTab = spreadsheet.tabs.find(
-          (t) => t.name.trim().toLowerCase() === tabName!.trim().toLowerCase()
-        );
-        if (foundTab?.cells) {
-          targetCells = foundTab.cells;
-        }
-      }
-
-      const v = targetCells[cleanRef];
-      if (v === undefined || v === null || v === '') return 0;
-      if (typeof v === 'number') return v;
-      if (typeof v === 'boolean') return v ? 1 : 0;
-      if (typeof v === 'string') {
-        if (v.startsWith('=')) {
-          if (v === formula) return 0;
-          const sub = evaluateFormula(v, depth + 1);
-          const subNum = Number(String(sub).replace(/[$,\s%]/g, ''));
-          return isNaN(subNum) ? 0 : subNum;
-        }
-        const cleaned = v.replace(/[$,\s%]/g, '');
-        const n = Number(cleaned);
-        return isNaN(n) ? 0 : n;
-      }
-      return 0;
-    };
-
-    // Expand a range like A1:B3 or $A$1:$B$3 or 'Sheet1'!A1:B3 into individual ref values
-    const expandRange = (rangeStr: string): number[] => {
-      let tabName: string | undefined;
-      let cleanRange = rangeStr.trim();
-      const tabMatch = cleanRange.match(/^(?:'([^']+)'|([A-Za-z0-9_.\- ]+?))!(.*)$/);
-      if (tabMatch) {
-        tabName = tabMatch[1] || tabMatch[2];
-        cleanRange = tabMatch[3].trim();
-      }
-
-      const m = cleanRange.match(/^(\$?)([A-Z]+)(\$?)([0-9]+):(\$?)([A-Z]+)(\$?)([0-9]+)$/i);
-      if (!m) return [resolveCell(rangeStr)];
-
-      const startCol = m[2].toUpperCase(); const startRow = parseInt(m[4], 10);
-      const endCol = m[6].toUpperCase(); const endRow = parseInt(m[8], 10);
-      const sc = letterToCol(startCol); const ec = letterToCol(endCol);
-      const minCol = Math.min(sc, ec); const maxCol = Math.max(sc, ec);
-      const minRow = Math.min(startRow, endRow); const maxRow = Math.max(startRow, endRow);
-
-      const tabPrefix = tabName ? `'${tabName}'!` : '';
-      const vals: number[] = [];
-      for (let r = minRow; r <= maxRow; r++) {
-        for (let c = minCol; c <= maxCol; c++) {
-          vals.push(resolveCell(`${tabPrefix}${colToLetter(c)}${r}`));
-        }
-      }
-      return vals;
-    };
-
-    // Parse comma-separated args, respecting nested parens
-    const splitArgs = (s: string): string[] => {
-      const args: string[] = []; let depth = 0; let cur = '';
-      for (const ch of s) {
-        if (ch === '(' ) depth++;
-        else if (ch === ')') depth--;
-        if (ch === ',' && depth === 0) { args.push(cur.trim()); cur = ''; }
-        else cur += ch;
-      }
-      if (cur.trim()) args.push(cur.trim());
-      return args;
-    };
-
-    // Recursively evaluate a sub-expression
-    const evalExpr = (e: string): number | string => {
-      e = e.trim();
-      // String literal
-      if ((e.startsWith('"') && e.endsWith('"')) || (e.startsWith("'") && e.endsWith("'"))) return e.slice(1,-1);
-      // Number literal
-      if (/^-?[0-9]+(?:\.[0-9]+)?$/.test(e)) return parseFloat(e);
-      // Cell reference (with optional sheet and optional $)
-      if (/^(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Z]+\$?[0-9]+$/i.test(e)) return resolveCell(e);
-      // Range (returns first value — use inside function args)
-      if (/^(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Z]+\$?[0-9]+:\$?[A-Z]+\$?[0-9]+$/i.test(e)) return expandRange(e)[0] ?? 0;
-      // Function call
-      const fnMatch = e.match(/^([A-Z_]+)\((.*)\)$/i);
-      if (fnMatch) {
-        const fn = fnMatch[1].toUpperCase();
-        const innerArgs = splitArgs(fnMatch[2]);
-        const numArgs = innerArgs.flatMap(a => /^(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Z]+\$?[0-9]+:\$?[A-Z]+\$?[0-9]+$/i.test(a.trim()) ? expandRange(a.trim()) : [Number(evalExpr(a))]);
-        switch (fn) {
-          case 'SUM':     return numArgs.reduce((s, v) => s + v, 0);
-          case 'AVERAGE': return numArgs.length ? numArgs.reduce((s, v) => s + v, 0) / numArgs.length : 0;
-          case 'MIN':     return numArgs.length ? Math.min(...numArgs) : 0;
-          case 'MAX':     return numArgs.length ? Math.max(...numArgs) : 0;
-          case 'PRODUCT': return numArgs.length ? numArgs.reduce((s, v) => s * v, 1) : 0;
-          case 'COUNT':   return numArgs.filter(v => !isNaN(v)).length;
-          case 'COUNTA':  return innerArgs.flatMap(a => /^(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Z]+\$?[0-9]+:\$?[A-Z]+\$?[0-9]+$/i.test(a.trim()) ? expandRange(a.trim()) : [evalExpr(a)]).filter(v => v !== '' && v !== 0).length;
-          case 'ROUND':   return Math.round(Number(evalExpr(innerArgs[0])) * Math.pow(10, Number(evalExpr(innerArgs[1] ?? '0')))) / Math.pow(10, Number(evalExpr(innerArgs[1] ?? '0')));
-          case 'ABS':     return Math.abs(Number(evalExpr(innerArgs[0])));
-          case 'SQRT':    return Math.sqrt(Number(evalExpr(innerArgs[0])));
-          case 'INT':     return Math.floor(Number(evalExpr(innerArgs[0])));
-          case 'POWER':   return Math.pow(Number(evalExpr(innerArgs[0])), Number(evalExpr(innerArgs[1] ?? '1')));
-          case 'MOD':     return ((Number(evalExpr(innerArgs[0])) % Number(evalExpr(innerArgs[1]))) + Number(evalExpr(innerArgs[1]))) % Number(evalExpr(innerArgs[1]));
-          case 'MEDIAN': {
-            if (numArgs.length === 0) return 0;
-            const sorted = [...numArgs].sort((a, b) => a - b);
-            const mid = Math.floor(sorted.length / 2);
-            return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-          }
-          case 'IF': {
-            const cond = innerArgs[0];
-            const condVal = cond.includes('>=')
-              ? Number(evalExpr(cond.split('>=')[0])) >= Number(evalExpr(cond.split('>=')[1]))
-              : cond.includes('<=')
-              ? Number(evalExpr(cond.split('<=')[0])) <= Number(evalExpr(cond.split('<=')[1]))
-              : cond.includes('>')
-              ? Number(evalExpr(cond.split('>')[0])) > Number(evalExpr(cond.split('>')[1]))
-              : cond.includes('<')
-              ? Number(evalExpr(cond.split('<')[0])) < Number(evalExpr(cond.split('<')[1]))
-              : cond.includes('<>')
-              ? evalExpr(cond.split('<>')[0]) !== evalExpr(cond.split('<>')[1])
-              : cond.includes('=')
-              ? evalExpr(cond.split('=')[0]) === evalExpr(cond.split('=')[1])
-              : Boolean(evalExpr(cond));
-            return condVal ? evalExpr(innerArgs[1] ?? '0') : evalExpr(innerArgs[2] ?? '0');
-          }
-          case 'CONCATENATE': return innerArgs.map(a => String(evalExpr(a))).join('');
-          default: return `#NAME?`;
-        }
-      }
-      // Arithmetic: replace all cell refs (including $, and tab! refs)
-      let withRefs = e.replace(/(?:(?:'[^']+'|[A-Za-z0-9_.\- ]+?)!)?\$?[A-Za-z]+\$?[0-9]+/gi, (match) => String(resolveCell(match)));
-      // Percentage support like 15% -> (15/100)
-      withRefs = withRefs.replace(/([0-9.]+)\s*%/g, '($1/100)');
-      // Power / Exponentiation support like 2^3 -> 2**3
-      withRefs = withRefs.replace(/\^/g, '**');
-
-      try {
-        if (/^[0-9+\-*/().\s*]+$/.test(withRefs)) {
-          // eslint-disable-next-line no-new-func
-          return Function(`"use strict"; return (${withRefs})`)() as number;
-        }
-      } catch { /**/ }
-      return `#ERROR`;
-    };
-
-    try {
-      const result = evalExpr(expr);
-      let finalResult: number | string;
-      if (typeof result === 'number') {
-        if (!isFinite(result)) finalResult = '#DIV/0!';
-        else finalResult = parseFloat(result.toFixed(10));
-      } else {
-        finalResult = String(result);
-      }
-      formulaCacheRef.current.set(formula, finalResult);
-      return finalResult;
-    } catch {
-      formulaCacheRef.current.set(formula, '#ERROR');
-      return '#ERROR';
-    }
-  }, [currentCells, spreadsheet.tabs]);
+    return evaluateSpreadsheetFormula(formula, localSpreadsheet, currentTab?.name, depth, formulaCacheRef.current);
+  }, [localSpreadsheet, currentTab?.name]);
 
   // Resolve displayed value for a cell — evaluates formulas on the fly with display caching
   const resolveCellDisplay = useCallback((cellRef: string): { raw: string | number | undefined; display: string; isFormula: boolean } => {
@@ -1680,10 +1501,10 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
   // Copy syntax to clipboard
   const handleCopyVar = (withValueFallback: boolean) => {
-    const val = currentCells[selectedCellRef];
+    const { display: cellDisplay } = resolveCellDisplay(selectedCellRef);
     const textToCopy = createCellVariableToken(
       selectedCellRef,
-      withValueFallback ? formatCellValue(val) : undefined,
+      withValueFallback ? cellDisplay : undefined,
       currentTab?.name,
       isMultiTab
     );
@@ -1701,14 +1522,14 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   // Link selected cell to document (picker mode)
   const handleConfirmInsert = () => {
     if (onInsertVariable) {
-      const val = currentCells[selectedCellRef];
+      const { display: cellDisplay } = resolveCellDisplay(selectedCellRef);
       const token = createCellVariableToken(
         selectedCellRef,
-        formatCellValue(val),
+        cellDisplay,
         currentTab?.name,
         isMultiTab
       );
-      onInsertVariable(token, formatCellValue(val));
+      onInsertVariable(token, cellDisplay);
       onOpenChange(false);
       toast.success(`Linked ${token} to document!`);
     }
@@ -1974,7 +1795,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
               <span className="font-mono bg-emerald-950/60 px-2.5 py-0.5 rounded border border-emerald-400/40 text-emerald-200 text-xs">
                 {createCellVariableToken(
                   selectedCellRef,
-                  formatCellValue(currentCells[selectedCellRef]),
+                  selectedFormatted,
                   currentTab?.name,
                   isMultiTab
                 )}
@@ -3786,15 +3607,15 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                 const ref = contextMenu.cellRef;
                 setContextMenu(null);
                 handleSelectCell(ref);
-                const val = currentCells[ref];
+                const { display: cellDisplay } = resolveCellDisplay(ref);
                 const token = createCellVariableToken(
                   ref,
-                  formatCellValue(val),
+                  cellDisplay,
                   currentTab?.name,
                   isMultiTab
                 );
                 if (onInsertVariable) {
-                  onInsertVariable(token, formatCellValue(val));
+                  onInsertVariable(token, cellDisplay);
                   onOpenChange(false);
                   toast.success(`Linked ${token} into document!`);
                 } else {
@@ -3820,10 +3641,10 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                 e.stopPropagation();
                 const ref = contextMenu.cellRef;
                 setContextMenu(null);
-                const val = currentCells[ref];
+                const { display: cellDisplay } = resolveCellDisplay(ref);
                 const token = createCellVariableToken(
                   ref,
-                  formatCellValue(val),
+                  cellDisplay,
                   currentTab?.name,
                   isMultiTab
                 );

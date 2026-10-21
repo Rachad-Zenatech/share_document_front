@@ -4,6 +4,7 @@ import {
   CELL_VARIABLE_REGEX,
   formatCellValue,
   getCellValue,
+  evaluateSpreadsheetFormula,
   hasDocumentVariables
 } from '../../../utils/documentVariables';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../components/ui/tooltip';
@@ -86,12 +87,18 @@ export const DocumentVariableRenderer: React.FC<DocumentVariableRendererProps> =
 
     const cleanFallback = fallback ? fallback.replace(/^\{+|\}+$/g, '').trim() : undefined;
     const liveVal = getCellValue(cellRef, spreadsheet, tabName);
-    const displayVal =
-      liveVal !== undefined && liveVal !== null
-        ? formatCellValue(liveVal)
-        : cleanFallback !== undefined && cleanFallback !== ''
-        ? cleanFallback
-        : `@${cellRef}`;
+    let displayVal = `@${cellRef}`;
+
+    if (liveVal !== undefined && liveVal !== null && liveVal !== '') {
+      displayVal = formatCellValue(liveVal);
+    } else if (cleanFallback !== undefined && cleanFallback !== '') {
+      if (cleanFallback.startsWith('=')) {
+        const evalFb = evaluateSpreadsheetFormula(cleanFallback, spreadsheet, tabName);
+        displayVal = formatCellValue(evalFb);
+      } else {
+        displayVal = cleanFallback;
+      }
+    }
 
     const fullRefLabel = tabName ? `${tabName}!${cellRef}` : cellRef;
 
