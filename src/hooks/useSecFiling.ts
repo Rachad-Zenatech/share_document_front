@@ -341,8 +341,21 @@ export function useSecFiling() {
 
       switch (type) {
         case 'heading': {
-          const isNewNamedSection = !defaultSection || defaultSection === 'ALL';
-          const headingText = isNewNamedSection ? section : 'New Section Heading';
+          // When a heading is inserted into an existing section we still give it a
+          // brand-new section name so it shows up immediately in the Document Outline.
+          // The user can rename the heading in place and the outline will follow via
+          // the matchesOldSection / isFirstInSection path in updateBlock.
+          if (defaultSection && defaultSection !== 'ALL') {
+            let sName = 'New Section';
+            let c = 1;
+            const existingSections = new Set(workingBlocks.map((b) => b.section).filter(Boolean));
+            while (existingSections.has(sName)) {
+              c++;
+              sName = `New Section ${c}`;
+            }
+            section = sName;
+          }
+          const headingText = section; // text always equals section so rename propagates
           newBlock = {
             id: blockId,
             type: 'heading',
