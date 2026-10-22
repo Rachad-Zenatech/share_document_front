@@ -34,18 +34,18 @@ const BLOCK_OPTIONS: {
   color: string;
 }[] = [
     {
-      type: 'paragraph',
-      label: 'Paragraph / Disclosure',
-      desc: 'Standard financial text and narrative disclosure',
-      icon: AlignLeft,
-      color: 'text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40'
-    },
-    {
       type: 'heading',
       label: 'Section Heading / New Section',
       desc: 'Starts a section; name on page sets document section name',
       icon: Heading,
       color: 'text-purple-500 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40'
+    },
+    {
+      type: 'paragraph',
+      label: 'Paragraph / Disclosure',
+      desc: 'Standard financial text and narrative disclosure',
+      icon: AlignLeft,
+      color: 'text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40'
     },
     {
       type: 'image',
