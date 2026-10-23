@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Link2,
   Copy,
@@ -22,6 +22,8 @@ import type { SecFilingDocument, SecChangeProposal } from '../../../types/secFil
 import type { ContributorPermissions } from '../../../types/collaborator';
 import type { User } from '../../../lib/AuthContext';
 import { getProposalInviteUrl } from '../../../services/secFilingService';
+import { formatWorkflowStepTitle } from '../../../services/secWorkflowService';
+import { useDocumentWorkflow } from '../../../hooks/useSecWorkflows';
 import { Dialog, DialogContent, DialogTitle } from '../../../components/ui/dialog';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -103,6 +105,8 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
   const [contributorRole, setContributorRole] = useState('');
   const [contributorEmail, setContributorEmail] = useState('');
   const [taskTitle, setTaskTitle] = useState('');
+  // Workflow step number picked from the dropdown, or 'CUSTOM' for a free-text title.
+  const [selectedStep, setSelectedStep] = useState<string>('CUSTOM');
   const [assignedSection, setAssignedSection] = useState('ALL');
   const [description, setDescription] = useState('');
   const [governanceRole, setGovernanceRole] = useState<'CONTRIBUTOR' | 'DOC_MANAGER'>('CONTRIBUTOR');
@@ -155,11 +159,42 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
     );
   }, [systemUsersData, userSearchQuery]);
 
+  // The workflow assigned to this document drives the task title dropdown.
+  const { data: documentWorkflowData } = useDocumentWorkflow(mainDoc.id);
+  const workflow = documentWorkflowData?.workflow ?? null;
+  const workflowSteps = workflow?.steps ?? [];
+  const firstStep = workflowSteps[0];
+
+  // Once the workflow loads, start the dropdown on its first step instead of a blank title.
+  useEffect(() => {
+    if (firstStep) {
+      setSelectedStep(String(firstStep.step));
+      setTaskTitle(formatWorkflowStepTitle(firstStep));
+    }
+  }, [workflow?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSelectWorkflowStep = (value: string) => {
+    setSelectedStep(value);
+    setGeneratedInvite(null);
+    if (value === 'CUSTOM') {
+      setTaskTitle('');
+      return;
+    }
+    const step = workflowSteps.find((s) => String(s.step) === value);
+    if (!step) return;
+    setTaskTitle(formatWorkflowStepTitle(step));
+    if (!description.trim() && step.assignedTo) {
+      setDescription(`Workflow "${workflow?.name}" step ${step.step}. Assigned to: ${step.assignedTo}`);
+    }
+  };
+
   const handleSelectSystemUser = (u: any) => {
     setContributorName(u.full_name || '');
     setContributorEmail(u.email || '');
     setContributorRole(u.job_title || u.department || 'System Member');
-    setTaskTitle(`${u.full_name}'s Section Review`);
+    if (selectedStep === 'CUSTOM') {
+      setTaskTitle(`${u.full_name}'s Section Review`);
+    }
     setGeneratedInvite(null);
     toast.success(`Selected system user: ${u.full_name}`);
   };
@@ -168,7 +203,8 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
     setContributorName('');
     setContributorRole('');
     setContributorEmail('');
-    setTaskTitle('');
+    setSelectedStep(firstStep ? String(firstStep.step) : 'CUSTOM');
+    setTaskTitle(firstStep ? formatWorkflowStepTitle(firstStep) : '');
     setAssignedSection('ALL');
     setDescription('');
     setGovernanceRole('CONTRIBUTOR');
@@ -483,18 +519,46 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="md:col-span-2">
-                  <label className="text-[10px] font-semibold text-slate-500 block mb-1">
-                    Task / Proposed Branch Title *
+                  <label className="text-[10px] font-semibold text-slate-500 mb-1 flex items-center justify-between">
+                    <span>Task / Proposed Branch Title *</span>
+                    {workflow && (
+                      <span className="font-normal text-slate-400">
+                        From workflow: <strong className="text-slate-600 dark:text-zinc-300">{workflow.name}</strong>
+                      </span>
+                    )}
                   </label>
-                  <Input
-                    value={taskTitle}
-                    onChange={(e) => {
-                      setTaskTitle(e.target.value);
-                      setGeneratedInvite(null);
-                    }}
-                    placeholder="e.g. Q2 Leases & Share Capital Draft"
-                    className="h-8 text-xs font-semibold text-blue-950 dark:text-blue-200"
-                  />
+                  {workflowSteps.length > 0 && (
+                    <select
+                      value={selectedStep}
+                      onChange={(e) => handleSelectWorkflowStep(e.target.value)}
+                      className="w-full h-8 px-2 mb-1.5 rounded-md border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-semibold text-blue-950 dark:text-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    >
+                      {workflowSteps.map((s) => (
+                        <option key={s.step} value={String(s.step)}>
+                          {formatWorkflowStepTitle(s)}
+                          {s.assignedTo ? ` (${s.assignedTo})` : ''}
+                        </option>
+                      ))}
+                      <option value="CUSTOM">Custom title…</option>
+                    </select>
+                  )}
+                  {(workflowSteps.length === 0 || selectedStep === 'CUSTOM') && (
+                    <Input
+                      value={taskTitle}
+                      onChange={(e) => {
+                        setTaskTitle(e.target.value);
+                        setGeneratedInvite(null);
+                      }}
+                      placeholder="e.g. Q2 Leases & Share Capital Draft"
+                      className="h-8 text-xs font-semibold text-blue-950 dark:text-blue-200"
+                    />
+                  )}
+                  {!workflow && (
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      No workflow is assigned to this document. Assign one under Document → Workflow Assignments to pick
+                      a step here.
+                    </p>
+                  )}
                 </div>
               </div>
 

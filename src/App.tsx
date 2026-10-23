@@ -38,6 +38,8 @@ const SecFilingContributorPage = lazy(() => import("./pages/SecFilings/SecFiling
 const MobileSignerPage = lazy(() => import("./pages/SecFilings/MobileSignerPage"));
 const SpreadsheetHubPage = lazy(() => import("./pages/SecFilings/SpreadsheetHubPage").then(m => ({ default: m.SpreadsheetHubPage })));
 
+const WorkflowAssignmentsPage = lazy(() => import("./pages/SecFilings/WorkflowAssignmentsPage"));
+
 function SpreadsheetHubRoute() {
   return (
     <ProtectedRoute navigationCode="SEC_FILINGS">
@@ -141,6 +143,14 @@ function App() {
               <Route path="/sec-filings/editor" element={<SecFilingsEditorRoute />} />
               <Route path="/sec-filings/spreadsheets" element={<SpreadsheetHubRoute />} />
               <Route path="/spreadsheets" element={<Navigate to="/sec-filings/spreadsheets" replace />} />
+              <Route
+                path="/sec-filings/workflows"
+                element={
+                  <ProtectedRoute navigationCode="SEC_FILINGS">
+                    <WorkflowAssignmentsPage />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Configuration Routes */}
               <Route path="/configuration" element={<Navigate to="/configurations/users" replace />} />

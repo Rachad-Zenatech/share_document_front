@@ -30,6 +30,7 @@ export const navigation: NavigationItem[] = [
     subItems: [
       { label: "Document Hub", path: "/sec-filings", navigationCode: "SEC_FILINGS" },
       { label: "Spreadsheet Hub", path: "/sec-filings/spreadsheets", navigationCode: "SEC_FILINGS" },
+      { label: "Workflow Assignments", path: "/sec-filings/workflows", navigationCode: "SEC_FILINGS" },
       { label: "Document Editor", path: "/sec-filings/editor", navigationCode: "SEC_FILINGS" },
     ],
   },

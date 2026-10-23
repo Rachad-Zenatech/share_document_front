@@ -219,6 +219,8 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
                                     import('../../pages/SecFilings/CreateSecFilingPage');
                                   } else if (sub.path === '/sec-filings/spreadsheets') {
                                     import('../../pages/SecFilings/SpreadsheetHubPage');
+                                  } else if (sub.path === '/sec-filings/workflows') {
+                                    import('../../pages/SecFilings/WorkflowAssignmentsPage');
                                   }
                                 }}
                                 className={`
