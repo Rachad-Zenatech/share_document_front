@@ -9,7 +9,9 @@ import {
   Search,
   X,
   Link2,
-  GripVertical
+  GripVertical,
+  Download,
+  FileDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
@@ -25,7 +27,7 @@ import {
   DialogTitle
 } from '../../components/ui/dialog';
 import { secFilingService } from '../../services/secFilingService';
-import { parseWorkflowCsv } from '../../services/secWorkflowService';
+import { buildWorkflowWorkbook, downloadBlob, parseWorkflowFile } from '../../services/secWorkflowService';
 import {
   useCreateSecWorkflow,
   useDeleteSecWorkflow,
@@ -109,12 +111,31 @@ export const WorkflowAssignmentsPage: React.FC = () => {
     );
   };
 
-  const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const safeFileName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'Workflow';
+
+  const handleDownloadTemplate = async () => {
+    try {
+      downloadBlob(await buildWorkflowWorkbook(), 'Workflow Assignment Template.xlsx');
+    } catch {
+      toast.error('Failed to build the workflow template.');
+    }
+  };
+
+  const handleExport = async (wf: SecWorkflow) => {
+    try {
+      downloadBlob(await buildWorkflowWorkbook(wf), `${safeFileName(wf.name)}.xlsx`);
+      toast.success(`Exported "${wf.name}"`);
+    } catch {
+      toast.error('Failed to export workflow.');
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (e.target) e.target.value = '';
     if (!file) return;
     try {
-      const parsed = parseWorkflowCsv(await file.text(), file.name.replace(/\.csv$/i, ''));
+      const parsed = await parseWorkflowFile(file);
       setDraft({
         name: parsed.name,
         description: parsed.description || '',
@@ -123,7 +144,7 @@ export const WorkflowAssignmentsPage: React.FC = () => {
       });
       toast.success(`Read ${parsed.steps.length} steps from "${file.name}". Assign it to a document and save.`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to read the workflow CSV.');
+      toast.error(err instanceof Error ? err.message : 'Failed to read the workflow file.');
     }
   };
 
@@ -232,7 +253,24 @@ export const WorkflowAssignmentsPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleCsvUpload} className="hidden" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadTemplate}
+              title="Blank standard sheet starting at A1: Step / Description / Assigned To. The file name becomes the workflow name."
+              className="h-9 gap-1.5 border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs font-semibold cursor-pointer"
+            >
+              <FileDown className="w-4 h-4 text-emerald-600" />
+              <span>Download Template</span>
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -241,7 +279,7 @@ export const WorkflowAssignmentsPage: React.FC = () => {
               className="h-9 gap-1.5 border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs font-semibold cursor-pointer"
             >
               <Upload className="w-4 h-4 text-blue-600" />
-              <span>Import Workflow CSV</span>
+              <span>Import Workflow</span>
             </Button>
             <Button
               type="button"
@@ -298,7 +336,7 @@ export const WorkflowAssignmentsPage: React.FC = () => {
             <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4">
               {searchQuery
                 ? `No workflows match "${searchQuery}".`
-                : 'Import a workflow sheet exported as CSV, or create one by hand, then assign it to a document.'}
+                : 'Download the template, fill in the steps, and import it, or create a workflow by hand. Then assign it to a document.'}
             </p>
           </div>
         ) : (
@@ -318,6 +356,14 @@ export const WorkflowAssignmentsPage: React.FC = () => {
                     )}
                   </div>
                   <div className="shrink-0 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleExport(wf)}
+                      title="Export to .xlsx (standard layout)"
+                      className="p-1.5 text-slate-400 hover:text-emerald-600 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => openEditor(wf)}
