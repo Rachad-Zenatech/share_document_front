@@ -22,7 +22,7 @@ import type { SecFilingDocument, SecChangeProposal } from '../../../types/secFil
 import type { ContributorPermissions } from '../../../types/collaborator';
 import type { User } from '../../../lib/AuthContext';
 import { getProposalInviteUrl } from '../../../services/secFilingService';
-import { formatWorkflowStepTitle } from '../../../services/secWorkflowService';
+import { formatWorkflowStepTitle, getStepAssignees } from '../../../services/secWorkflowService';
 import { useDocumentWorkflow } from '../../../hooks/useSecWorkflows';
 import type { SecWorkflowAssignee, SecWorkflowStep } from '../../../types/secWorkflow';
 import { Dialog, DialogContent, DialogTitle } from '../../../components/ui/dialog';
@@ -166,7 +166,11 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
   const workflowSteps = workflow?.steps ?? [];
   const firstStep = workflowSteps[0];
 
-  const selectedStepAssignees = workflowSteps.find((s) => String(s.step) === selectedStep)?.assignees ?? [];
+  const directoryUsers = Array.isArray(systemUsersData) ? systemUsersData : [];
+  const selectedStepObj = workflowSteps.find((s) => String(s.step) === selectedStep);
+  // Saved assignees, or names resolved from an imported step's free text.
+  const selectedStepAssignees = selectedStepObj ? getStepAssignees(selectedStepObj, directoryUsers) : [];
+  const stepUserIds = new Set(selectedStepAssignees.map((a) => a.userId).filter(Boolean));
 
   // Fill the participant fields from a step's assignee: platform users come from the
   // system directory (for job title), external people switch to the custom source.
@@ -199,7 +203,9 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
     if (step.assignedTo && (!description.trim() || description.startsWith('Workflow "'))) {
       setDescription(`Workflow "${workflow?.name}" step ${step.step}. Assigned to: ${step.assignedTo}`);
     }
-    const first = step.assignees?.[0];
+    const people = getStepAssignees(step, directoryUsers);
+    // Prefer a platform user so the System Directory selection is filled in.
+    const first = people.find((a) => a.userId) || people[0];
     if (first) applyStepAssignee(first);
   };
 
@@ -509,8 +515,12 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
                           No system users found matching "{userSearchQuery}"
                         </div>
                       ) : (
-                        availableUsers.map((u) => {
-                          const isSelected = contributorEmail === u.email;
+                        // The selected workflow step's people are listed first.
+                        [...availableUsers]
+                          .sort((a, b) => Number(stepUserIds.has(b.id)) - Number(stepUserIds.has(a.id)))
+                          .map((u) => {
+                          const isSelected = !!contributorEmail && contributorEmail.toLowerCase() === u.email?.toLowerCase();
+                          const isOnStep = stepUserIds.has(u.id);
                           return (
                             <div
                               key={u.id || u.email}
@@ -524,6 +534,11 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
                               <div className="min-w-0 pr-2">
                                 <div className="font-semibold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
                                   <span>{u.full_name}</span>
+                                  {isOnStep && (
+                                    <Badge className="text-[9px] py-0 px-1 font-semibold bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950 dark:text-blue-300">
+                                      On this step
+                                    </Badge>
+                                  )}
                                   {u.department && (
                                     <Badge variant="outline" className="text-[9px] py-0 px-1 font-normal text-slate-500">
                                       {u.department}

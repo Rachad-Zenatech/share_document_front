@@ -30,11 +30,17 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { WorkflowAssigneePicker, formatAssignees } from './components/WorkflowAssigneePicker';
 import { secFilingService } from '../../services/secFilingService';
-import { buildWorkflowWorkbook, downloadBlob, parseWorkflowFile } from '../../services/secWorkflowService';
+import {
+  buildWorkflowWorkbook,
+  downloadBlob,
+  getStepAssignees,
+  parseWorkflowFile
+} from '../../services/secWorkflowService';
 import {
   useCreateSecWorkflow,
   useDeleteSecWorkflow,
   useSecWorkflows,
+  useAssignableUsers,
   useSetSecWorkflowDocuments,
   useUpdateSecWorkflow
 } from '../../hooks/useSecWorkflows';
@@ -56,12 +62,6 @@ const BLANK_DRAFT: WorkflowDraft = {
   documentIds: []
 };
 
-// Steps imported from sheets only carry free text, so it becomes one "Other" person
-// the user can swap for platform users.
-const toDraftStep = (s: SecWorkflowStep): SecWorkflowStep => ({
-  ...s,
-  assignees: s.assignees?.length ? s.assignees : s.assignedTo?.trim() ? [{ userId: null, name: s.assignedTo.trim() }] : []
-});
 
 export const WorkflowAssignmentsPage: React.FC = () => {
   const { data, isLoading, isError } = useSecWorkflows();
@@ -72,6 +72,14 @@ export const WorkflowAssignmentsPage: React.FC = () => {
   const updateMutation = useUpdateSecWorkflow();
   const deleteMutation = useDeleteSecWorkflow();
   const setDocumentsMutation = useSetSecWorkflowDocuments();
+  const { data: directoryUsers = [] } = useAssignableUsers();
+
+  // Steps imported from sheets only carry free text ("Senior Staff (David S, Paul)"),
+  // so resolve the names in it to platform users, keeping the rest as external names.
+  const toDraftStep = (s: SecWorkflowStep): SecWorkflowStep => ({
+    ...s,
+    assignees: getStepAssignees(s, directoryUsers)
+  });
 
   const [searchQuery, setSearchQuery] = useState('');
   const [draft, setDraft] = useState<WorkflowDraft | null>(null);

@@ -2,6 +2,7 @@
 import type {
   SecDocumentWorkflowResponse,
   SecWorkflow,
+  SecWorkflowAssignee,
   SecWorkflowCreate,
   SecWorkflowList,
   SecWorkflowStep,
@@ -36,6 +37,65 @@ export const getDocumentWorkflow = async (documentId: string) => {
     `/sec-filings/documents/${encodeURIComponent(documentId)}/workflow`
   );
 };
+
+interface DirectoryUser {
+  id: string;
+  full_name: string;
+  email: string;
+}
+
+/**
+ * Turns a step's free-text "Assigned to" (from an imported sheet) into people.
+ *
+ * Names in parentheses are people and the text before them is a group label, so
+ * "Senior Staff (David S, Paul, Gina and Elena)" gives David S..., Paul..., Gina..., Elena...
+ * Without parentheses every comma/"and" part is kept ("Auditors", "Controller").
+ * A part becomes a platform user only when exactly one directory user matches it
+ * ("Paul" = first name, "David S" = first name + last initial); otherwise it stays an
+ * external name.
+ */
+export function resolveAssigneesFromText(text: string | null | undefined, users: DirectoryUser[]): SecWorkflowAssignee[] {
+  const source = (text || '').trim();
+  if (!source) return [];
+
+  const inParens = [...source.matchAll(/\(([^)]*)\)/g)].map((m) => m[1]).join(',');
+  const parts = (inParens.trim() ? inParens : source)
+    .split(/,|&|\/|\band\b/i)
+    .map((p) => p.trim().replace(/\.$/, ''))
+    .filter(Boolean);
+
+  const findUser = (part: string) => {
+    const words = part.toLowerCase().split(/\s+/);
+    const candidates = users.filter((u) => {
+      const name = (u.full_name || '').trim().toLowerCase();
+      if (!name) return false;
+      if (name === words.join(' ')) return true;
+      const [first, ...rest] = name.split(/\s+/);
+      const last = rest.join(' ');
+      if (words.length === 1) return first === words[0];
+      // "David S" / "David Schill" -> first name + start of last name
+      return words.length === 2 && first === words[0] && !!last && last.startsWith(words[1]);
+    });
+    return candidates.length === 1 ? candidates[0] : undefined;
+  };
+
+  const result: SecWorkflowAssignee[] = [];
+  for (const part of parts) {
+    const user = findUser(part);
+    const next: SecWorkflowAssignee = user
+      ? { userId: user.id, name: user.full_name, email: user.email }
+      : { userId: null, name: part, email: null };
+    const dup = result.some((r) =>
+      r.userId && next.userId ? r.userId === next.userId : r.name.toLowerCase() === next.name.toLowerCase()
+    );
+    if (!dup) result.push(next);
+  }
+  return result;
+}
+
+/** A step's people: saved assignees, or ones resolved from its imported free text. */
+export const getStepAssignees = (step: SecWorkflowStep, users: DirectoryUser[]): SecWorkflowAssignee[] =>
+  step.assignees?.length ? step.assignees : resolveAssigneesFromText(step.assignedTo, users);
 
 /** The value shown in the invite modal's Task / Proposed Branch Title dropdown. */
 export const formatWorkflowStepTitle = (step: SecWorkflowStep) =>

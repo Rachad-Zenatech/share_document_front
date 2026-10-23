@@ -15,6 +15,20 @@ import type {
   SecWorkflowUpdate
 } from '../types/secWorkflow';
 import { queryKeys } from '../services/queryKeys';
+import { apiClient } from '../services/apiClient';
+import type { User } from '../lib/AuthContext';
+
+/** Active platform users that can be put on a workflow step. */
+export function useAssignableUsers() {
+  return useQuery<User[]>({
+    queryKey: ['sec-workflow-assignable-users'],
+    queryFn: async () => {
+      const res = await apiClient.get<User[]>('/api/configuration/users?is_active=true');
+      return Array.isArray(res) ? res : [];
+    },
+    staleTime: 60_000
+  });
+}
 
 export function useSecWorkflows() {
   return useQuery<SecWorkflowList>({

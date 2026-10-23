@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, Search, UserPlus, X } from 'lucide-react';
-import { apiClient } from '../../../services/apiClient';
 import type { User } from '../../../lib/AuthContext';
+import { useAssignableUsers } from '../../../hooks/useSecWorkflows';
 import type { SecWorkflowAssignee } from '../../../types/secWorkflow';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import { Input } from '../../../components/ui/input';
@@ -29,11 +28,7 @@ export const WorkflowAssigneePicker: React.FC<WorkflowAssigneePickerProps> = ({ 
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
 
-  const { data: users = [], isLoading } = useQuery({
-    queryKey: ['sec-workflow-assignable-users'],
-    queryFn: () => apiClient.get<User[]>('/api/configuration/users?is_active=true'),
-    staleTime: 60_000
-  });
+  const { data: users = [], isLoading } = useAssignableUsers();
 
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
