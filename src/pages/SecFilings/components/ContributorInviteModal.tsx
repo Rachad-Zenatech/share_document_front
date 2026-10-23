@@ -24,6 +24,7 @@ import type { User } from '../../../lib/AuthContext';
 import { getProposalInviteUrl } from '../../../services/secFilingService';
 import { formatWorkflowStepTitle } from '../../../services/secWorkflowService';
 import { useDocumentWorkflow } from '../../../hooks/useSecWorkflows';
+import type { SecWorkflowAssignee, SecWorkflowStep } from '../../../types/secWorkflow';
 import { Dialog, DialogContent, DialogTitle } from '../../../components/ui/dialog';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -165,27 +166,59 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
   const workflowSteps = workflow?.steps ?? [];
   const firstStep = workflowSteps[0];
 
-  // Once the workflow loads, start the dropdown on its first step instead of a blank title.
-  useEffect(() => {
-    if (firstStep) {
-      setSelectedStep(String(firstStep.step));
-      setTaskTitle(formatWorkflowStepTitle(firstStep));
+  const selectedStepAssignees = workflowSteps.find((s) => String(s.step) === selectedStep)?.assignees ?? [];
+
+  // Fill the participant fields from a step's assignee: platform users come from the
+  // system directory (for job title), external people switch to the custom source.
+  const applyStepAssignee = (a: SecWorkflowAssignee, announce = false) => {
+    const directory = Array.isArray(systemUsersData) ? systemUsersData : [];
+    const match = a.userId
+      ? directory.find(
+          (u) => u.id === a.userId || (!!a.email && u.email?.toLowerCase() === a.email.toLowerCase())
+        )
+      : undefined;
+    if (a.userId) {
+      setSourceMode('system');
+      setContributorName(match?.full_name || a.name);
+      setContributorEmail(match?.email || a.email || '');
+      setContributorRole(match?.job_title || match?.department || 'System Member');
+    } else {
+      setSourceMode('custom');
+      setContributorName(a.name);
+      setContributorEmail('');
+      setContributorRole('External Contributor');
     }
-  }, [workflow?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    setGeneratedInvite(null);
+    if (announce) toast.success(`Filled in ${a.name} from the workflow step`);
+  };
+
+  const applyWorkflowStep = (step: SecWorkflowStep) => {
+    setSelectedStep(String(step.step));
+    setTaskTitle(formatWorkflowStepTitle(step));
+    // Only replace notes this function wrote, never ones the user typed.
+    if (step.assignedTo && (!description.trim() || description.startsWith('Workflow "'))) {
+      setDescription(`Workflow "${workflow?.name}" step ${step.step}. Assigned to: ${step.assignedTo}`);
+    }
+    const first = step.assignees?.[0];
+    if (first) applyStepAssignee(first);
+  };
+
+  // Once the workflow loads, start on its first step (and its first assignee) instead of a blank form.
+  // Re-runs once when the directory arrives so the assignee's job title is filled in.
+  const directoryLoaded = Array.isArray(systemUsersData) && systemUsersData.length > 0;
+  useEffect(() => {
+    if (firstStep) applyWorkflowStep(firstStep);
+  }, [workflow?.id, directoryLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectWorkflowStep = (value: string) => {
-    setSelectedStep(value);
     setGeneratedInvite(null);
     if (value === 'CUSTOM') {
+      setSelectedStep(value);
       setTaskTitle('');
       return;
     }
     const step = workflowSteps.find((s) => String(s.step) === value);
-    if (!step) return;
-    setTaskTitle(formatWorkflowStepTitle(step));
-    if (!description.trim() && step.assignedTo) {
-      setDescription(`Workflow "${workflow?.name}" step ${step.step}. Assigned to: ${step.assignedTo}`);
-    }
+    if (step) applyWorkflowStep(step);
   };
 
   const handleSelectSystemUser = (u: any) => {
@@ -333,11 +366,83 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
         <div className="p-6 space-y-4 text-xs max-h-[70vh] overflow-y-auto">
           {activeTab === 'create' ? (
             <>
+              {/* Workflow Task: picking a step fills in the title and its assigned person */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center justify-between">
+                  <span>1. Task / Proposed Branch Title *</span>
+                  {workflow && (
+                    <span className="text-[10px] font-normal text-slate-400">
+                      From workflow: <strong className="text-slate-600 dark:text-zinc-300">{workflow.name}</strong>
+                    </span>
+                  )}
+                </label>
+                {workflowSteps.length > 0 && (
+                  <select
+                    value={selectedStep}
+                    onChange={(e) => handleSelectWorkflowStep(e.target.value)}
+                    className="w-full h-8 px-2 rounded-md border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-semibold text-blue-950 dark:text-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                  >
+                    {workflowSteps.map((s) => (
+                      <option key={s.step} value={String(s.step)}>
+                        {formatWorkflowStepTitle(s)}
+                        {s.assignedTo ? ` (${s.assignedTo})` : ''}
+                      </option>
+                    ))}
+                    <option value="CUSTOM">Custom title…</option>
+                  </select>
+                )}
+                {(workflowSteps.length === 0 || selectedStep === 'CUSTOM') && (
+                  <Input
+                    value={taskTitle}
+                    onChange={(e) => {
+                      setTaskTitle(e.target.value);
+                      setGeneratedInvite(null);
+                    }}
+                    placeholder="e.g. Q2 Leases & Share Capital Draft"
+                    className="h-8 text-xs font-semibold text-blue-950 dark:text-blue-200"
+                  />
+                )}
+                {selectedStepAssignees.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                    <span className="text-[10px] text-slate-400">Assigned to this step:</span>
+                    {selectedStepAssignees.map((a) => {
+                      const isActive = a.email
+                        ? contributorEmail.toLowerCase() === a.email.toLowerCase()
+                        : contributorName === a.name;
+                      return (
+                        <button
+                          key={a.userId || `other:${a.name}`}
+                          type="button"
+                          onClick={() => applyStepAssignee(a, true)}
+                          title={a.userId ? a.email || undefined : 'External / no platform access'}
+                          className={`px-2 py-0.5 rounded-full border text-[10px] font-medium cursor-pointer transition-all ${
+                            isActive
+                              ? 'border-blue-600 bg-blue-600 text-white'
+                              : a.userId
+                              ? 'border-slate-300 text-slate-700 dark:text-zinc-300 hover:border-blue-400'
+                              : 'border-purple-300 text-purple-700 dark:text-purple-300 hover:border-purple-500'
+                          }`}
+                        >
+                          {a.name}
+                          {!a.userId && <span className="ml-1 opacity-70">ext</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {!workflow && (
+                  <p className="text-[10px] text-slate-400">
+                    No workflow is assigned to this document. Assign one under Document → Workflow Assignments to pick
+                    a step here.
+                  </p>
+                )}
+              </div>
+
               {/* Source Selection Mode */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                    <span>1. Select User Source</span>
+                    <span>2. Select User Source</span>
                   </span>
                   {(contributorName || contributorRole || contributorEmail) && (
                     <button
@@ -517,51 +622,6 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="md:col-span-2">
-                  <label className="text-[10px] font-semibold text-slate-500 mb-1 flex items-center justify-between">
-                    <span>Task / Proposed Branch Title *</span>
-                    {workflow && (
-                      <span className="font-normal text-slate-400">
-                        From workflow: <strong className="text-slate-600 dark:text-zinc-300">{workflow.name}</strong>
-                      </span>
-                    )}
-                  </label>
-                  {workflowSteps.length > 0 && (
-                    <select
-                      value={selectedStep}
-                      onChange={(e) => handleSelectWorkflowStep(e.target.value)}
-                      className="w-full h-8 px-2 mb-1.5 rounded-md border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-semibold text-blue-950 dark:text-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                    >
-                      {workflowSteps.map((s) => (
-                        <option key={s.step} value={String(s.step)}>
-                          {formatWorkflowStepTitle(s)}
-                          {s.assignedTo ? ` (${s.assignedTo})` : ''}
-                        </option>
-                      ))}
-                      <option value="CUSTOM">Custom title…</option>
-                    </select>
-                  )}
-                  {(workflowSteps.length === 0 || selectedStep === 'CUSTOM') && (
-                    <Input
-                      value={taskTitle}
-                      onChange={(e) => {
-                        setTaskTitle(e.target.value);
-                        setGeneratedInvite(null);
-                      }}
-                      placeholder="e.g. Q2 Leases & Share Capital Draft"
-                      className="h-8 text-xs font-semibold text-blue-950 dark:text-blue-200"
-                    />
-                  )}
-                  {!workflow && (
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      No workflow is assigned to this document. Assign one under Document → Workflow Assignments to pick
-                      a step here.
-                    </p>
-                  )}
-                </div>
-              </div>
-
               <div>
                 <label className="text-[10px] font-semibold text-slate-500 block mb-1">
                   Instructions / Notes for Contributor
@@ -580,7 +640,7 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
               {/* Document Governance & Merge Rights Selector */}
               <div className="space-y-2 pt-1">
                 <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center justify-between">
-                  <span>2. Document Governance & Merge Authorization</span>
+                  <span>3. Document Governance & Merge Authorization</span>
                   <Badge variant="outline" className="text-[10px] font-normal">
                     Multi-manager supported
                   </Badge>

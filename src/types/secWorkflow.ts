@@ -1,9 +1,18 @@
 // Mirrors the backend models in `models/sec_filing_model.py`; keep the two in step.
 
+/** A platform user (`userId` set) or an external person known only by name. */
+export interface SecWorkflowAssignee {
+  userId?: string | null;
+  name: string;
+  email?: string | null;
+}
+
 export interface SecWorkflowStep {
   step: number;
   description: string;
+  /** Display text built from `assignees`; the only field set for steps imported from sheets. */
   assignedTo?: string | null;
+  assignees?: SecWorkflowAssignee[] | null;
 }
 
 export interface SecWorkflow {

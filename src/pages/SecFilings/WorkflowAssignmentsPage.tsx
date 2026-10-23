@@ -28,6 +28,7 @@ import {
   DialogTitle
 } from '../../components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
+import { WorkflowAssigneePicker, formatAssignees } from './components/WorkflowAssigneePicker';
 import { secFilingService } from '../../services/secFilingService';
 import { buildWorkflowWorkbook, downloadBlob, parseWorkflowFile } from '../../services/secWorkflowService';
 import {
@@ -51,9 +52,16 @@ interface WorkflowDraft {
 const BLANK_DRAFT: WorkflowDraft = {
   name: '',
   description: '',
-  steps: [{ step: 1, description: '', assignedTo: '' }],
+  steps: [{ step: 1, description: '', assignees: [] }],
   documentIds: []
 };
+
+// Steps imported from sheets only carry free text, so it becomes one "Other" person
+// the user can swap for platform users.
+const toDraftStep = (s: SecWorkflowStep): SecWorkflowStep => ({
+  ...s,
+  assignees: s.assignees?.length ? s.assignees : s.assignedTo?.trim() ? [{ userId: null, name: s.assignedTo.trim() }] : []
+});
 
 export const WorkflowAssignmentsPage: React.FC = () => {
   const { data, isLoading, isError } = useSecWorkflows();
@@ -116,7 +124,7 @@ export const WorkflowAssignmentsPage: React.FC = () => {
             id: wf.id,
             name: wf.name,
             description: wf.description || '',
-            steps: wf.steps.map((s) => ({ ...s, assignedTo: s.assignedTo || '' })),
+            steps: wf.steps.map(toDraftStep),
             documentIds: [...wf.documentIds]
           }
         : { ...BLANK_DRAFT, steps: [...BLANK_DRAFT.steps] }
@@ -151,7 +159,7 @@ export const WorkflowAssignmentsPage: React.FC = () => {
       setDraft({
         name: parsed.name,
         description: parsed.description || '',
-        steps: parsed.steps.map((s) => ({ ...s, assignedTo: s.assignedTo || '' })),
+        steps: parsed.steps.map(toDraftStep),
         documentIds: []
       });
       toast.success(`Read ${parsed.steps.length} steps from "${file.name}". Assign it to a document and save.`);
@@ -169,7 +177,7 @@ export const WorkflowAssignmentsPage: React.FC = () => {
   const addStep = () => {
     setDraft((prev) =>
       prev
-        ? { ...prev, steps: [...prev.steps, { step: prev.steps.length + 1, description: '', assignedTo: '' }] }
+        ? { ...prev, steps: [...prev.steps, { step: prev.steps.length + 1, description: '', assignees: [] }] }
         : prev
     );
   };
@@ -199,7 +207,15 @@ export const WorkflowAssignmentsPage: React.FC = () => {
     if (!draft) return;
     const steps = draft.steps
       .filter((s) => s.description.trim())
-      .map((s, i) => ({ step: i + 1, description: s.description.trim(), assignedTo: s.assignedTo?.trim() || null }));
+      .map((s, i) => {
+        const assignees = s.assignees || [];
+        return {
+          step: i + 1,
+          description: s.description.trim(),
+          assignedTo: formatAssignees(assignees) || null,
+          assignees
+        };
+      });
 
     if (!draft.name.trim()) {
       toast.error('Please enter a workflow name.');
@@ -487,12 +503,12 @@ export const WorkflowAssignmentsPage: React.FC = () => {
                       placeholder="Step description"
                       className="h-8 text-xs flex-[3]"
                     />
-                    <Input
-                      value={s.assignedTo || ''}
-                      onChange={(e) => updateStep(index, { assignedTo: e.target.value })}
-                      placeholder="Assigned to"
-                      className="h-8 text-xs flex-[2]"
-                    />
+                    <div className="flex-[2] min-w-0">
+                      <WorkflowAssigneePicker
+                        value={s.assignees || []}
+                        onChange={(assignees) => updateStep(index, { assignees })}
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={() => removeStep(index)}
