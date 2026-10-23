@@ -11,7 +11,8 @@ import {
   Link2,
   GripVertical,
   Download,
-  FileDown
+  FileDown,
+  ChevronDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
@@ -26,6 +27,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '../../components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { secFilingService } from '../../services/secFilingService';
 import { buildWorkflowWorkbook, downloadBlob, parseWorkflowFile } from '../../services/secWorkflowService';
 import {
@@ -66,6 +68,8 @@ export const WorkflowAssignmentsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [draft, setDraft] = useState<WorkflowDraft | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDocPickerOpen, setIsDocPickerOpen] = useState(false);
+  const [docSearch, setDocSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // documentId -> workflow, so the editor can show when a document will move workflows.
@@ -94,6 +98,14 @@ export const WorkflowAssignmentsPage: React.FC = () => {
         wf.documentIds.some((id) => titleOf(id).toLowerCase().includes(q))
     );
   }, [workflows, searchQuery, docTitleById]);
+
+  const filteredPickerDocs = useMemo(() => {
+    const q = docSearch.trim().toLowerCase();
+    if (!q) return documents;
+    return documents.filter(
+      (d) => d.title.toLowerCase().includes(q) || (d.formType || '').toLowerCase().includes(q)
+    );
+  }, [documents, docSearch]);
 
   const unassignedDocsCount = documents.filter((d) => !workflowByDocId.has(d.id)).length;
 
@@ -507,35 +519,120 @@ export const WorkflowAssignmentsPage: React.FC = () => {
                     No documents found. Create a document in the Document Hub first.
                   </div>
                 ) : (
-                  <div className="max-h-48 overflow-y-auto space-y-1 border border-slate-200 dark:border-zinc-700 rounded-lg p-2">
-                    {documents.map((doc) => {
-                      const current = workflowByDocId.get(doc.id);
-                      const movesFromOther = current && current.id !== draft.id && draft.documentIds.includes(doc.id);
-                      return (
-                        <label
-                          key={doc.id}
-                          className="flex items-center gap-2 p-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-zinc-800 cursor-pointer"
-                        >
-                          <Checkbox
-                            checked={draft.documentIds.includes(doc.id)}
-                            onCheckedChange={() => toggleDraftDoc(doc.id)}
-                          />
-                          <span className="flex-1 min-w-0 truncate font-medium text-slate-800 dark:text-zinc-200">
-                            {doc.title}
-                          </span>
-                          <span className="text-[10px] text-slate-400 shrink-0">{doc.formType}</span>
-                          {current && current.id !== draft.id && (
-                            <Badge
-                              variant="outline"
-                              className={`text-[9px] shrink-0 ${movesFromOther ? 'text-amber-700 border-amber-300' : 'text-slate-500'}`}
-                            >
-                              {movesFromOther ? `Moves from ${current.name}` : `On ${current.name}`}
-                            </Badge>
+                  <Popover
+                    open={isDocPickerOpen}
+                    onOpenChange={(open) => {
+                      setIsDocPickerOpen(open);
+                      if (!open) setDocSearch('');
+                    }}
+                  >
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="w-full min-h-9 px-2 py-1.5 rounded-md border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 flex items-center gap-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <div className="flex-1 min-w-0 flex flex-wrap gap-1">
+                          {draft.documentIds.length === 0 ? (
+                            <span className="text-slate-400 py-0.5">Select documents...</span>
+                          ) : (
+                            draft.documentIds.map((docId) => {
+                              const current = workflowByDocId.get(docId);
+                              const moves = current && current.id !== draft.id;
+                              return (
+                                <Badge
+                                  key={docId}
+                                  variant="outline"
+                                  title={moves ? `Moves from ${current.name}` : undefined}
+                                  className={`text-[10px] gap-1 font-normal max-w-full ${moves ? 'border-amber-300 text-amber-800 dark:text-amber-300' : ''}`}
+                                >
+                                  <FileText className="w-3 h-3 text-blue-600 shrink-0" />
+                                  <span className="truncate">{docTitle(docId)}</span>
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label={`Remove ${docTitle(docId)}`}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleDraftDoc(docId);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        toggleDraftDoc(docId);
+                                      }
+                                    }}
+                                    className="shrink-0 text-slate-400 hover:text-red-600"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </span>
+                                </Badge>
+                              );
+                            })
                           )}
-                        </label>
-                      );
-                    })}
-                  </div>
+                        </div>
+                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-2 gap-2 text-xs">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" />
+                        <Input
+                          autoFocus
+                          value={docSearch}
+                          onChange={(e) => setDocSearch(e.target.value)}
+                          placeholder="Search documents by title or form type..."
+                          className="h-7 text-[11px] pl-8"
+                        />
+                      </div>
+                      <div className="max-h-60 overflow-y-auto space-y-0.5">
+                        {filteredPickerDocs.length === 0 ? (
+                          <div className="py-4 text-center text-slate-400">No documents match "{docSearch}"</div>
+                        ) : (
+                          filteredPickerDocs.map((doc) => {
+                            const current = workflowByDocId.get(doc.id);
+                            const isSelected = draft.documentIds.includes(doc.id);
+                            const onOther = current && current.id !== draft.id;
+                            return (
+                              <label
+                                key={doc.id}
+                                className={`flex items-start gap-2 p-1.5 rounded-md cursor-pointer ${
+                                  isSelected ? 'bg-blue-50 dark:bg-blue-950/40' : 'hover:bg-slate-50 dark:hover:bg-zinc-800'
+                                }`}
+                              >
+                                <Checkbox checked={isSelected} onCheckedChange={() => toggleDraftDoc(doc.id)} className="mt-0.5" />
+                                <span className="flex-1 min-w-0">
+                                  <span className="block truncate font-medium text-slate-800 dark:text-zinc-200">{doc.title}</span>
+                                  <span className="block text-[10px] text-slate-400 truncate">{doc.formType}</span>
+                                </span>
+                                {onOther && (
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[9px] shrink-0 ${isSelected ? 'text-amber-700 border-amber-300' : 'text-slate-500'}`}
+                                  >
+                                    {isSelected ? `Moves from ${current.name}` : `On ${current.name}`}
+                                  </Badge>
+                                )}
+                              </label>
+                            );
+                          })
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-zinc-800 text-[10px] text-slate-500">
+                        <span>
+                          {draft.documentIds.length} of {documents.length} selected
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsDocPickerOpen(false)}
+                          className="font-semibold text-blue-600 hover:underline cursor-pointer"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 )}
               </div>
             </div>
