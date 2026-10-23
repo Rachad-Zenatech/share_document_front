@@ -51,11 +51,13 @@ export default function Breadcrumbs() {
       "system-logs": "System Logs",
       configuration: "Configuration",
       configurations: "Configurations",
-      dashboard: "Document",
-      "sec-filings": "Document",
-      documents: "Document",
-      document: "Document",
+      dashboard: "Document Workspace",
+      "sec-filings": "Document Workspace",
+      documents: "Document Workspace",
+      document: "Document Workspace",
       editor: "Document Editor",
+      spreadsheets: "Spreadsheet Hub",
+      workflows: "Workflow Assignments",
     };
     const key = name.toLowerCase();
     if (specialNames[key]) {

@@ -438,7 +438,7 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
                 )}
                 {!workflow && (
                   <p className="text-[10px] text-slate-400">
-                    No workflow is assigned to this document. Assign one under Document → Workflow Assignments to pick
+                    No workflow is assigned to this document. Assign one under Document Workspace → Workflow Assignments to pick
                     a step here.
                   </p>
                 )}

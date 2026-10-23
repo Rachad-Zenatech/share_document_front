@@ -22,7 +22,7 @@ export interface NavigationItem {
 
 export const navigation: NavigationItem[] = [
   {
-    label: "Document",
+    label: "Document Workspace",
     path: "/sec-filings",
     icon: FileText,
     section: "MAIN",
