@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { SecBlock, SecBlockType, SecBlockDiff, SecBlockSpacing, AttachedSpreadsheet } from '../../../types/secFiling';
 import { BlockItem } from './BlockItem';
 import { InlineAddBlock } from './InlineAddBlock';
@@ -113,8 +113,20 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
     }
     return ids;
   }, [blocks]);
+  // BlockItem's memo ignores callback props, so a block that didn't re-render would keep
+  // handlers bound to an old copy of the document (edits then rename sections from stale
+  // data, or overwrite other changes, until a refresh). Route every block action through
+  // a ref that always holds this render's handlers.
+  const handlersRef = useRef({ onUpdateBlock, onMoveBlock, onDuplicateBlock, onDeleteBlock, onStartSectionAtBlock });
+  handlersRef.current = { onUpdateBlock, onMoveBlock, onDuplicateBlock, onDeleteBlock, onStartSectionAtBlock };
+  const updateBlockLatest = (id: string, updates: Partial<SecBlock>) => handlersRef.current.onUpdateBlock(id, updates);
+  const moveBlockLatest = (id: string, dir: 'up' | 'down') => handlersRef.current.onMoveBlock(id, dir);
+  const duplicateBlockLatest = (id: string) => handlersRef.current.onDuplicateBlock(id);
+  const deleteBlockLatest = (id: string) => handlersRef.current.onDeleteBlock(id);
   const startSectionHandler = (id: string) =>
-    onStartSectionAtBlock && headingsInsideSection.has(id) ? () => onStartSectionAtBlock(id) : undefined;
+    onStartSectionAtBlock && headingsInsideSection.has(id)
+      ? () => handlersRef.current.onStartSectionAtBlock?.(id)
+      : undefined;
   const selectedSet = useMemo(() => new Set(selectedBlockIds), [selectedBlockIds]);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [showRuler, setShowRuler] = useState<boolean>(true);
@@ -640,12 +652,12 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
                             isMultiSelected={selectedSet.has(block.id)}
                             onSelect={() => onSelectBlock(block.id)}
                             onToggleSelect={(multi) => onToggleBlockSelection?.(block.id, multi)}
-                            onUpdate={(updates) => onUpdateBlock(block.id, updates)}
-                            onMoveUp={() => onMoveBlock(block.id, 'up')}
-                            onMoveDown={() => onMoveBlock(block.id, 'down')}
-                            onDuplicate={() => onDuplicateBlock(block.id)}
+                            onUpdate={(updates) => updateBlockLatest(block.id, updates)}
+                            onMoveUp={() => moveBlockLatest(block.id, 'up')}
+                            onMoveDown={() => moveBlockLatest(block.id, 'down')}
+                            onDuplicate={() => duplicateBlockLatest(block.id)}
                             onStartSection={startSectionHandler(block.id)}
-                            onDelete={() => onDeleteBlock(block.id)}
+                            onDelete={() => deleteBlockLatest(block.id)}
                             diffType={diffInfo?.status}
                             tableCellDiffs={diffInfo?.tableCellDiffs}
                             viewMode={viewMode}
@@ -735,12 +747,12 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
                       isMultiSelected={selectedSet.has(block.id)}
                       onSelect={() => onSelectBlock(block.id)}
                       onToggleSelect={(multi) => onToggleBlockSelection?.(block.id, multi)}
-                      onUpdate={(updates) => onUpdateBlock(block.id, updates)}
-                      onMoveUp={() => onMoveBlock(block.id, 'up')}
-                      onMoveDown={() => onMoveBlock(block.id, 'down')}
-                      onDuplicate={() => onDuplicateBlock(block.id)}
+                      onUpdate={(updates) => updateBlockLatest(block.id, updates)}
+                      onMoveUp={() => moveBlockLatest(block.id, 'up')}
+                      onMoveDown={() => moveBlockLatest(block.id, 'down')}
+                      onDuplicate={() => duplicateBlockLatest(block.id)}
                       onStartSection={startSectionHandler(block.id)}
-                      onDelete={() => onDeleteBlock(block.id)}
+                      onDelete={() => deleteBlockLatest(block.id)}
                       diffType={diffInfo?.status}
                       tableCellDiffs={diffInfo?.tableCellDiffs}
                       viewMode={viewMode}
