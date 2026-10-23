@@ -30,6 +30,47 @@ import {
 
 export type UserFilingRole = 'LEAD_CONTROLLER' | 'CONTRIBUTOR';
 
+/**
+ * Moves the run of blocks starting at `start` that are still in `fromSection` into
+ * `toSection`, stopping at the first block from another section. This is how a heading
+ * takes over the rest of the section it was placed in.
+ */
+function moveRunToSection(blocks: SecBlock[], start: number, fromSection: string, toSection: string): SecBlock[] {
+  const next = [...blocks];
+  const now = new Date().toISOString();
+  for (let i = start; i < next.length && next[i].section === fromSection; i++) {
+    next[i] = { ...next[i], section: toSection, updatedAt: now };
+  }
+  return next;
+}
+
+// Placeholder text older builds gave a heading inserted into an existing section,
+// while leaving it in that section, so it never reached Document Sections.
+const LEGACY_HEADING_PLACEHOLDER = /^new section heading$/i;
+
+/**
+ * Gives each legacy placeholder heading that is still inside another section its own
+ * section, carrying the blocks after it along. Returns null when nothing needed fixing.
+ */
+function repairLegacySectionHeadings(blocks: SecBlock[]): SecBlock[] | null {
+  let next = blocks;
+  let changed = false;
+  const seen = new Set<string>();
+  for (let i = 0; i < next.length; i++) {
+    const b = next[i];
+    if (b.type === 'heading' && seen.has(b.section) && LEGACY_HEADING_PLACEHOLDER.test(b.text.trim())) {
+      const existing = new Set(next.map((x) => x.section));
+      let name = 'New Section Heading';
+      let c = 2;
+      while (existing.has(name)) name = `New Section Heading ${c++}`;
+      next = moveRunToSection(next, i, b.section, name);
+      changed = true;
+    }
+    seen.add(next[i].section);
+  }
+  return changed ? next : null;
+}
+
 export function useSecFiling() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -284,6 +325,15 @@ export function useSecFiling() {
     [workingBlocks, applyWorkingBlocks]
   );
 
+  // One-time repair of headings saved by older builds (see repairLegacySectionHeadings).
+  // Written without an undo entry since it is a data fix, not a user edit.
+  // Merged proposals are read-only history (writing to one forks it), so they are left alone.
+  useEffect(() => {
+    if (activeProposal?.status === 'merged') return;
+    const repaired = repairLegacySectionHeadings(workingBlocks);
+    if (repaired) applyWorkingBlocks(repaired);
+  }, [workingBlocks, applyWorkingBlocks, activeProposal?.status]);
+
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) {
       toast.info('Nothing to undo');
@@ -333,7 +383,10 @@ export function useSecFiling() {
         }
         section = sName;
       } else if (!section) {
-        section = workingBlocks[index]?.section || 'General Disclosures';
+        // A block added below another belongs to the same section as the block above it
+        // (e.g. a paragraph added under a new heading joins that heading's section).
+        section =
+          workingBlocks[index - 1]?.section || workingBlocks[index]?.section || 'General Disclosures';
       }
 
       const blockId = `block-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -508,14 +561,27 @@ export function useSecFiling() {
           };
       }
 
-      const nextBlocks = [...workingBlocks];
+      let nextBlocks = [...workingBlocks];
       const targetIdx = index >= 0 && index <= nextBlocks.length ? index : nextBlocks.length;
       nextBlocks.splice(targetIdx, 0, newBlock);
+      if (type === 'heading') {
+        // A heading starts a section: the rest of the section it was dropped into
+        // now sits under it, so those blocks move into the heading's new section.
+        const interrupted = nextBlocks[targetIdx - 1]?.section;
+        if (interrupted && interrupted !== section) {
+          nextBlocks = moveRunToSection(nextBlocks, targetIdx + 1, interrupted, section);
+        }
+        if (sectionFilter !== 'ALL' && sectionFilter !== section) {
+          setSectionFilter(section);
+        }
+      }
       setWorkingBlocks(nextBlocks);
       setSelectedBlockId(newBlock.id);
-      toast.success(`Added new ${type.replace('_', ' ')} block`);
+      toast.success(
+        type === 'heading' ? `Added new section "${section}"` : `Added new ${type.replace('_', ' ')} block`
+      );
     },
-    [workingBlocks, setWorkingBlocks, user]
+    [workingBlocks, setWorkingBlocks, user, sectionFilter, setSectionFilter]
   );
 
   const updateBlock = useCallback(
@@ -590,6 +656,43 @@ export function useSecFiling() {
       }
     },
     [workingBlocks, setWorkingBlocks, user, sectionFilter, setSectionFilter]
+  );
+
+  // Make a heading that sits inside another section start its own section: the heading
+  // and the blocks after it that are still in the old section move to a new section
+  // named after the heading. Headings added before the outline fix were stored inside
+  // the surrounding section, so this is how they get into the Document Sections list.
+  // BlockItem is memoised without comparing callbacks, so read the latest blocks from a ref
+  // rather than this callback's closure.
+  const latestBlocksRef = useRef(workingBlocks);
+  latestBlocksRef.current = workingBlocks;
+  const latestSectionFilterRef = useRef(sectionFilter);
+  latestSectionFilterRef.current = sectionFilter;
+
+  const startSectionAtBlock = useCallback(
+    (id: string) => {
+      const blocks = latestBlocksRef.current;
+      const idx = blocks.findIndex((b) => b.id === id);
+      const heading = blocks[idx];
+      if (idx === -1 || heading.type !== 'heading') return;
+
+      const oldSection = heading.section;
+      const existing = new Set(blocks.map((b) => b.section).filter(Boolean));
+      const base = (heading as SecHeadingBlock).text.trim() || 'New Section';
+      let name = base;
+      let c = 2;
+      while (existing.has(name)) {
+        name = `${base} (${c++})`;
+      }
+
+      const nextBlocks = moveRunToSection(blocks, idx, oldSection, name);
+      setWorkingBlocks(nextBlocks);
+      if (latestSectionFilterRef.current === oldSection) {
+        setSectionFilter(name);
+      }
+      toast.success(`"${name}" is now its own section`);
+    },
+    [setWorkingBlocks, setSectionFilter]
   );
 
   const moveBlock = useCallback(
@@ -1412,6 +1515,7 @@ export function useSecFiling() {
     addBlock,
     updateBlock,
     moveBlock,
+    startSectionAtBlock,
     moveMultipleBlocks,
     duplicateBlock,
     duplicateMultipleBlocks,

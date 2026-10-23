@@ -114,6 +114,7 @@ export default function SecFilingContributorPage() {
     addBlock,
     updateBlock,
     moveBlock,
+    startSectionAtBlock,
     moveMultipleBlocks,
     duplicateBlock,
     duplicateMultipleBlocks,
@@ -671,6 +672,7 @@ export default function SecFilingContributorPage() {
             }
             onUpdateBlock={updateBlock}
             onMoveBlock={moveBlock}
+            onStartSectionAtBlock={startSectionAtBlock}
             onMoveMultipleBlocks={moveMultipleBlocks}
             onDuplicateBlock={duplicateBlock}
             onDuplicateMultipleBlocks={duplicateMultipleBlocks}

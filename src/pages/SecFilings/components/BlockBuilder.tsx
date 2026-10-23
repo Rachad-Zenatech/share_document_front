@@ -45,6 +45,8 @@ interface BlockBuilderProps {
   tableTemplates?: FinancialTableTemplate[];
   onUpdateBlock: (id: string, updates: Partial<SecBlock>) => void;
   onMoveBlock: (id: string, direction: 'up' | 'down') => void;
+  /** Split the section so this heading (and the blocks after it) start a new one. */
+  onStartSectionAtBlock?: (id: string) => void;
   onMoveMultipleBlocks?: (ids: string[], direction: 'up' | 'down') => void;
   onDuplicateBlock: (id: string) => void;
   onDuplicateMultipleBlocks?: (ids: string[]) => void;
@@ -78,6 +80,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
   tableTemplates,
   onUpdateBlock,
   onMoveBlock,
+  onStartSectionAtBlock,
   onMoveMultipleBlocks,
   onDuplicateBlock,
   onDuplicateMultipleBlocks,
@@ -99,6 +102,19 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
 }) => {
   const diffMap = useMemo(() => new Map<string, SecBlockDiff>(diffs.map((d) => [d.blockId, d])), [diffs]);
   const blockIndexMap = useMemo(() => new Map<string, number>(blocks.map((b, i) => [b.id, i])), [blocks]);
+  // Headings that are not the first block of their section don't appear in Document Sections;
+  // they get a "Start new section here" action.
+  const headingsInsideSection = useMemo(() => {
+    const seen = new Set<string>();
+    const ids = new Set<string>();
+    for (const b of blocks) {
+      if (b.type === 'heading' && seen.has(b.section)) ids.add(b.id);
+      seen.add(b.section);
+    }
+    return ids;
+  }, [blocks]);
+  const startSectionHandler = (id: string) =>
+    onStartSectionAtBlock && headingsInsideSection.has(id) ? () => onStartSectionAtBlock(id) : undefined;
   const selectedSet = useMemo(() => new Set(selectedBlockIds), [selectedBlockIds]);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [showRuler, setShowRuler] = useState<boolean>(true);
@@ -628,6 +644,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
                             onMoveUp={() => onMoveBlock(block.id, 'up')}
                             onMoveDown={() => onMoveBlock(block.id, 'down')}
                             onDuplicate={() => onDuplicateBlock(block.id)}
+                            onStartSection={startSectionHandler(block.id)}
                             onDelete={() => onDeleteBlock(block.id)}
                             diffType={diffInfo?.status}
                             tableCellDiffs={diffInfo?.tableCellDiffs}
@@ -722,6 +739,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
                       onMoveUp={() => onMoveBlock(block.id, 'up')}
                       onMoveDown={() => onMoveBlock(block.id, 'down')}
                       onDuplicate={() => onDuplicateBlock(block.id)}
+                      onStartSection={startSectionHandler(block.id)}
                       onDelete={() => onDeleteBlock(block.id)}
                       diffType={diffInfo?.status}
                       tableCellDiffs={diffInfo?.tableCellDiffs}

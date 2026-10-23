@@ -3,6 +3,7 @@ import {
   ChevronUp,
   ChevronDown,
   Copy,
+  ListPlus,
   Trash2,
   AlignLeft,
   AlignCenter,
@@ -134,6 +135,8 @@ interface BlockItemProps {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onDuplicate: () => void;
+  /** Set only for headings inside another section: makes the heading start its own section. */
+  onStartSection?: () => void;
   onDelete: () => void;
   isDiffModified?: boolean;
   diffType?: 'added' | 'modified' | 'deleted' | 'unchanged';
@@ -161,6 +164,7 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
   onMoveUp,
   onMoveDown,
   onDuplicate,
+  onStartSection,
   onDelete,
   diffType,
   tableCellDiffs,
@@ -1011,6 +1015,22 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
           <Copy className="w-3 h-3" />
         </Button>
 
+        {onStartSection && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onStartSection();
+            }}
+            title={`Start new section here: "${(block as SecHeadingBlock).text}" (adds it to Document Sections)`}
+            className="h-5 w-5 text-amber-600 hover:text-blue-600"
+          >
+            <ListPlus className="w-3 h-3" />
+          </Button>
+        )}
+
         <Button
           type="button"
           variant="ghost"
@@ -1124,7 +1144,8 @@ export const BlockItem = React.memo(BlockItemComponent, (prev, next) => {
     prev.attachedSpreadsheet === next.attachedSpreadsheet &&
     prev.searchQuery === next.searchQuery &&
     prev.isActiveSearchMatch === next.isActiveSearchMatch &&
-    prev.isSearchMatch === next.isSearchMatch
+    prev.isSearchMatch === next.isSearchMatch &&
+    !!prev.onStartSection === !!next.onStartSection
   );
 });
 
