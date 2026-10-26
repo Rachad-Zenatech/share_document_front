@@ -1451,6 +1451,40 @@ export function useSecFiling() {
     };
   }, [refreshAll]);
 
+  // Documents live on the server (see secFiling/secFilingStore.ts): re-read when someone
+  // else's changes arrive, and say so when a save was refused or could not be sent.
+  useEffect(() => {
+    const handleRemoteUpdate = () => refreshAll();
+    const handleConflict = (e: Event) => {
+      const detail = (e as CustomEvent<{ title?: string }>).detail;
+      refreshAll();
+      toast.warning('Someone else saved this document first', {
+        description: `Loaded their latest version of "${detail?.title || 'the document'}". Re-apply your last change if it is missing.`
+      });
+    };
+    let lastErrorToast = 0;
+    const handleSyncError = (e: Event) => {
+      const detail = (e as CustomEvent<{ message?: string; permanent?: boolean }>).detail;
+      if (Date.now() - lastErrorToast < 15000) return;
+      lastErrorToast = Date.now();
+      if (detail?.permanent) {
+        toast.error('Your changes could not be saved to the server', { description: detail?.message });
+      } else {
+        toast.warning('Not saved to the server yet; retrying', {
+          description: 'Keep this tab open until it reconnects.'
+        });
+      }
+    };
+    window.addEventListener('sec-filing-remote-updated', handleRemoteUpdate);
+    window.addEventListener('sec-filing-remote-conflict', handleConflict);
+    window.addEventListener('sec-filing-sync-error', handleSyncError);
+    return () => {
+      window.removeEventListener('sec-filing-remote-updated', handleRemoteUpdate);
+      window.removeEventListener('sec-filing-remote-conflict', handleConflict);
+      window.removeEventListener('sec-filing-sync-error', handleSyncError);
+    };
+  }, [refreshAll]);
+
   // Global Keyboard Listener for Ctrl+Z / Cmd+Z and Ctrl+Y / Cmd+Shift+Z
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

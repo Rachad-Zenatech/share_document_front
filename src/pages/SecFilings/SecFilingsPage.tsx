@@ -1140,9 +1140,10 @@ export default function SecFilingsPage() {
             onToggleBlockSelection={toggleBlockSelection}
             onSelectAllBlocks={selectAllBlocks}
             onClearSelection={clearBlockSelection}
-            onAddBlock={(index, type, customBlock) =>
-              addBlock(index, type, sectionFilter !== 'ALL' ? sectionFilter : undefined, customBlock)
-            }
+            // The editor always shows the whole document (the outline only highlights and
+            // scrolls), so a new block takes its section from where it is inserted, not from
+            // the highlighted/scrolled-to section.
+            onAddBlock={(index, type, customBlock) => addBlock(index, type, undefined, customBlock)}
             onUpdateBlock={updateBlock}
             onMoveBlock={moveBlock}
             onStartSectionAtBlock={startSectionAtBlock}

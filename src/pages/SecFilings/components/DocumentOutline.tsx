@@ -168,7 +168,7 @@ const DocumentOutlineComponent: React.FC<DocumentOutlineProps> = ({
           {onCreateSection && (
             <button
               type="button"
-              onClick={onCreateSection}
+              onClick={() => onCreateSection()}
               className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/80 text-blue-600 dark:text-blue-400 text-[10px] font-medium transition-colors cursor-pointer border border-blue-200 dark:border-blue-800/60 shadow-2xs"
               title="Add a new section to document"
             >

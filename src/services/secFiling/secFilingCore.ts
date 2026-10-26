@@ -15,6 +15,7 @@ import {
   generateProjectProposalDoc
 } from '../../data/secDocumentTemplates';
 import {
+  docStore,
   STORAGE_KEYS,
   safeSetItem,
   flushPendingSaves,
@@ -31,6 +32,7 @@ import {
 } from './secFilingStorage';
 import { sanitizeAndCompactBlocks } from './secFilingSanitizer';
 import { getAllSpreadsheets } from './secFilingSpreadsheet';
+import { deleteRemoteDocument, getDocumentPreviewBlocks, isDocStoreServerBacked } from './secFilingStore';
 
 export function getMainDocument(): SecFilingDocument {
     const pending = getPendingMainDoc();
@@ -45,13 +47,15 @@ export function getMainDocument(): SecFilingDocument {
       }
       return pending;
     }
-    const saved = localStorage.getItem(STORAGE_KEYS.MAIN_DOC) || localStorage.getItem('sec_filing_main_doc_v2_full') || localStorage.getItem('sec_filing_main_doc');
+    const saved = docStore.getItem(STORAGE_KEYS.MAIN_DOC) || docStore.getItem('sec_filing_main_doc_v2_full') || docStore.getItem('sec_filing_main_doc');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (parsed && Array.isArray(parsed.blocks)) {
-          // If this is the default review copy and was corrupted by earlier compaction (lost 4th column or was truncated)
-          if (parsed.id === 'sec-doc-zenatech-2026-q2') {
+          // If this is the default review copy and was corrupted by earlier compaction (lost 4th column or was truncated).
+          // Browser-only mode: on the server this would silently overwrite everyone's copy
+          // whenever someone trimmed the document below 50 blocks.
+          if (parsed.id === 'sec-doc-zenatech-2026-q2' && !isDocStoreServerBacked()) {
             const firstTable = parsed.blocks.find((b: any) => b.type === 'financial_table');
             if (parsed.blocks.length < 50 || (firstTable && firstTable.headers?.length < 4)) {
               safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(INITIAL_SEC_FILING_DOC));
@@ -78,7 +82,14 @@ export function getMainDocument(): SecFilingDocument {
         console.error('Failed to parse main document from storage', e);
       }
     }
-    const defaultDoc = JSON.parse(JSON.stringify(INITIAL_SEC_FILING_DOC));
+    // With no documents on the server for this user, start them on a blank document of
+    // their own: the built-in review copy has a fixed id that belongs to whoever owns it.
+    const defaultDoc: SecFilingDocument = isDocStoreServerBacked()
+      ? generateBlankDocument('Untitled Document')
+      : JSON.parse(JSON.stringify(INITIAL_SEC_FILING_DOC));
+    if (isDocStoreServerBacked()) {
+      docStore.setItem(STORAGE_KEYS.ACTIVE_DOC_ID, defaultDoc.id);
+    }
     const allSheets = getAllSpreadsheets();
     const match = allSheets.find((s) => s.assignedDocIds?.includes(defaultDoc.id) || s.id === defaultDoc.attachedSpreadsheetId);
     if (match) {
@@ -122,7 +133,7 @@ export function getDocumentsList(): SecDocumentSummary[] {
       return cached;
     }
     const mainDoc = getMainDocument();
-    const saved = localStorage.getItem(STORAGE_KEYS.DOCUMENTS_LIST);
+    const saved = docStore.getItem(STORAGE_KEYS.DOCUMENTS_LIST);
     let list: SecDocumentSummary[] = [];
 
     if (saved) {
@@ -136,11 +147,13 @@ export function getDocumentsList(): SecDocumentSummary[] {
       }
     }
 
-    if (list.length === 0) {
+    // Demo documents are only seeded in the old browser-only mode. With the server, an
+    // empty list means this user has no documents yet (or none shared with them).
+    if (list.length === 0 && !isDocStoreServerBacked()) {
       list = [
         {
           id: mainDoc.id || 'sec-doc-zenatech-2026-q2',
-          title: mainDoc.title || 'ZenaTech, Inc. Consolidated Financial Statements — June 30, 2026 (v22 REVIEW COPY)',
+          title: mainDoc.title || 'ZenaTech, Inc. Consolidated Financial Statements â€” June 30, 2026 (v22 REVIEW COPY)',
           formType: mainDoc.formType || 'Form 6-K / Interim Consolidated',
           period: mainDoc.period || 'For the Six Months Ended June 30, 2026 and June 30, 2025',
           updatedAt: mainDoc.updatedAt || new Date().toISOString(),
@@ -179,7 +192,7 @@ export function getDocumentsList(): SecDocumentSummary[] {
         },
         {
           id: 'sec-doc-zenatech-8k-acq',
-          title: 'ZenaTech, Inc. Form 8-K (Current Report — Strategic Acquisition)',
+          title: 'ZenaTech, Inc. Form 8-K (Current Report â€” Strategic Acquisition)',
           formType: 'Form 8-K',
           period: 'Current',
           updatedAt: '2026-09-25T11:20:00.000Z',
@@ -195,13 +208,13 @@ export function getDocumentsList(): SecDocumentSummary[] {
       list = list.filter((d) => d.id !== 'sec-doc-zenatech-v24-sarah-jenkins' && !d.title?.includes('Sarah_Jenkins'));
     }
 
-    // Scan localStorage for any custom doc keys: sec_doc_content_*
-    if (typeof localStorage !== 'undefined') {
+    // Scan docStore for any custom doc keys: sec_doc_content_*
+    if (typeof docStore !== 'undefined') {
       try {
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
+        for (let i = 0; i < docStore.length; i++) {
+          const key = docStore.key(i);
           if (key && key.startsWith('sec_doc_content_')) {
-            const raw = localStorage.getItem(key);
+            const raw = docStore.getItem(key);
             if (raw) {
               try {
                 const doc = JSON.parse(raw);
@@ -234,7 +247,7 @@ export function getDocumentsList(): SecDocumentSummary[] {
           }
         }
       } catch (e) {
-        console.warn('Error scanning custom docs in localStorage', e);
+        console.warn('Error scanning custom docs in docStore', e);
       }
     }
 
@@ -262,7 +275,7 @@ export function getDocumentsList(): SecDocumentSummary[] {
     }
 
     try {
-      localStorage.setItem(STORAGE_KEYS.DOCUMENTS_LIST, JSON.stringify(deduplicatedList));
+      docStore.setItem(STORAGE_KEYS.DOCUMENTS_LIST, JSON.stringify(deduplicatedList));
     } catch (e) {
       console.warn('Could not save documents list', e);
     }
@@ -276,7 +289,7 @@ export function getDocumentPreview(id: string): SecBlock[] {
       return mainDoc.blocks.slice(0, 15);
     }
     const customKey = `sec_doc_content_${id}`;
-    const customSaved = localStorage.getItem(customKey);
+    const customSaved = docStore.getItem(customKey);
     if (customSaved) {
       try {
         const parsed = JSON.parse(customSaved);
@@ -287,6 +300,10 @@ export function getDocumentPreview(id: string): SecBlock[] {
         // Fallback to defaults
       }
     }
+    const serverPreview = getDocumentPreviewBlocks(id);
+    if (serverPreview) {
+      return serverPreview as SecBlock[];
+    }
     if (id === 'sec-doc-zenatech-10q-q2') {
       return generate10QDoc('ZenaTech, Inc. Form 10-Q (Q2 2026 Quarterly Report)').blocks.slice(0, 15);
     }
@@ -294,7 +311,7 @@ export function getDocumentPreview(id: string): SecBlock[] {
       return generate10KDoc('ZenaTech, Inc. Form 10-K (Annual Comprehensive Audited Filing)').blocks.slice(0, 15);
     }
     if (id === 'sec-doc-zenatech-8k-acq') {
-      return generate8KDoc('ZenaTech, Inc. Form 8-K (Current Report — Strategic Acquisition)').blocks.slice(0, 15);
+      return generate8KDoc('ZenaTech, Inc. Form 8-K (Current Report â€” Strategic Acquisition)').blocks.slice(0, 15);
     }
     if (id === 'doc-onboarding-1') {
       return generateOnboardingChecklistDoc('Onboarding').blocks.slice(0, 15);
@@ -308,7 +325,7 @@ export function getDocumentPreview(id: string): SecBlock[] {
 export function saveDocumentsList(list: SecDocumentSummary[]): void {
     setCachedDocumentsList(list);
     try {
-      localStorage.setItem(STORAGE_KEYS.DOCUMENTS_LIST, JSON.stringify(list));
+      docStore.setItem(STORAGE_KEYS.DOCUMENTS_LIST, JSON.stringify(list));
       broadcastSync('DOCUMENTS_LIST_UPDATED', { count: list.length });
     } catch (e) {
       console.warn('Could not save documents list', e);
@@ -320,8 +337,8 @@ export function getAllDocuments(): SecDocumentSummary[] {
 }
 
 export function setActiveDocumentId(id: string): void {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_DOC_ID, id);
+    if (typeof docStore !== 'undefined') {
+      docStore.setItem(STORAGE_KEYS.ACTIVE_DOC_ID, id);
     }
 }
 
@@ -337,7 +354,7 @@ export function getDocumentContent(id: string): SecFilingDocument {
       if (main.id === id) return main;
     }
     const customKey = `sec_doc_content_${id}`;
-    const customSaved = typeof localStorage !== 'undefined' ? localStorage.getItem(customKey) : null;
+    const customSaved = typeof docStore !== 'undefined' ? docStore.getItem(customKey) : null;
     let doc: SecFilingDocument | null = null;
     if (customSaved) {
       try {
@@ -378,7 +395,7 @@ export function getDocumentContent(id: string): SecFilingDocument {
 }
 
 export function getActiveDocumentId(): string {
-    return localStorage.getItem(STORAGE_KEYS.ACTIVE_DOC_ID) || 'sec-doc-zenatech-2026-q2';
+    return docStore.getItem(STORAGE_KEYS.ACTIVE_DOC_ID) || 'sec-doc-zenatech-2026-q2';
 }
 
 export function openDocument(id: string): SecFilingDocument {
@@ -387,7 +404,7 @@ export function openDocument(id: string): SecFilingDocument {
 
     const customKey = `sec_doc_content_${id}`;
     let doc: SecFilingDocument | null = null;
-    const customSaved = typeof localStorage !== 'undefined' ? localStorage.getItem(customKey) : null;
+    const customSaved = typeof docStore !== 'undefined' ? docStore.getItem(customKey) : null;
     if (customSaved) {
       try {
         const parsed = JSON.parse(customSaved);
@@ -401,7 +418,7 @@ export function openDocument(id: string): SecFilingDocument {
     }
 
     if (!doc) {
-      const savedMain = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.MAIN_DOC) : null;
+      const savedMain = typeof docStore !== 'undefined' ? docStore.getItem(STORAGE_KEYS.MAIN_DOC) : null;
       if (savedMain) {
         try {
           const parsed = JSON.parse(savedMain);
@@ -423,7 +440,7 @@ export function openDocument(id: string): SecFilingDocument {
         doc = generate10KDoc('ZenaTech, Inc. Form 10-K (Annual Comprehensive Audited Filing)');
         doc.id = id;
       } else if (id === 'sec-doc-zenatech-8k-acq') {
-        doc = generate8KDoc('ZenaTech, Inc. Form 8-K (Current Report — Strategic Acquisition)');
+        doc = generate8KDoc('ZenaTech, Inc. Form 8-K (Current Report â€” Strategic Acquisition)');
         doc.id = id;
       } else if (id === 'doc-onboarding-1') {
         doc = generateOnboardingChecklistDoc('Onboarding');
@@ -471,6 +488,10 @@ export function openDocument(id: string): SecFilingDocument {
     safeSetItem(customKey, JSON.stringify(finalDoc));
     safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(finalDoc));
     setPendingMainDoc(finalDoc);
+    // Version history is loaded per document; secFilingSync fetches this one's.
+    if (isDocStoreServerBacked() && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sec-filing-document-opened', { detail: { documentId: id } }));
+    }
     return finalDoc;
 }
 
@@ -511,7 +532,7 @@ export function createDocumentFromTemplate(
     // Save document content
     safeSetItem(`sec_doc_content_${newDoc.id}`, JSON.stringify(newDoc));
     safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(newDoc));
-    localStorage.setItem(STORAGE_KEYS.ACTIVE_DOC_ID, newDoc.id);
+    docStore.setItem(STORAGE_KEYS.ACTIVE_DOC_ID, newDoc.id);
     setPendingMainDoc(newDoc);
 
     // Add to documents list
@@ -546,7 +567,7 @@ export function duplicateDocument(id: string): SecFilingDocument | null {
     if (!item) return null;
 
     let baseDoc: SecFilingDocument;
-    const customSaved = localStorage.getItem(`sec_doc_content_${id}`);
+    const customSaved = docStore.getItem(`sec_doc_content_${id}`);
     if (customSaved) {
       baseDoc = JSON.parse(customSaved);
     } else if (id === 'sec-doc-zenatech-2026-q2') {
@@ -600,7 +621,7 @@ export function renameDocument(id: string, newTitle: string): boolean {
 
     // Also update document content if present
     const customKey = `sec_doc_content_${id}`;
-    const saved = localStorage.getItem(customKey);
+    const saved = docStore.getItem(customKey);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -627,35 +648,64 @@ export function deleteDocument(id: string): boolean {
     const filtered = list.filter((d) => d.id !== id);
     saveDocumentsList(filtered);
     try {
-      localStorage.removeItem(`sec_doc_content_${id}`);
+      docStore.removeItem(`sec_doc_content_${id}`);
     } catch (e) {
       console.warn('Remove doc error', e);
+    }
+    if (isDocStoreServerBacked()) {
+      // Removing the key only drops our copy; the server copy is deleted explicitly.
+      deleteRemoteDocument(id).catch((e) => console.error(`Could not delete document ${id} on the server`, e));
     }
     return true;
 }
 
-export function getVersionHistory(): SecVersionSnapshot[] {
-    const saved = localStorage.getItem(STORAGE_KEYS.VERSION_HISTORY);
+function currentMainDocId(): string {
+    const pending = getPendingMainDoc();
+    if (pending?.id) return pending.id;
+    try {
+      const main = JSON.parse(docStore.getItem(STORAGE_KEYS.MAIN_DOC) || 'null');
+      if (main?.id) return main.id;
+    } catch {
+      // fall through
+    }
+    return getActiveDocumentId();
+}
+
+function getAllVersionHistory(): SecVersionSnapshot[] {
+    const saved = docStore.getItem(STORAGE_KEYS.VERSION_HISTORY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed) && (parsed.length > 0 || isDocStoreServerBacked())) {
           return parsed;
         }
       } catch (e) {
         console.error('Failed to parse version history', e);
       }
     }
+    // Demo history only in the old browser-only mode.
+    if (isDocStoreServerBacked()) return [];
     safeSetItem(STORAGE_KEYS.VERSION_HISTORY, JSON.stringify(INITIAL_VERSION_HISTORY));
     return JSON.parse(JSON.stringify(INITIAL_VERSION_HISTORY));
 }
 
+/** Snapshots of the open document (older untagged snapshots show for every document). */
+export function getVersionHistory(): SecVersionSnapshot[] {
+    const docId = currentMainDocId();
+    return getAllVersionHistory().filter((s) => !s.documentId || s.documentId === docId);
+}
+
 export function saveVersionHistory(history: SecVersionSnapshot[]): void {
-    // Each snapshot carries a full copy of the document, so cap the history here
-    // rather than letting it grow until it exhausts the storage quota.
-    const capped =
-      history.length > 5 ? history.slice(-5) : history;
-    safeSetItem(STORAGE_KEYS.VERSION_HISTORY, JSON.stringify(capped));
+    const docId = currentMainDocId();
+    const tagged = history.map((s) => ({ ...s, documentId: s.documentId || docId }));
+    // Each snapshot carries a full copy of the document; the cap only existed to fit
+    // browser storage. The server keeps the full history.
+    const kept = isDocStoreServerBacked() ? tagged : tagged.length > 5 ? tagged.slice(-5) : tagged;
+    const keptIds = new Set(kept.map((s) => s.id));
+    const others = getAllVersionHistory().filter(
+      (s) => s.documentId && s.documentId !== docId && !keptIds.has(s.id)
+    );
+    safeSetItem(STORAGE_KEYS.VERSION_HISTORY, JSON.stringify([...kept, ...others]));
 }
 
 export function restoreVersion(snapshotId: string, restoredBy: string): SecFilingDocument {
@@ -689,7 +739,8 @@ export function restoreVersion(snapshotId: string, restoredBy: string): SecFilin
       timestamp: new Date().toISOString(),
       author: restoredBy,
       description: `Restored document state from ${snapshot.version}`,
-      blocks: JSON.parse(JSON.stringify(snapshot.blocks))
+      blocks: JSON.parse(JSON.stringify(snapshot.blocks)),
+      documentId: updatedMain.id
     };
     history.push(newSnapshot);
     saveVersionHistory(history);
@@ -781,9 +832,9 @@ export function resetToDefault(): void {
     setPendingMainDoc(null);
     setPendingProposals(null);
 
-    localStorage.removeItem(STORAGE_KEYS.MAIN_DOC);
-    localStorage.removeItem(STORAGE_KEYS.PROPOSALS);
-    localStorage.removeItem(STORAGE_KEYS.VERSION_HISTORY);
+    docStore.removeItem(STORAGE_KEYS.MAIN_DOC);
+    docStore.removeItem(STORAGE_KEYS.PROPOSALS);
+    docStore.removeItem(STORAGE_KEYS.VERSION_HISTORY);
     safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(INITIAL_SEC_FILING_DOC));
 }
 export interface DocumentAuthUser {
@@ -825,9 +876,9 @@ export function canUserAccessDocument(
   if (userEmail && doc.invitedEmails?.some((e) => e.trim().toLowerCase() === userEmail)) return true;
 
   // 3. Proposal contributor check
-  if (!proposals && typeof localStorage !== 'undefined') {
+  if (!proposals && typeof docStore !== 'undefined') {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.PROPOSALS);
+      const raw = docStore.getItem(STORAGE_KEYS.PROPOSALS);
       if (raw) proposals = JSON.parse(raw);
     } catch {
       // ignore
@@ -885,9 +936,23 @@ export function addDocumentInvitee(
     saveDocumentsList(list);
   }
 
+  // The open document may be held in memory ahead of storage; update that copy too,
+  // otherwise its next save would drop the invitee (and with it the contributor's access).
+  const pendingMain = getPendingMainDoc();
+  if (pendingMain && pendingMain.id === docId) {
+    const emails = new Set(pendingMain.invitedEmails || []);
+    if (cleanEmail) emails.add(cleanEmail);
+    pendingMain.invitedEmails = Array.from(emails);
+    if (inviteeUserId) {
+      const uids = new Set(pendingMain.invitedUserIds || []);
+      uids.add(inviteeUserId);
+      pendingMain.invitedUserIds = Array.from(uids);
+    }
+  }
+
   const customKey = `sec_doc_content_${docId}`;
-  if (typeof localStorage !== 'undefined') {
-    const raw = localStorage.getItem(customKey);
+  if (typeof docStore !== 'undefined') {
+    const raw = docStore.getItem(customKey);
     if (raw) {
       try {
         const parsed: SecFilingDocument = JSON.parse(raw);
@@ -900,7 +965,7 @@ export function addDocumentInvitee(
           uids.add(inviteeUserId);
           parsed.invitedUserIds = Array.from(uids);
         }
-        localStorage.setItem(customKey, JSON.stringify(parsed));
+        docStore.setItem(customKey, JSON.stringify(parsed));
       } catch {
         // ignore
       }

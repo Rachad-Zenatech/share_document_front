@@ -4,13 +4,21 @@ import type {
   SecDocumentSummary,
   AttachedSpreadsheet
 } from '../../types/secFiling';
+import {
+  docStore,
+  DOC_STORE_KEYS,
+  flushRemote,
+  hasUnsyncedChanges,
+  isDocStoreServerBacked,
+  setDocReplacedHandler
+} from './secFilingStore';
+
+// Documents, proposals and version history go through `docStore`, which is backed by the
+// server (see secFilingStore.ts); other keys pass through to localStorage.
+export { docStore };
 
 export const STORAGE_KEYS = {
-  MAIN_DOC: 'sec_filing_main_doc_v4_compact',
-  PROPOSALS: 'sec_filing_proposals_v4_compact',
-  VERSION_HISTORY: 'sec_filing_versions_v4_compact',
-  DOCUMENTS_LIST: 'sec_filing_documents_list_v2',
-  ACTIVE_DOC_ID: 'sec_filing_active_doc_id',
+  ...DOC_STORE_KEYS,
   SPREADSHEETS: 'sec_filing_spreadsheets_registry_v2',
 };
 
@@ -73,7 +81,7 @@ export function broadcastSync(type: string, payload?: any): void {
   }
 }
 
-// Debounced Disk I/O: prevents synchronous localStorage serialization freezes on every keystroke
+// Debounced Disk I/O: prevents synchronous docStore serialization freezes on every keystroke
 let saveMainDocTimer: any = null;
 let pendingMainDocToSave: SecFilingDocument | null = null;
 
@@ -84,6 +92,17 @@ export function getPendingMainDoc(): SecFilingDocument | null {
 export function setPendingMainDoc(doc: SecFilingDocument | null): void {
   pendingMainDocToSave = doc;
 }
+
+// When the server copy of a document replaces ours (another user saved first), drop
+// the in-memory pending copy so reads return the server version.
+setDocReplacedHandler((id) => {
+  if (pendingMainDocToSave?.id === id) {
+    if (saveMainDocTimer) clearTimeout(saveMainDocTimer);
+    saveMainDocTimer = null;
+    pendingMainDocToSave = null;
+  }
+  cachedDocumentsList = null;
+});
 
 export function getSaveMainDocTimer(): any {
   return saveMainDocTimer;
@@ -127,7 +146,7 @@ export function scheduleSaveSpreadsheetRegistry(list: AttachedSpreadsheet[]): vo
   saveSpreadsheetRegistryTimer = setTimeout(() => {
     saveSpreadsheetRegistryTimer = null;
     try {
-      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
+      docStore.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
     } catch (e) {
       console.warn('Could not save spreadsheet registry', e);
     }
@@ -153,15 +172,15 @@ export function describeStorageUsage(): {
   totalBytes: number;
   breakdown: Array<{ key: string; bytes: number }>;
 } {
-  if (typeof localStorage === 'undefined') {
+  if (typeof docStore === 'undefined') {
     return { totalBytes: 0, breakdown: [] };
   }
   const breakdown: Array<{ key: string; bytes: number }> = [];
   let totalBytes = 0;
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
+  for (let i = 0; i < docStore.length; i++) {
+    const key = docStore.key(i);
     if (!key) continue;
-    const val = localStorage.getItem(key) || '';
+    const val = docStore.getItem(key) || '';
     const bytes = (key.length + val.length) * 2;
     totalBytes += bytes;
     breakdown.push({ key, bytes });
@@ -180,8 +199,8 @@ export function logStorageBreakdown(): { totalBytes: number; largestKey: string 
 }
 
 function readProposalsForReclaim(): any[] | null {
-  if (typeof localStorage === 'undefined') return null;
-  const raw = localStorage.getItem(STORAGE_KEYS.PROPOSALS);
+  if (typeof docStore === 'undefined') return null;
+  const raw = docStore.getItem(STORAGE_KEYS.PROPOSALS);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
@@ -192,25 +211,25 @@ function readProposalsForReclaim(): any[] | null {
 }
 
 function writeProposalsForReclaim(proposals: any[]): void {
-  if (typeof localStorage === 'undefined') return;
+  if (typeof docStore === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEYS.PROPOSALS, JSON.stringify(proposals));
+    docStore.setItem(STORAGE_KEYS.PROPOSALS, JSON.stringify(proposals));
   } catch (e) {
     console.warn('Could not write reclaimed proposals', e);
   }
 }
 
 function trimHistoryTo(keep: number): boolean {
-  if (typeof localStorage === 'undefined') return false;
-  const raw = localStorage.getItem(STORAGE_KEYS.VERSION_HISTORY);
+  if (typeof docStore === 'undefined') return false;
+  const raw = docStore.getItem(STORAGE_KEYS.VERSION_HISTORY);
   if (!raw) return false;
   try {
     const list = JSON.parse(raw);
     if (!Array.isArray(list) || list.length <= keep) return false;
     if (keep <= 0) {
-      localStorage.removeItem(STORAGE_KEYS.VERSION_HISTORY);
+      docStore.removeItem(STORAGE_KEYS.VERSION_HISTORY);
     } else {
-      localStorage.setItem(STORAGE_KEYS.VERSION_HISTORY, JSON.stringify(list.slice(0, keep)));
+      docStore.setItem(STORAGE_KEYS.VERSION_HISTORY, JSON.stringify(list.slice(0, keep)));
     }
     return true;
   } catch {
@@ -262,10 +281,10 @@ function trimAllProposalsTo(keep: number): boolean {
 }
 
 function clearOrphanCustomDocs(): boolean {
-  if (typeof localStorage === 'undefined') return false;
+  if (typeof docStore === 'undefined') return false;
   let freed = false;
   try {
-    const rawList = localStorage.getItem(STORAGE_KEYS.DOCUMENTS_LIST);
+    const rawList = docStore.getItem(STORAGE_KEYS.DOCUMENTS_LIST);
     const validIds = new Set<string>();
     if (rawList) {
       try {
@@ -277,16 +296,16 @@ function clearOrphanCustomDocs(): boolean {
         // Ignore
       }
     }
-    const activeId = localStorage.getItem(STORAGE_KEYS.ACTIVE_DOC_ID);
+    const activeId = docStore.getItem(STORAGE_KEYS.ACTIVE_DOC_ID);
     if (activeId) validIds.add(activeId);
     validIds.add('sec-doc-zenatech-2026-q2');
 
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i);
+    for (let i = docStore.length - 1; i >= 0; i--) {
+      const key = docStore.key(i);
       if (key && key.startsWith('sec_doc_content_')) {
         const docId = key.replace('sec_doc_content_', '');
         if (!validIds.has(docId)) {
-          localStorage.removeItem(key);
+          docStore.removeItem(key);
           freed = true;
         }
       }
@@ -298,15 +317,15 @@ function clearOrphanCustomDocs(): boolean {
 }
 
 function purgeAllLegacyAndStaleKeys(): boolean {
-  if (typeof localStorage === 'undefined') return false;
+  if (typeof docStore === 'undefined') return false;
   let freed = false;
   const currentKeySet = new Set(Object.values(STORAGE_KEYS));
   try {
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i);
+    for (let i = docStore.length - 1; i >= 0; i--) {
+      const key = docStore.key(i);
       if (!key) continue;
       if (key.startsWith('sec_filing_') && !currentKeySet.has(key)) {
-        localStorage.removeItem(key);
+        docStore.removeItem(key);
         freed = true;
       }
     }
@@ -317,7 +336,7 @@ function purgeAllLegacyAndStaleKeys(): boolean {
 }
 
 export function cleanupStorageQuota(): boolean {
-  if (typeof localStorage === 'undefined') return false;
+  if (typeof docStore === 'undefined') return false;
   let freed = false;
   try {
     if (purgeAllLegacyAndStaleKeys()) freed = true;
@@ -366,7 +385,7 @@ export function reclaimStorageSpace(round: number): boolean {
 export function safeSetItem(key: string, value: string): boolean {
   for (let round = 0; ; round++) {
     try {
-      localStorage.setItem(key, value);
+      docStore.setItem(key, value);
       if (round > 0) {
         storageFailureListener?.({ key, recovered: true });
       }
@@ -392,7 +411,7 @@ export function flushPendingSaves(): boolean {
     clearTimeout(saveSpreadsheetRegistryTimer);
     saveSpreadsheetRegistryTimer = null;
     try {
-      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(cachedSpreadsheetsList));
+      docStore.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(cachedSpreadsheetsList));
     } catch (e) {
       console.warn('Could not save spreadsheet registry', e);
     }
@@ -411,7 +430,7 @@ export function flushPendingSaves(): boolean {
           existing.updatedAt = doc.updatedAt || new Date().toISOString();
           existing.blocksCount = doc.blocks?.length || 0;
           existing.formType = doc.formType;
-          localStorage.setItem(STORAGE_KEYS.DOCUMENTS_LIST, JSON.stringify(cachedDocumentsList));
+          docStore.setItem(STORAGE_KEYS.DOCUMENTS_LIST, JSON.stringify(cachedDocumentsList));
         }
       }
       safeSetItem(`sec_doc_content_${doc.id}`, JSON.stringify(doc));
@@ -439,11 +458,22 @@ export function flushPendingSaves(): boolean {
 }
 
 if (typeof window !== 'undefined') {
-  cleanupStorageQuota();
-  window.addEventListener('beforeunload', flushPendingSaves);
+  // No quota cleanup at load any more: documents now live on the server, and trimming
+  // here would delete the browser's old copies before secFilingSync uploads them.
+  // Hand the debounced in-memory copy to the store first, then push it to the server;
+  // warn before closing if it has not reached the server yet.
+  window.addEventListener('beforeunload', (e) => {
+    flushPendingSaves();
+    if (isDocStoreServerBacked() && hasUnsyncedChanges()) {
+      void flushRemote();
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       flushPendingSaves();
+      if (isDocStoreServerBacked()) void flushRemote();
     }
   });
 }

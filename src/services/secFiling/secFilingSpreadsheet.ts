@@ -10,6 +10,7 @@ import { DEFAULT_TRIAL_BALANCE_SHEET } from '../../data/defaultTrialBalanceSheet
 import { colToLetter, formatCellValue, parseCellRef, ensureSpreadsheetTabs } from '../../utils/documentVariables';
 import { apiClient } from '../apiClient';
 import {
+  docStore,
   STORAGE_KEYS,
   safeSetItem,
   broadcastSync,
@@ -129,7 +130,7 @@ export function getAllSpreadsheets(): AttachedSpreadsheet[] {
     if (cached) {
       return [...cached];
     }
-    if (typeof localStorage === 'undefined') {
+    if (typeof docStore === 'undefined') {
       const fallback = [
         ensureSpreadsheetTabs({
           ...DEFAULT_TRIAL_BALANCE_SHEET,
@@ -142,7 +143,7 @@ export function getAllSpreadsheets(): AttachedSpreadsheet[] {
       return [...fallback];
     }
 
-    const saved = localStorage.getItem(STORAGE_KEYS.SPREADSHEETS);
+    const saved = docStore.getItem(STORAGE_KEYS.SPREADSHEETS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -167,7 +168,7 @@ export function getAllSpreadsheets(): AttachedSpreadsheet[] {
     ];
 
     try {
-      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(initialList));
+      docStore.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(initialList));
     } catch {
       // Ignore storage error
     }
@@ -213,7 +214,7 @@ export function saveSpreadsheet(sheet: AttachedSpreadsheet, syncToMainDoc = fals
         setSaveSpreadsheetRegistryTimer(null);
       }
       try {
-        localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
+        docStore.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
       } catch (e) {
         console.warn('Could not save spreadsheet registry', e);
       }
@@ -248,7 +249,7 @@ export function deleteSpreadsheet(sheetId: string): void {
     const list = allSheets.filter((s) => s.id !== sheetId);
     setCachedSpreadsheetsList(list);
     try {
-      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
+      docStore.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
     } catch (e) {
       console.warn('Could not update spreadsheet registry', e);
     }
@@ -258,13 +259,13 @@ export function deleteSpreadsheet(sheetId: string): void {
     for (const docSummary of docSummaries) {
       try {
         const docKey = `sec_doc_content_${docSummary.id}`;
-        const savedDoc = localStorage.getItem(docKey);
+        const savedDoc = docStore.getItem(docKey);
         if (savedDoc) {
           const parsedDoc = JSON.parse(savedDoc);
           if (parsedDoc.attachedSpreadsheetId === sheetId) {
             parsedDoc.attachedSpreadsheetId = undefined;
             parsedDoc.attachedSpreadsheet = null;
-            localStorage.setItem(docKey, JSON.stringify(parsedDoc));
+            docStore.setItem(docKey, JSON.stringify(parsedDoc));
           }
         }
       } catch {
@@ -295,7 +296,7 @@ export function assignSpreadsheetToDocuments(sheetId: string, targetDocIds: stri
     setCachedSpreadsheetsList(list);
 
     try {
-      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
+      docStore.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
     } catch (e) {
       console.warn('Could not save spreadsheet registry', e);
     }
@@ -305,7 +306,7 @@ export function assignSpreadsheetToDocuments(sheetId: string, targetDocIds: stri
     for (const docSummary of allDocs) {
       try {
         const docKey = `sec_doc_content_${docSummary.id}`;
-        const savedDoc = localStorage.getItem(docKey);
+        const savedDoc = docStore.getItem(docKey);
         if (savedDoc) {
           const parsedDoc = JSON.parse(savedDoc);
           if (targetDocIds.includes(docSummary.id)) {
@@ -315,7 +316,7 @@ export function assignSpreadsheetToDocuments(sheetId: string, targetDocIds: stri
             parsedDoc.attachedSpreadsheetId = undefined;
             parsedDoc.attachedSpreadsheet = null;
           }
-          localStorage.setItem(docKey, JSON.stringify(parsedDoc));
+          docStore.setItem(docKey, JSON.stringify(parsedDoc));
         }
       } catch {
         // Ignore
@@ -363,7 +364,7 @@ export function assignSpreadsheetToDocument(
 
     setCachedSpreadsheetsList(updatedSheets);
     try {
-      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(updatedSheets));
+      docStore.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(updatedSheets));
     } catch (e) {
       console.warn('Could not save spreadsheet registry', e);
     }
@@ -381,7 +382,7 @@ export function assignSpreadsheetToDocument(
     safeSetItem(docKey, JSON.stringify(finalTargetDoc));
 
     const activeDocId = getActiveDocumentId();
-    const currentMain = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.MAIN_DOC) : null;
+    const currentMain = typeof docStore !== 'undefined' ? docStore.getItem(STORAGE_KEYS.MAIN_DOC) : null;
     let mainObj: any = null;
     if (currentMain) {
       try {
@@ -462,7 +463,7 @@ export function applyBackendSpreadsheet(docId: string, remote: AttachedSpreadshe
     else list.unshift(merged);
     setCachedSpreadsheetsList(list);
     try {
-      localStorage.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
+      docStore.setItem(STORAGE_KEYS.SPREADSHEETS, JSON.stringify(list));
     } catch (e) {
       console.warn('Could not save spreadsheet registry', e);
     }

@@ -667,9 +667,9 @@ export default function SecFilingContributorPage() {
             onToggleBlockSelection={toggleBlockSelection}
             onSelectAllBlocks={selectAllBlocks}
             onClearSelection={clearBlockSelection}
-            onAddBlock={(index, type, customBlock) =>
-              addBlock(index, type, sectionFilter !== 'ALL' ? sectionFilter : undefined, customBlock)
-            }
+            // The whole document is shown, so a new block takes its section from where it is
+            // inserted, not from the highlighted section.
+            onAddBlock={(index, type, customBlock) => addBlock(index, type, undefined, customBlock)}
             onUpdateBlock={updateBlock}
             onMoveBlock={moveBlock}
             onStartSectionAtBlock={startSectionAtBlock}

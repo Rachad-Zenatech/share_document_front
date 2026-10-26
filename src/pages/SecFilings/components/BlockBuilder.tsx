@@ -101,8 +101,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
   onClearSearch
 }) => {
   const diffMap = useMemo(() => new Map<string, SecBlockDiff>(diffs.map((d) => [d.blockId, d])), [diffs]);
-  const blockIndexMap = useMemo(() => new Map<string, number>(blocks.map((b, i) => [b.id, i])), [blocks]);
-  // Headings that are not the first block of their section don't appear in Document Sections;
+  const blockIndexMap = useMemo(() => new Map<string, number>(blocks.map((b, i) => [b.id, i])), [blocks]);  // Headings that are not the first block of their section don't appear in Document Sections;
   // they get a "Start new section here" action.
   const headingsInsideSection = useMemo(() => {
     const seen = new Set<string>();

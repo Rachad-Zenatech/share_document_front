@@ -355,6 +355,8 @@ export interface SecChangeProposal {
   reviewNotes?: string;
   reviewedBy?: string;
   reviewedAt?: string;
+  /** The document this proposal branches from. Older proposals may lack it. */
+  documentId?: string;
 }
 
 export interface SecVersionSnapshot {
@@ -366,6 +368,8 @@ export interface SecVersionSnapshot {
   description: string;
   blocks: SecBlock[];
   proposalId?: string;
+  /** The document this snapshot belongs to. Older snapshots may lack it. */
+  documentId?: string;
 }
 
 export type SecChangeCategory =

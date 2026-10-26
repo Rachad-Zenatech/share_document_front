@@ -5,6 +5,7 @@ import { ShieldAlert, ArrowLeft } from "lucide-react";
 import { Button } from "./components/ui/button";
 
 import ProtectedRoute from "./components/ProtectedRoute";
+import SecFilingDataGate from "./components/SecFilingDataGate";
 
 const AppShell = lazy(() => import("./components/AppShell/AppShell"));
 const Users = lazy(() => import("./pages/Configurations/Users"));
@@ -43,7 +44,9 @@ const WorkflowAssignmentsPage = lazy(() => import("./pages/SecFilings/WorkflowAs
 function SpreadsheetHubRoute() {
   return (
     <ProtectedRoute navigationCode="SEC_FILINGS">
-      <SpreadsheetHubPage />
+      <SecFilingDataGate>
+        <SpreadsheetHubPage />
+      </SecFilingDataGate>
     </ProtectedRoute>
   );
 }
@@ -59,12 +62,18 @@ function SecFilingsHubRoute() {
   }
 
   if (isContributor) {
-    return <SecFilingContributorPage />;
+    return (
+      <SecFilingDataGate>
+        <SecFilingContributorPage />
+      </SecFilingDataGate>
+    );
   }
 
   return (
     <ProtectedRoute navigationCode="SEC_FILINGS">
-      <CreateSecFilingPage />
+      <SecFilingDataGate>
+        <CreateSecFilingPage />
+      </SecFilingDataGate>
     </ProtectedRoute>
   );
 }
@@ -80,12 +89,18 @@ function SecFilingsEditorRoute() {
   }
 
   if (isContributor) {
-    return <SecFilingContributorPage />;
+    return (
+      <SecFilingDataGate>
+        <SecFilingContributorPage />
+      </SecFilingDataGate>
+    );
   }
 
   return (
     <ProtectedRoute navigationCode="SEC_FILINGS">
-      <SecFilings />
+      <SecFilingDataGate>
+        <SecFilings />
+      </SecFilingDataGate>
     </ProtectedRoute>
   );
 }
@@ -122,7 +137,14 @@ function App() {
             <Route path="/documents" element={<Navigate to="/sec-filings" replace />} />
 
             {/* Standalone Contributor & Mobile Signing Routes */}
-            <Route path="/sec-filings/contribute" element={<SecFilingContributorPage />} />
+            <Route
+              path="/sec-filings/contribute"
+              element={
+                <SecFilingDataGate>
+                  <SecFilingContributorPage />
+                </SecFilingDataGate>
+              }
+            />
 
             {/* Main app layout routes (AppShell stays permanently mounted) */}
             <Route
@@ -147,7 +169,9 @@ function App() {
                 path="/sec-filings/workflows"
                 element={
                   <ProtectedRoute navigationCode="SEC_FILINGS">
-                    <WorkflowAssignmentsPage />
+                    <SecFilingDataGate>
+                      <WorkflowAssignmentsPage />
+                    </SecFilingDataGate>
                   </ProtectedRoute>
                 }
               />

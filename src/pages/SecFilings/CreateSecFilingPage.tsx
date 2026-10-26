@@ -54,6 +54,7 @@ import { Checkbox } from '../../components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import { secFilingService, canUserAccessDocument, isDocumentOwner } from '../../services/secFilingService';
+import { docStore } from '../../services/secFiling/secFilingStore';
 import { DOCUMENT_TEMPLATES } from '../../data/secDocumentTemplates';
 import type { DocumentTemplateDefinition } from '../../data/secDocumentTemplates';
 import type { SecDocumentSummary, SecFilingDocument, SecBlock } from '../../types/secFiling';
@@ -439,9 +440,9 @@ export default function CreateSecFilingPage() {
       });
 
       // Save document contents into local storage & service
-      localStorage.setItem(`sec_doc_content_${parsedDoc.id}`, JSON.stringify(parsedDoc));
-      localStorage.setItem('sec_filing_main_doc_v4_compact', JSON.stringify(parsedDoc));
-      localStorage.setItem('sec_filing_active_doc_id', parsedDoc.id);
+      docStore.setItem(`sec_doc_content_${parsedDoc.id}`, JSON.stringify(parsedDoc));
+      docStore.setItem('sec_filing_main_doc_v4_compact', JSON.stringify(parsedDoc));
+      docStore.setItem('sec_filing_active_doc_id', parsedDoc.id);
 
       const list = secFilingService.getDocumentsList();
       list.unshift({
@@ -597,9 +598,9 @@ export default function CreateSecFilingPage() {
       lastModifiedBy: 'Current User',
     };
 
-    localStorage.setItem(`sec_doc_content_${newDoc.id}`, JSON.stringify(newDoc));
-    localStorage.setItem('sec_filing_main_doc_v4_compact', JSON.stringify(newDoc));
-    localStorage.setItem('sec_filing_active_doc_id', newDoc.id);
+    docStore.setItem(`sec_doc_content_${newDoc.id}`, JSON.stringify(newDoc));
+    docStore.setItem('sec_filing_main_doc_v4_compact', JSON.stringify(newDoc));
+    docStore.setItem('sec_filing_active_doc_id', newDoc.id);
 
     const list = secFilingService.getDocumentsList();
     list.unshift({
