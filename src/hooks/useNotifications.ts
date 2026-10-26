@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, BASE_URL } from "@/services/apiClient";
 
@@ -19,63 +19,172 @@ export interface Notification {
   read_at: string | null;
 }
 
-export function useNotificationStream() {
+/* --------------------------------------------------------------------------
+ * Shared notification socket
+ *
+ * Real-time notifications run over WebSocket rather than SSE: CloudFront caps
+ * the total duration of a streaming HTTP response at ~60s, so the old SSE
+ * stream was severed every minute and the browser reconnected in a permanent
+ * loop (ERR_HTTP2_PROTOCOL_ERROR alongside a 200). WebSockets are exempt.
+ *
+ * The connection is a module-level singleton rather than per-component state:
+ * several components subscribe to notifications, and one socket each meant a
+ * growing pile of duplicate connections to the same endpoint.
+ * ----------------------------------------------------------------------- */
+
+type NotificationListener = (payload: any) => void;
+
+const RECONNECT_DELAY_MS = 5000;
+const MAX_AUTH_RETRIES = 3;
+// Once credentials are exhausted, keep a slow poll rather than giving up, so
+// the stream recovers on its own after the user signs in again.
+const DORMANT_RETRY_MS = 60000;
+
+const listeners = new Set<NotificationListener>();
+let socket: WebSocket | null = null;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let authRetries = 0;
+
+const toWebSocketScheme = (url: string) => url.replace(/^http/i, "ws");
+
+/**
+ * An already-expired JWT is worse than none: it is checked first and rejected,
+ * whereas omitting it lets the handshake fall back to the HttpOnly auth cookie,
+ * which the heartbeat keeps fresh.
+ */
+function isTokenUsable(token: string | null): token is string {
+  if (!token) return false;
+  try {
+    const claims = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return typeof claims.exp !== "number" || claims.exp * 1000 > Date.now() + 5000;
+  } catch {
+    return false;
+  }
+}
+
+function scheduleReconnect(delayMs: number) {
+  if (reconnectTimer || listeners.size === 0) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    openSocket();
+  }, delayMs);
+}
+
+function openSocket() {
+  if (listeners.size === 0) return;
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+
+  let opened = false;
+  try {
+    const base = /^https?:\/\//i.test(BASE_URL)
+      ? toWebSocketScheme(BASE_URL)
+      : `${toWebSocketScheme(window.location.origin)}${BASE_URL}`;
+    const storedToken = sessionStorage.getItem("token");
+    const tokenParam = isTokenUsable(storedToken) ? `?token=${encodeURIComponent(storedToken)}` : "";
+
+    const ws = new WebSocket(`${base}/ws/notifications${tokenParam}`);
+    socket = ws;
+
+    ws.onopen = () => {
+      opened = true;
+      authRetries = 0;
+    };
+
+    ws.onmessage = (event) => {
+      if (!event.data) return;
+      try {
+        const payload = JSON.parse(event.data);
+        // Keep-alive frames carry no notification payload.
+        if (!payload || payload.type === "ping") return;
+        listeners.forEach((listener) => {
+          try {
+            listener(payload);
+          } catch {
+            // One bad subscriber must not starve the others.
+          }
+        });
+      } catch {
+        // Ignore non-JSON frames
+      }
+    };
+
+    ws.onerror = () => {
+      // onclose always follows and owns recovery.
+      ws.close();
+    };
+
+    ws.onclose = () => {
+      if (socket === ws) socket = null;
+      if (listeners.size === 0) return;
+
+      if (opened) {
+        authRetries = 0;
+        scheduleReconnect(RECONNECT_DELAY_MS);
+        return;
+      }
+
+      // Never opened, so the handshake itself was rejected, which in practice
+      // means the credentials expired. There is no status code to inspect:
+      // CloudFront rewrites the backend's 403 into a 200 HTML page.
+      if (authRetries < MAX_AUTH_RETRIES) {
+        authRetries += 1;
+        // Silent refresh. The heartbeat re-issues the HttpOnly auth cookie,
+        // which the handshake falls back to once the stored token is stale.
+        // It is HttpOnly by design, so it cannot be copied into sessionStorage.
+        apiClient
+          .post("/auth/heartbeat", {})
+          .then(() => scheduleReconnect(RECONNECT_DELAY_MS))
+          .catch(() => scheduleReconnect(RECONNECT_DELAY_MS * authRetries));
+      } else {
+        scheduleReconnect(DORMANT_RETRY_MS);
+      }
+    };
+  } catch {
+    scheduleReconnect(RECONNECT_DELAY_MS);
+  }
+}
+
+function subscribeToNotifications(listener: NotificationListener) {
+  listeners.add(listener);
+  openSocket();
+
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size > 0) return;
+
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    authRetries = 0;
+    if (socket) {
+      const ws = socket;
+      socket = null;
+      // Detach first so teardown does not schedule a reconnect.
+      ws.onclose = null;
+      ws.close();
+    }
+  };
+}
+
+/**
+ * Subscribe to the shared notification stream. Always refreshes the
+ * notification caches; `onNotification` receives the raw payload for callers
+ * that need to react to it directly (toasts, desktop notifications).
+ */
+export function useNotificationStream(options?: { onNotification?: NotificationListener }) {
   const queryClient = useQueryClient();
+  const handlerRef = useRef<NotificationListener | undefined>(options?.onNotification);
+  handlerRef.current = options?.onNotification;
 
   useEffect(() => {
-    let eventSource: EventSource | null = null;
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-    let isMounted = true;
-
-    const connect = () => {
-      if (!isMounted) return;
-      try {
-        const token = sessionStorage.getItem("token");
-        const streamUrl = new URL(`${BASE_URL}/api/notifications/stream`, window.location.origin);
-        if (token) {
-          streamUrl.searchParams.set("token", token);
-        }
-
-        eventSource = new EventSource(streamUrl.toString(), { withCredentials: true });
-
-        eventSource.onmessage = (event) => {
-          if (!event.data || event.data.trim() === "") return;
-          try {
-            const data = JSON.parse(event.data);
-            if (data) {
-              queryClient.invalidateQueries({ queryKey: ["notifications"] });
-              queryClient.invalidateQueries({ queryKey: ["notifications", "unread-count"] });
-            }
-          } catch {
-            // Ignore non-JSON keep-alives
-          }
-        };
-
-        eventSource.onerror = () => {
-          if (eventSource) {
-            eventSource.close();
-            eventSource = null;
-          }
-          if (isMounted) {
-            reconnectTimeout = setTimeout(connect, 5000);
-          }
-        };
-      } catch {
-        if (isMounted) {
-          reconnectTimeout = setTimeout(connect, 5000);
-        }
-      }
-    };
-
-    connect();
-
-    return () => {
-      isMounted = false;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (eventSource) {
-        eventSource.close();
-      }
-    };
+    // Subscribing through a ref keeps a changing callback identity from
+    // tearing down and re-opening the shared socket on every render.
+    return subscribeToNotifications((payload) => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications", "unread-count"] });
+      handlerRef.current?.(payload);
+    });
   }, [queryClient]);
 }
 

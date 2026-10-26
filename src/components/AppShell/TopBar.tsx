@@ -25,11 +25,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiClient, BASE_URL } from "@/services/apiClient";
+import { apiClient } from "@/services/apiClient";
 import ThemeSwitch from "./ThemeSwitch";
 import { useAuth, type Role } from "@/lib/AuthContext";
 import { resolveUserDepartment } from "@/lib/userDepartment";
-import { useUnreadNotificationCount } from "@/hooks/useNotifications";
+import { useUnreadNotificationCount, useNotificationStream } from "@/hooks/useNotifications";
 import { NotificationDropdownContent } from "./NotificationDropdown";
 
 function TopBarClock() {
@@ -197,70 +197,59 @@ export default function TopBar({ onToggleSidebar }: { onToggleSidebar?: () => vo
 
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    // Connect to SSE stream
-    const token = sessionStorage.getItem("token") || "";
-    const eventSource = new EventSource(`${BASE_URL || ""}/api/notifications/stream?token=${token}`, { withCredentials: true });
+  // Subscribes to the shared notification socket owned by useNotificationStream,
+  // rather than opening a second connection of its own.
+  const handleNotification = (newNotif: any) => {
+    try {
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications", "unread-count"] });
 
-    eventSource.onmessage = (event) => {
-      try {
-        const newNotif = JSON.parse(event.data);
-        // Invalidate queries
-        queryClient.invalidateQueries({ queryKey: ["notifications"] });
-        queryClient.invalidateQueries({ queryKey: ["notifications", "unread-count"] });
+      // Only display toast/desktop alerts if targeted to current user
+      const currentUserId = user?.id || (user as any)?.sub;
+      const isTargetUser =
+        !newNotif.user_id ||
+        newNotif.user_id === "*" ||
+        (currentUserId && String(newNotif.user_id).toLowerCase() === String(currentUserId).toLowerCase()) ||
+        (user?.email && String(newNotif.user_id).toLowerCase() === String(user.email).toLowerCase());
 
-        // Only display toast/desktop alerts if targeted to current user
-        const currentUserId = user?.id || (user as any)?.sub;
-        const isTargetUser =
-          !newNotif.user_id ||
-          newNotif.user_id === "*" ||
-          (currentUserId && String(newNotif.user_id).toLowerCase() === String(currentUserId).toLowerCase()) ||
-          (user?.email && String(newNotif.user_id).toLowerCase() === String(user.email).toLowerCase());
-
-        if (!isTargetUser) {
-          return;
-        }
-
-        const capitalizedTitle = newNotif.title ? newNotif.title.charAt(0).toUpperCase() + newNotif.title.slice(1) : "System Notification";
-
-        if (inAppAlerts) {
-          toast(
-            <div
-              className="cursor-pointer w-full flex flex-col gap-1"
-              onClick={() => newNotif.link_url && navigate(newNotif.link_url)}
-            >
-              <div className="font-medium">{capitalizedTitle}</div>
-              <div className="text-sm text-slate-500 dark:text-zinc-400 whitespace-pre-line">{newNotif.message}</div>
-            </div>,
-            {
-              position: "bottom-right",
-              duration: 5000,
-              closeButton: true,
-            }
-          );
-        }
-
-        if (windowsNotifications && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-          sendWindowsNotification(
-            capitalizedTitle,
-            newNotif.message || "New notification received",
-            newNotif.link_url,
-            (url) => navigate(url)
-          );
-        }
-      } catch (err) {
-        console.error("Failed to parse SSE notification:", err);
+      if (!isTargetUser) {
+        return;
       }
-    };
 
-    eventSource.onerror = (err) => {
-      console.error("EventSource failed:", err);
-    };
+      const capitalizedTitle = newNotif.title ? newNotif.title.charAt(0).toUpperCase() + newNotif.title.slice(1) : "System Notification";
 
-    return () => {
-      eventSource.close();
-    };
-  }, [inAppAlerts, windowsNotifications, navigate, queryClient, user]);
+      if (inAppAlerts) {
+        toast(
+          <div
+            className="cursor-pointer w-full flex flex-col gap-1"
+            onClick={() => newNotif.link_url && navigate(newNotif.link_url)}
+          >
+            <div className="font-medium">{capitalizedTitle}</div>
+            <div className="text-sm text-slate-500 dark:text-zinc-400 whitespace-pre-line">{newNotif.message}</div>
+          </div>,
+          {
+            position: "bottom-right",
+            duration: 5000,
+            closeButton: true,
+          }
+        );
+      }
+
+      if (windowsNotifications && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        sendWindowsNotification(
+          capitalizedTitle,
+          newNotif.message || "New notification received",
+          newNotif.link_url,
+          (url) => navigate(url)
+        );
+      }
+    } catch (err) {
+      console.error("Failed to handle notification:", err);
+    }
+  };
+
+  useNotificationStream({ onNotification: handleNotification });
 
   return (
     <header className="h-14 border-b border-border bg-card text-card-foreground flex items-center justify-between px-4 sm:px-6 shrink-0 transition-all duration-300 gap-3 sm:gap-4 relative z-40">
