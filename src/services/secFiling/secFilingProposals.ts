@@ -29,6 +29,7 @@ import {
   saveVersionHistory
 } from './secFilingCore';
 import { saveSpreadsheet } from './secFilingSpreadsheet';
+import { createGuestInviteToken, isGuestInviteToken } from '../guestInvite';
 
 export function getProposalInviteUrl(proposal: SecChangeProposal): string {
   const baseUrl =
@@ -44,7 +45,9 @@ export function getProposalInviteUrl(proposal: SecChangeProposal): string {
     title: proposal.title,
     ...(proposal.changeSummary?.description ? { desc: proposal.changeSummary.description } : {})
   });
-  if (proposal.inviteToken) {
+  // A guest token goes in the fragment, which browsers never send to a server.
+  const guestToken = isGuestInviteToken(proposal.inviteToken) ? proposal.inviteToken : null;
+  if (proposal.inviteToken && !guestToken) {
     queryParams.set('token', proposal.inviteToken);
   }
   if (proposal.permissions) {
@@ -54,7 +57,22 @@ export function getProposalInviteUrl(proposal: SecChangeProposal): string {
       queryParams.set('canMerge', String(proposal.permissions.canMergeAndApprove));
     }
   }
-  return `${baseUrl}?${queryParams.toString()}`;
+  return `${baseUrl}?${queryParams.toString()}${guestToken ? `#invite=${guestToken}` : ''}`;
+}
+
+/**
+ * Give a proposal from before guest links (guessable "inv-..." token) a guest token, so
+ * its link works without a login. Saving it registers the token on the server.
+ */
+export function ensureGuestInviteToken(proposal: SecChangeProposal): SecChangeProposal {
+  if (isGuestInviteToken(proposal.inviteToken)) return proposal;
+  const proposals = getProposals();
+  const stored = proposals.find((p) => p.id === proposal.id);
+  if (!stored) return proposal;
+  stored.inviteToken = createGuestInviteToken();
+  saveProposals(proposals, true);
+  void flushRemote();
+  return stored;
 }
 
 /** The document proposals are read and written for: the one open in the editor. */
@@ -187,12 +205,15 @@ export function createContributorInvite(params: {
   }): { proposal: SecChangeProposal; inviteUrl: string } {
     const proposals = getProposals();
     const propId = `prop-contrib-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 5)}`;
-    const token = `inv-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+    const token = createGuestInviteToken();
 
     const author = {
       id: `usr-contrib-${Date.now().toString(36)}`,
       name: params.contributorName,
-      email: params.contributorEmail || `${params.contributorName.toLowerCase().replace(/\s+/g, '.')}@zenatech.com`,
+      // Never invent an address: proposal authors and invitees get access to the whole
+      // document, so a guessed one could belong to a real employee. Without an email the
+      // contributor works through the guest link only.
+      email: params.contributorEmail?.trim().toLowerCase() || '',
       role: params.contributorRole
     };
 
@@ -258,7 +279,7 @@ export function getOrCreateContributorProposal(params: {
     const author = {
       id: `contrib-${Date.now()}`,
       name: params.name || 'External Contributor',
-      email: params.email || `${(params.name || 'contributor').toLowerCase().replace(/\s+/g, '.')}@zenatech.com`,
+      email: params.email?.trim().toLowerCase() || '',
       role: params.role || 'Contributor'
     };
 
@@ -276,7 +297,7 @@ export function getOrCreateContributorProposal(params: {
         ? JSON.parse(JSON.stringify(mainDoc.attachedSpreadsheet))
         : null,
       assignedSection: params.section && params.section !== 'ALL' ? params.section : undefined,
-      inviteToken: `inv-${Date.now().toString(36)}`,
+      inviteToken: createGuestInviteToken(),
       permissions: params.permissions,
       documentId: mainDoc.id,
       changeSummary: {
@@ -342,7 +363,7 @@ export function forkProposalFromMerged(
       blocks: blocksToUse,
       attachedSpreadsheet: sheetToUse,
       assignedSection: source.assignedSection,
-      inviteToken: `inv-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`,
+      inviteToken: createGuestInviteToken(),
       documentId: source.documentId || currentMain.id,
       changeSummary: {
         addedCount: diffs.filter((d) => d.status === 'added').length,

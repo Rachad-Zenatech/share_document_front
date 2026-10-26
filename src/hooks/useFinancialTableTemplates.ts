@@ -12,11 +12,14 @@ import type {
   SecFinancialTableTemplateUpdate
 } from '../types/secFilingTemplate';
 import { queryKeys } from '../services/queryKeys';
+import { isGuestSession } from '../services/guestInvite';
 
 export function useFinancialTableTemplates() {
   return useQuery<SecFinancialTableTemplateList>({
     queryKey: queryKeys.secFilingTableTemplates(),
-    queryFn: getFinancialTableTemplates
+    queryFn: getFinancialTableTemplates,
+    // Guest contributors have no login; the bundled templates are used instead.
+    enabled: !isGuestSession()
   });
 }
 

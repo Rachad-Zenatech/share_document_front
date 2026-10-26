@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { CloudOff, Loader2, RotateCcw } from 'lucide-react';
 import { Button } from './ui/button';
 import { hydrateSecFilingData, isSecFilingDataHydrated } from '../services/secFiling/secFilingSync';
+import { getGuestInviteToken } from '../services/guestInvite';
 
 /**
  * Renders the SEC filing pages only after their documents, proposals and history have
@@ -12,6 +13,8 @@ import { hydrateSecFilingData, isSecFilingDataHydrated } from '../services/secFi
 export default function SecFilingDataGate({ children }: { children: ReactNode }) {
   const location = useLocation();
   const proposalId = new URLSearchParams(location.search).get('proposalId') || undefined;
+  // An external contributor's link carries a guest token instead of needing a login.
+  const guestToken = getGuestInviteToken() || undefined;
   const [ready, setReady] = useState(() => isSecFilingDataHydrated() && !proposalId);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -19,7 +22,7 @@ export default function SecFilingDataGate({ children }: { children: ReactNode })
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    hydrateSecFilingData({ proposalId })
+    hydrateSecFilingData({ proposalId, guestToken })
       .then(() => {
         if (!cancelled) setReady(true);
       })
@@ -27,7 +30,7 @@ export default function SecFilingDataGate({ children }: { children: ReactNode })
         if (cancelled) return;
         console.error('[sec-filing] could not load documents from the server', err);
         setError(
-          err?.status === 401
+          err?.status === 401 && !guestToken
             ? 'Your session has expired. Sign in again to open your documents.'
             : err?.message || 'The server could not be reached.'
         );
@@ -35,7 +38,7 @@ export default function SecFilingDataGate({ children }: { children: ReactNode })
     return () => {
       cancelled = true;
     };
-  }, [proposalId, attempt]);
+  }, [proposalId, guestToken, attempt]);
 
   if (ready) return <>{children}</>;
 

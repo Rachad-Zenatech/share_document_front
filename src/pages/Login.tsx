@@ -5,6 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { POST_LOGIN_REDIRECT_KEY, SESSION_EXPIRED_REASON } from "@/services/helper";
+
+function takePostLoginRedirect(): string | null {
+  const path = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+  sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+  if (path && path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/login")) {
+    return path;
+  }
+  return null;
+}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -12,6 +22,17 @@ export default function Login() {
   const { refreshPermissions } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const hasProcessedLogin = useRef(false);
+  const hasShownExpiryNotice = useRef(false);
+
+  useEffect(() => {
+    if (searchParams.get("reason") === SESSION_EXPIRED_REASON && !hasShownExpiryNotice.current) {
+      hasShownExpiryNotice.current = true;
+      setTimeout(() => {
+        toast.info("Your session has expired. Please log in again.");
+      }, 100);
+      navigate("/login", { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   useEffect(() => {
     const handleSsoCallback = async () => {
@@ -52,7 +73,7 @@ export default function Login() {
           await refreshPermissions();
           toast.success("Successfully logged in");
           window.history.replaceState({}, document.title, window.location.pathname);
-          navigate("/sec-filings");
+          navigate(takePostLoginRedirect() ?? "/sec-filings", { replace: true });
         } catch (error) {
           console.error("Failed to process SSO login", error);
           toast.error("Failed to process login");

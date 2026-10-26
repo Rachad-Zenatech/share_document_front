@@ -14,9 +14,13 @@
  *
  * Every other key (active document id, spreadsheet registry...) passes straight
  * through to localStorage.
+ *
+ * Guest contributors (no login) only ever push their own proposal, through the guest
+ * endpoint; document and version writes stay in memory and are never sent.
  */
 import { apiClient } from '../apiClient';
 import { ApiError } from '../helper';
+import { saveGuestProposal } from './secFilingGuest';
 
 export const DOC_STORE_KEYS = {
   MAIN_DOC: 'sec_filing_main_doc_v4_compact',
@@ -49,6 +53,7 @@ const isManagedKey = (key: string) =>
 
 const memory = new Map<string, string>();
 let serverBacked = false;
+let guest: { token: string; proposalId: string } | null = null;
 
 // Per-document state for revision-checked saves.
 const revisions = new Map<string, number>();
@@ -185,7 +190,34 @@ function scheduleProposalPush() {
   setStatus('saving');
 }
 
+async function pushGuestProposal(): Promise<void> {
+  proposalTimer = null;
+  if (!guest) return;
+  const list = parse<Array<Record<string, unknown>>>(memory.get(DOC_STORE_KEYS.PROPOSALS)) || [];
+  const p = list.find((x) => x.id === guest!.proposalId);
+  const json = p ? JSON.stringify(p) : null;
+  if (!p || !json || pushedProposals.get(guest.proposalId) === json) {
+    refreshIdleStatus();
+    return;
+  }
+  try {
+    await saveGuestProposal(guest.token, p);
+    pushedProposals.set(guest.proposalId, json);
+    lastAttemptFailed = false;
+  } catch (err) {
+    lastAttemptFailed = true;
+    const message = err instanceof Error ? err.message : 'Could not save your changes';
+    setStatus('error', message);
+    // Expired/revoked link, already submitted, or edits outside the invite: retrying cannot help.
+    const permanent = err instanceof ApiError && [404, 409, 422].includes(err.status);
+    emit('sec-filing-sync-error', { proposalId: guest.proposalId, message, permanent });
+    if (!permanent) proposalTimer = setTimeout(() => void pushGuestProposal(), RETRY_DELAYS_MS[1]);
+  }
+  refreshIdleStatus();
+}
+
 async function pushProposals(): Promise<void> {
+  if (guest) return pushGuestProposal();
   proposalTimer = null;
   const list = parse<Array<Record<string, unknown>>>(memory.get(DOC_STORE_KEYS.PROPOSALS)) || [];
   const fallbackDoc = activeDocId();
@@ -269,17 +301,17 @@ export const docStore = {
     if (LEGACY_KEYS.has(key)) return;
     memory.set(key, value);
     if (key.startsWith(DOC_CONTENT_PREFIX)) {
-      scheduleDocPush(key.slice(DOC_CONTENT_PREFIX.length), value);
+      if (!guest) scheduleDocPush(key.slice(DOC_CONTENT_PREFIX.length), value);
     } else if (key === DOC_STORE_KEYS.MAIN_DOC) {
       const id = parse<{ id?: string }>(value)?.id;
       if (id) {
         memory.set(`${DOC_CONTENT_PREFIX}${id}`, value);
-        scheduleDocPush(id, value);
+        if (!guest) scheduleDocPush(id, value);
       }
     } else if (key === DOC_STORE_KEYS.PROPOSALS) {
       scheduleProposalPush();
     } else if (key === DOC_STORE_KEYS.VERSION_HISTORY) {
-      scheduleVersionPush();
+      if (!guest) scheduleVersionPush();
     }
   },
 
@@ -336,6 +368,20 @@ export const docStoreInternals = {
     memory.set(DOC_STORE_KEYS.VERSION_HISTORY, JSON.stringify(seed.versions));
     seed.versions.forEach((v) => pushedVersionIds.add(v.id as string));
     setStatus('saved');
+  },
+
+  /** Load a guest session: its document (read-only) and the one proposal it may save. */
+  enableGuestBacking(seed: { token: string; document: Record<string, unknown>; proposal: Record<string, unknown> }) {
+    const id = seed.document.id as string;
+    docStoreInternals.enableServerBacking({
+      list: [{ id, title: seed.document.title, formType: seed.document.formType, period: seed.document.period }],
+      documents: [{ document: seed.document, revision: 0 }],
+      proposals: [seed.proposal],
+      versions: [],
+      previews: new Map(),
+      activeId: id
+    });
+    guest = { token: seed.token, proposalId: seed.proposal.id as string };
   },
 
   /** Merge server versions of one document into memory (loaded when it is opened). */
@@ -408,6 +454,7 @@ export async function flushRemote(): Promise<void> {
 }
 
 export async function deleteRemoteDocument(id: string): Promise<void> {
+  if (guest) throw new Error('Guest contributors cannot delete documents');
   const t = docTimers.get(id);
   if (t) clearTimeout(t);
   docTimers.delete(id);

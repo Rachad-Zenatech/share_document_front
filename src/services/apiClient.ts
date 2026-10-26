@@ -1,4 +1,4 @@
-import { handleResponse } from "./helper";
+import { handleResponse, handleUnauthorized } from "./helper";
 
 export interface ActiveApiAction {
   id: string;
@@ -311,6 +311,7 @@ export const apiClient = {
       } as HeadersInit
     });
     if (!res.ok) {
+      handleUnauthorized(res);
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error((err as { detail: string }).detail || "Request failed");
     }

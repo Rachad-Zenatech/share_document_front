@@ -998,7 +998,7 @@ export function useSecFiling() {
       const author = {
         id: user?.id || 'usr-contrib',
         name: user?.full_name || 'Financial Contributor',
-        email: user?.email || 'contributor@zenatech.com',
+        email: user?.email || '',
         role: activeRole === 'LEAD_CONTROLLER' ? 'Controller' : 'Financial Analyst'
       };
       const created = secFilingService.createProposal(title, author, description, mainDoc, assignedSection);

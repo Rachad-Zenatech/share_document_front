@@ -16,6 +16,8 @@ import {
 } from './secFilingStore';
 import { setCachedDocumentsList, setPendingMainDoc, setPendingProposals } from './secFilingStorage';
 import { getDocumentContent } from './secFilingCore';
+import { fetchGuestSession } from './secFilingGuest';
+import { isGuestSession } from '../guestInvite';
 
 type ServerSummary = Record<string, unknown> & {
   id: string;
@@ -190,17 +192,44 @@ async function doHydrate(proposalId?: string): Promise<void> {
   if (activeId) localStorage.setItem(DOC_STORE_KEYS.ACTIVE_DOC_ID, activeId);
 }
 
+/**
+ * A guest contributor loads only their proposal and its document. Nothing from this
+ * browser's localStorage is uploaded, and no other SEC endpoint is called.
+ */
+async function doGuestHydrate(token: string): Promise<void> {
+  // A freshly copied link can be opened before the lead's browser has registered it.
+  let session: Awaited<ReturnType<typeof fetchGuestSession>> | null = null;
+  for (const delay of [0, 1500, 3000]) {
+    if (delay) await new Promise((r) => setTimeout(r, delay));
+    try {
+      session = await fetchGuestSession(token);
+      break;
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 404) || delay === 3000) throw err;
+    }
+  }
+  if (!session) return;
+  docStoreInternals.enableGuestBacking({ token, document: session.document, proposal: session.proposal });
+  setCachedDocumentsList(null);
+  setPendingMainDoc(null);
+  setPendingProposals(null);
+  localStorage.setItem(DOC_STORE_KEYS.ACTIVE_DOC_ID, session.documentId);
+}
+
 let hydration: Promise<void> | null = null;
 
 /**
  * Load everything once per page load. `proposalId` (from a contributor invite link)
- * makes that proposal's document the open one.
+ * makes that proposal's document the open one; `guestToken` loads a guest session instead.
  */
-export function hydrateSecFilingData(options: { proposalId?: string } = {}): Promise<void> {
+export function hydrateSecFilingData(options: { proposalId?: string; guestToken?: string } = {}): Promise<void> {
   if (hydration) {
-    return options.proposalId ? hydration.then(() => ensureProposalLoaded(options.proposalId!)) : hydration;
+    return options.proposalId && !options.guestToken
+      ? hydration.then(() => ensureProposalLoaded(options.proposalId!))
+      : hydration;
   }
-  hydration = doHydrate(options.proposalId).catch((err) => {
+  const load = options.guestToken ? doGuestHydrate(options.guestToken) : doHydrate(options.proposalId);
+  hydration = load.catch((err) => {
     hydration = null;
     throw err;
   });
@@ -223,6 +252,7 @@ async function ensureProposalLoaded(proposalId: string): Promise<void> {
 // ---------------------------------------------------------------------------- staying fresh
 
 async function loadVersions(documentId: string) {
+  if (isGuestSession()) return;
   try {
     const { versions } = await apiClient.get<{ versions: Array<Record<string, unknown>> }>(
       `/sec-filings/documents/${enc(documentId)}/versions`,
@@ -238,7 +268,7 @@ async function loadVersions(documentId: string) {
 /** Pick up what other people saved to the open document (and its proposals). */
 async function refreshActiveDocument(reason: string) {
   const id = localStorage.getItem(DOC_STORE_KEYS.ACTIVE_DOC_ID);
-  if (!id || !docStoreInternals.isServerBacked() || hasUnsyncedChanges()) return;
+  if (!id || !docStoreInternals.isServerBacked() || hasUnsyncedChanges() || isGuestSession()) return;
   try {
     const [doc, { proposals }] = await Promise.all([
       apiClient.get<ServerDoc>(`/sec-filings/documents/${enc(id)}`, quiet),

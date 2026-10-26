@@ -132,7 +132,7 @@ function openSocket() {
         // which the handshake falls back to once the stored token is stale.
         // It is HttpOnly by design, so it cannot be copied into sessionStorage.
         apiClient
-          .post("/auth/heartbeat", {})
+          .post("/api/auth/heartbeat", {})
           .then(() => scheduleReconnect(RECONNECT_DELAY_MS))
           .catch(() => scheduleReconnect(RECONNECT_DELAY_MS * authRetries));
       } else {

@@ -21,7 +21,7 @@ import { apiClient } from '../../../services/apiClient';
 import type { SecFilingDocument, SecChangeProposal } from '../../../types/secFiling';
 import type { ContributorPermissions } from '../../../types/collaborator';
 import type { User } from '../../../lib/AuthContext';
-import { getProposalInviteUrl } from '../../../services/secFilingService';
+import { ensureGuestInviteToken, getProposalInviteUrl } from '../../../services/secFilingService';
 import { formatWorkflowStepTitle, getStepAssignees } from '../../../services/secWorkflowService';
 import { useDocumentWorkflow } from '../../../hooks/useSecWorkflows';
 import type { SecWorkflowAssignee, SecWorkflowStep } from '../../../types/secWorkflow';
@@ -50,43 +50,6 @@ interface ContributorInviteModalProps {
   onOpenProposal: (proposalId: string) => void;
   onForkProposal?: (sourceProposalId: string) => SecChangeProposal | null;
 }
-
-const FALLBACK_SYSTEM_USERS: Array<{
-  id: string;
-  full_name: string;
-  email: string;
-  job_title?: string;
-  department?: string;
-}> = [
-  {
-    id: 'usr-admin-01',
-    full_name: 'Alexander Ross',
-    email: 'a.ross@zenatech.com',
-    job_title: 'Chief Financial Officer (CFO)',
-    department: 'Executive'
-  },
-  {
-    id: 'usr-admin-02',
-    full_name: 'Elena Rostova',
-    email: 'e.rostova@zenatech.com',
-    job_title: 'VP of Financial Reporting & SEC Compliance',
-    department: 'Finance'
-  },
-  {
-    id: 'usr-admin-03',
-    full_name: 'Marcus Sterling',
-    email: 'm.sterling@zenatech.com',
-    job_title: 'Lead SEC Financial Controller',
-    department: 'Controllership'
-  },
-  {
-    id: 'usr-admin-04',
-    full_name: 'Sophia Laurent',
-    email: 's.laurent@zenatech.com',
-    job_title: 'Senior Corporate Counsel',
-    department: 'Legal'
-  }
-];
 
 export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
   open,
@@ -137,9 +100,11 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
           return res;
         }
       } catch {
-        // Fallback to local system users if offline or unauthenticated
+        // Directory unavailable (offline or no permission): the contributor is typed in.
+        // No made-up fallback people: picking one would invite, and give document access
+        // to, an address nobody chose.
       }
-      return FALLBACK_SYSTEM_USERS;
+      return [];
     },
     staleTime: 60_000
   });
@@ -147,7 +112,7 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
   const availableUsers = useMemo(() => {
     const list = Array.isArray(systemUsersData) && systemUsersData.length > 0
       ? systemUsersData
-      : FALLBACK_SYSTEM_USERS;
+      : [];
 
     if (!userSearchQuery.trim()) return list;
     const q = userSearchQuery.toLowerCase();
@@ -301,7 +266,7 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
   };
 
   const handleCopyExistingLink = (p: SecChangeProposal) => {
-    const url = getProposalInviteUrl(p);
+    const url = getProposalInviteUrl(ensureGuestInviteToken(p));
     navigator.clipboard.writeText(url);
     setCopiedId(p.id);
     setTimeout(() => setCopiedId(null), 2500);
@@ -313,7 +278,7 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
     if (target) {
       onOpenProposal(target.id);
       onOpenChange(false);
-      const url = getProposalInviteUrl(target);
+      const url = getProposalInviteUrl(ensureGuestInviteToken(target));
       window.open(url, '_blank');
       toast.info(`Opened Workspace in a new tab for ${target.author.name}`);
     }

@@ -38,7 +38,8 @@ export {
 
 // 4. Proposals & Contributor URLs
 export {
-  getProposalInviteUrl
+  getProposalInviteUrl,
+  ensureGuestInviteToken
 } from './secFiling/secFilingProposals';
 
 import {

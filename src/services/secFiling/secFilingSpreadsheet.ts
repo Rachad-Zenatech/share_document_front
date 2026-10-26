@@ -9,6 +9,8 @@ import type {
 import { DEFAULT_TRIAL_BALANCE_SHEET } from '../../data/defaultTrialBalanceSheet';
 import { colToLetter, formatCellValue, parseCellRef, ensureSpreadsheetTabs } from '../../utils/documentVariables';
 import { apiClient } from '../apiClient';
+import { isGuestSession } from '../guestInvite';
+import { getGuestSpreadsheetRecord } from './secFilingGuest';
 import {
   docStore,
   STORAGE_KEYS,
@@ -43,6 +45,8 @@ function trackSpreadsheetWrite(docId: string, write: Promise<unknown>, failureMe
 }
 
 function sendSpreadsheetPush(docId: string, payload: AttachedSpreadsheetPayload): void {
+  // A guest's sheet edits travel in their proposal; the document's workbook is never written.
+  if (isGuestSession()) return;
   trackSpreadsheetWrite(
     docId,
     apiClient.put(spreadsheetEndpoint(docId), payload, { skipGlobalLoading: true }),
@@ -118,6 +122,7 @@ function removeSpreadsheetFromBackend(docId: string): void {
     clearTimeout(existing.timer);
     pendingSpreadsheetPushes.delete(docId);
   }
+  if (isGuestSession()) return;
   trackSpreadsheetWrite(
     docId,
     apiClient.delete(spreadsheetEndpoint(docId), { skipGlobalLoading: true }),
@@ -430,6 +435,10 @@ export function getAttachedSpreadsheet(docId?: string): AttachedSpreadsheet | nu
    * Resolves null when nothing is linked; rejects when the backend is unreachable.
    */
 export async function fetchAttachedSpreadsheetFromBackend(docId: string): Promise<AttachedSpreadsheet | null> {
+    if (isGuestSession()) {
+      const record = getGuestSpreadsheetRecord() as AttachedSpreadsheetRecord | null;
+      return record ? fromSpreadsheetRecord(record) : null;
+    }
     await settleSpreadsheetWrites(docId);
     const res = await apiClient.get<AttachedSpreadsheetResponse>(spreadsheetEndpoint(docId), {
       skipGlobalLoading: true
