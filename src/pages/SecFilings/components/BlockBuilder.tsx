@@ -202,6 +202,26 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [onSelectBlock, onClearSelection]);
 
+  // Expose the sticky ribbon's bottom edge as --doc-toolbar-offset so scrollIntoView({ block: 'start' })
+  // lands blocks/pages just below it instead of underneath it (the ribbon wraps and changes height).
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const toolbar = toolbarRef.current;
+    if (!toolbar) return;
+    const root = document.documentElement;
+    const update = () => {
+      const stickyTop = parseFloat(getComputedStyle(toolbar).top) || 0;
+      root.style.setProperty('--doc-toolbar-offset', `${stickyTop + toolbar.offsetHeight + 12}px`);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(toolbar);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--doc-toolbar-offset');
+    };
+  }, []);
+
   // Paginate blocks dynamically taking global spacing into account
   const pages = useMemo(() => {
     return paginateBlocks(filteredBlocks, globalSpacing);
@@ -221,7 +241,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
   return (
     <div className="w-full flex flex-col items-center space-y-3">
       {/* Document Canvas Header & Ribbon Strip */}
-      <div className={`${sheetWidthClass} flex items-center justify-between px-4 py-2 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-xl border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-300 shadow-sm sticky top-[108px] z-20 transition-all duration-150`}>
+      <div ref={toolbarRef} className={`${sheetWidthClass} flex items-center justify-between px-4 py-2 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-xl border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-300 shadow-sm sticky top-[108px] z-20 transition-all duration-150`}>
         <div className="flex items-center gap-3">
           {/* Document / Block Mode Indicator & Page Count */}
           <div className="flex items-center gap-1.5 font-bold text-[#0E2841] dark:text-blue-400">
@@ -600,7 +620,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
               <div
                 id={`doc-page-${page.pageNumber}`}
                 onClick={() => onSelectBlock(null)}
-                className={`${sheetWidthClass} scroll-mt-32 ${
+                className={`${sheetWidthClass} scroll-mt-[var(--doc-toolbar-offset,10rem)] ${
                   viewMode === 'word'
                     ? 'bg-white text-slate-900 shadow-2xl rounded-sm border border-slate-300/80 px-8 sm:px-12 md:px-18 lg:px-22 py-12 md:py-14'
                     : 'bg-slate-50/50 dark:bg-zinc-900/60 text-slate-900 dark:text-zinc-100 shadow-xl rounded-2xl border border-slate-200/90 dark:border-zinc-800/90 p-6 md:p-8'

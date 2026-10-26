@@ -316,7 +316,7 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
         marginTop: `${currentSpacingTop}px`,
         marginBottom: '0px'
       }}
-      className={`group ${wrapperClass} scroll-mt-32`}
+      className={`group ${wrapperClass} scroll-mt-[var(--doc-toolbar-offset,10rem)]`}
     >
       {/* Visual Top Gap Spacer Indicator (Only when clicked into the block and custom spacing is set) */}
       {currentSpacingTop !== 0 && isHighlighted && (
