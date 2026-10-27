@@ -25,7 +25,7 @@ import type {
   SecFilingDocument
 } from '../../types/secFiling';
 import { useSecFiling } from '../../hooks/useSecFiling';
-import { getProposalInviteUrl } from '../../services/secFilingService';
+import { getProposalInviteUrl, secFilingService } from '../../services/secFilingService';
 import { exportSecFilingToDocx, downloadBlob, printSecFiling } from '../../utils/secFilingExport';
 import { BlockBuilder } from './components/BlockBuilder';
 import { BlockInspector } from './components/BlockInspector';
@@ -214,6 +214,7 @@ export default function SecFilingContributorPage() {
       const docToExport: SecFilingDocument = {
         ...mainDoc,
         blocks: workingBlocks,
+        attachedSpreadsheet: attachedSpreadsheet ?? mainDoc.attachedSpreadsheet,
         version: `${mainDoc.version} (Contributor Draft: ${activeProposal?.title || titleFromUrl})`
       };
       const blob = await exportSecFilingToDocx(docToExport);
@@ -232,6 +233,7 @@ export default function SecFilingContributorPage() {
     const docToExport: SecFilingDocument = {
       ...mainDoc,
       blocks: workingBlocks,
+      attachedSpreadsheet: attachedSpreadsheet ?? mainDoc.attachedSpreadsheet,
       version: `${mainDoc.version} (Contributor Draft: ${activeProposal?.title || titleFromUrl})`
     };
     printSecFiling(docToExport);
@@ -717,6 +719,10 @@ export default function SecFilingContributorPage() {
         proposal={activeProposal}
         diffs={activeDiffs}
         onSubmit={handleSubmitForReview}
+        mainSpreadsheet={mainDoc.attachedSpreadsheet ?? secFilingService.getAttachedSpreadsheet(mainDoc.id)}
+        branchSpreadsheet={attachedSpreadsheet}
+        blocks={workingBlocks}
+        onUpdateSpreadsheet={activeProposal ? updateAttachedSpreadsheet : undefined}
       />
 
       <AttachedSpreadsheetModal

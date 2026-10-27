@@ -305,6 +305,7 @@ export default function SecFilingsPage() {
       const currentWorkingDoc = {
         ...mainDoc,
         blocks: workingBlocks,
+        attachedSpreadsheet: attachedSpreadsheet ?? mainDoc.attachedSpreadsheet,
         version: activeProposal ? `${mainDoc.version} (Branch: ${activeProposal.title})` : mainDoc.version
       };
       const { exportSecFilingToDocx, downloadBlob } = await import('../../utils/secFilingExport');
@@ -325,6 +326,7 @@ export default function SecFilingsPage() {
     const currentWorkingDoc = {
       ...mainDoc,
       blocks: workingBlocks,
+      attachedSpreadsheet: attachedSpreadsheet ?? mainDoc.attachedSpreadsheet,
       version: activeProposal ? `${mainDoc.version} (Branch: ${activeProposal.title})` : mainDoc.version
     };
     printSecFiling(currentWorkingDoc);
@@ -1317,6 +1319,10 @@ export default function SecFilingsPage() {
         proposal={activeProposal}
         diffs={activeDiffs}
         onSubmit={handleSubmitForReview}
+        mainSpreadsheet={mainDoc.attachedSpreadsheet ?? secFilingService.getAttachedSpreadsheet(mainDoc.id)}
+        branchSpreadsheet={attachedSpreadsheet}
+        blocks={workingBlocks}
+        onUpdateSpreadsheet={activeProposal ? updateAttachedSpreadsheet : undefined}
       />
       )}
 

@@ -60,6 +60,8 @@ import { computeSpreadsheetDiffs } from '../../../utils/documentVariables';
 import { AttachedSpreadsheetModal } from './AttachedSpreadsheetModal';
 import { DocumentVariableRenderer } from './DocumentVariableRenderer';
 import { EmbeddedSpreadsheetDiffViewer } from './EmbeddedSpreadsheetDiffViewer';
+import { SpreadsheetReuploadPreviewModal } from './SpreadsheetReuploadPreviewModal';
+import { computeWorkbookReuploadDiff } from '../../../utils/spreadsheetReuploadDiff';
 import { secFilingService } from '../../../services/secFilingService';
 
 function formatSubmissionTime(dateString?: string): string {
@@ -254,6 +256,9 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
   const [isSpreadsheetPreviewOpen, setIsSpreadsheetPreviewOpen] = useState<boolean>(false);
   const [targetSpreadsheetCell, setTargetSpreadsheetCell] = useState<string | undefined>(undefined);
   const [targetSpreadsheetTab, setTargetSpreadsheetTab] = useState<string | undefined>(undefined);
+  // Row/column-aware workbook preview; `pendingMerge` set means it is the final merge confirmation
+  const [isWorkbookPreviewOpen, setIsWorkbookPreviewOpen] = useState(false);
+  const [pendingMerge, setPendingMerge] = useState<'selected' | 'all' | null>(null);
 
   const proposalSpreadsheet = proposal?.attachedSpreadsheet || mainDoc.attachedSpreadsheet;
   const mainSpreadsheet = mainDoc.attachedSpreadsheet;
@@ -313,6 +318,17 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
   const tableChangeCount = useMemo(
     () => changedDiffs.filter((d) => d.changeCategories?.includes('financial_data')).length,
     [changedDiffs]
+  );
+
+  const workbookBase = useMemo(
+    () => mainDoc.attachedSpreadsheet || secFilingService.getAttachedSpreadsheet(mainDoc.id),
+    [mainDoc.attachedSpreadsheet, mainDoc.id]
+  );
+  const branchWorkbook = proposal?.attachedSpreadsheet;
+  const workbookDiff = useMemo(
+    () =>
+      open && branchWorkbook && workbookBase ? computeWorkbookReuploadDiff(workbookBase, branchWorkbook) : null,
+    [open, branchWorkbook, workbookBase]
   );
 
   const spreadsheetStructureSummary = useMemo(() => {
@@ -605,27 +621,38 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
     setAcceptedBlockIds([]);
   };
 
-  const handleConfirmMergeSelected = () => {
-    if (acceptedBlockIds.length === 0 && spreadsheetDiffs.length === 0) {
-      alert('Please select at least one change to confirm and merge.');
-      return;
-    }
+  const performMerge = (kind: 'selected' | 'all') => {
+    const ids = kind === 'all' ? changedDiffs.map((d) => d.blockId) : acceptedBlockIds;
     if (onMergeSelective) {
-      onMergeSelective(proposal.id, acceptedBlockIds, reviewNotes);
+      onMergeSelective(proposal.id, ids, reviewNotes);
     } else {
       onMerge(proposal.id, reviewNotes);
     }
+    setPendingMerge(null);
+    setIsWorkbookPreviewOpen(false);
     onOpenChange(false);
   };
 
-  const handleApproveAndMergeAll = () => {
-    const allIds = changedDiffs.map((d) => d.blockId);
-    if (onMergeSelective) {
-      onMergeSelective(proposal.id, allIds, reviewNotes);
-    } else {
-      onMerge(proposal.id, reviewNotes);
+  /** Merging replaces Main's workbook with the branch's, so confirm against a row/column preview first. */
+  const requestMerge = (kind: 'selected' | 'all') => {
+    if (workbookDiff?.hasChanges) {
+      setPendingMerge(kind);
+      setIsWorkbookPreviewOpen(true);
+      return;
     }
-    onOpenChange(false);
+    performMerge(kind);
+  };
+
+  const handleConfirmMergeSelected = () => {
+    if (acceptedBlockIds.length === 0 && spreadsheetDiffs.length === 0 && !workbookDiff?.hasChanges) {
+      alert('Please select at least one change to confirm and merge.');
+      return;
+    }
+    requestMerge('selected');
+  };
+
+  const handleApproveAndMergeAll = () => {
+    requestMerge('all');
   };
 
   const handleRejectClick = () => {
@@ -1709,7 +1736,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
             /* 4. SUMMARY CARDS LIST VIEW                                                */
             /* ========================================================================= */
             <div className="w-full max-w-[1380px] space-y-3">
-              {(spreadsheetDiffs.length > 0 || spreadsheetStructureSummary?.hasStructureChanges) && (
+              {(spreadsheetDiffs.length > 0 || spreadsheetStructureSummary?.hasStructureChanges || workbookDiff?.hasChanges) && (
                 <div className="p-4 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/25 shadow-sm space-y-3">
                   <div className="flex items-center justify-between text-xs flex-wrap gap-2">
                     <div className="flex items-center gap-3">
@@ -1744,6 +1771,20 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                       </div>
                     </div>
 
+                    <div className="flex items-center gap-2">
+                    {workbookDiff?.hasChanges && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPendingMerge(null);
+                          setIsWorkbookPreviewOpen(true);
+                        }}
+                        className="px-3 py-1.5 rounded-lg border border-emerald-600 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5" />
+                        <span>Row &amp; Column Preview</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setViewMode('spreadsheet-diffs')}
@@ -1752,6 +1793,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                       <FileSpreadsheet className="w-3.5 h-3.5" />
                       <span>Inspect Spreadsheet View</span>
                     </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1975,6 +2017,31 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
           </div>
         </div>
       </DialogContent>
+
+      {isWorkbookPreviewOpen && workbookBase && proposal?.attachedSpreadsheet && (
+        <SpreadsheetReuploadPreviewModal
+          open={isWorkbookPreviewOpen}
+          onOpenChange={(isOpen) => {
+            setIsWorkbookPreviewOpen(isOpen);
+            if (!isOpen) setPendingMerge(null);
+          }}
+          currentSpreadsheet={workbookBase}
+          uploadedSpreadsheet={proposal.attachedSpreadsheet}
+          uploadedFileName={proposal.attachedSpreadsheet.fileName}
+          title={pendingMerge ? 'Confirm Workbook Merge into Main' : 'Branch Workbook Changes'}
+          description={
+            <span>
+              {pendingMerge
+                ? 'Merging replaces the Main workbook with this branch’s workbook. Green = added on the branch, red = removed, amber = changed. Red/amber can also mean Main was updated after this branch was created.'
+                : `Changes in "${proposal.title}" by ${proposal.author.name} compared with the Main workbook.`}
+            </span>
+          }
+          currentLabel="Main"
+          uploadedLabel="Branch"
+          applyLabel="Confirm & Merge into Main"
+          onApply={pendingMerge ? () => performMerge(pendingMerge) : undefined}
+        />
+      )}
 
       {proposal && (
         <AttachedSpreadsheetModal

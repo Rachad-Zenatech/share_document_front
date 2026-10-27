@@ -77,6 +77,9 @@ import {
   extractCellReferencesFromFormula,
   type FormulaCellReference
 } from '../../../utils/documentVariables';
+import { applyWorkbookReupload, applyReuploadWithBlocks } from '../../../utils/spreadsheetReuploadDiff';
+import type { WorkbookReuploadDiff } from '../../../types/spreadsheet';
+import { SpreadsheetReuploadPreviewModal } from './SpreadsheetReuploadPreviewModal';
 import { DEFAULT_TRIAL_BALANCE_SHEET } from '../../../data/defaultTrialBalanceSheet';
 import { toast } from 'sonner';
 
@@ -523,6 +526,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const [searchQuery, setSearchQuery] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [reuploadPreview, setReuploadPreview] = useState<{ uploaded: AttachedSpreadsheet; fileName: string } | null>(null);
 
   // ---------- Version History (Undo / Redo) ----------
   // Each entry is a snapshot of the full spreadsheet at that point in time.
@@ -1631,7 +1635,16 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     setIsUploading(true);
     try {
       const parsed = await parseExcelFileToSpreadsheet(file);
-      onUpdateSpreadsheet(parsed);
+      const hasExistingData = (ensureSpreadsheetTabs(spreadsheet).tabs || []).some(
+        (t) => Object.keys(t.cells || {}).length > 0
+      );
+      if (hasExistingData) {
+        // Re-upload of a workbook edited in Excel: review the diff before replacing
+        setReuploadPreview({ uploaded: parsed, fileName: file.name });
+        return;
+      }
+      // Keep the workbook id so links (and branch merges) still point at the same workbook
+      onUpdateSpreadsheet(spreadsheet?.id ? applyWorkbookReupload(spreadsheet, parsed) : parsed);
       setSelectedCellRef('A1');
       const firstVal = parsed.cells?.['A1'];
       setEditingValue(firstVal !== undefined && firstVal !== null ? String(firstVal) : '');
@@ -1650,6 +1663,29 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const handleApplyReupload = (diff: WorkbookReuploadDiff) => {
+    if (!reuploadPreview) return;
+    // Keep document variables pointing at the same data when rows/columns moved in Excel
+    const { merged, shiftedBlocks, shiftedCount } = applyReuploadWithBlocks(
+      spreadsheet,
+      reuploadPreview.uploaded,
+      diff,
+      blocks
+    );
+
+    pushHistory(spreadsheet);
+    onUpdateSpreadsheet(merged, shiftedBlocks);
+    setReuploadPreview(null);
+    setSelectedCellRef('A1');
+    const firstVal = merged.cells?.['A1'];
+    setEditingValue(firstVal !== undefined && firstVal !== null ? String(firstVal) : '');
+    toast.success(
+      `Applied re-upload from "${reuploadPreview.fileName}"${
+        shiftedCount ? ` and re-bound ${shiftedCount} document reference(s)` : ''
+      }`
+    );
   };
 
   // Export current spreadsheet (.xlsx)
@@ -3373,6 +3409,18 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Re-upload Diff Preview */}
+        {reuploadPreview && (
+          <SpreadsheetReuploadPreviewModal
+            open={reuploadPreview !== null}
+            onOpenChange={(isOpen) => !isOpen && setReuploadPreview(null)}
+            currentSpreadsheet={spreadsheet}
+            uploadedSpreadsheet={reuploadPreview.uploaded}
+            uploadedFileName={reuploadPreview.fileName}
+            onApply={handleApplyReupload}
+          />
+        )}
 
         {/* SPREADSHEET RIGHT-CLICK CONTEXT MENU — rendered via portal to document.body so it is
              fully outside the Dialog's CSS transform stacking context. This fixes the bug

@@ -14,7 +14,8 @@ import {
   Table,
   X,
   Sparkles,
-  Link2
+  Link2,
+  FileUp
 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -39,6 +40,8 @@ import {
   ensureSpreadsheetTabs
 } from '../../utils/documentVariables';
 import { AttachedSpreadsheetModal } from './components/AttachedSpreadsheetModal';
+import { SpreadsheetReuploadPreviewModal } from './components/SpreadsheetReuploadPreviewModal';
+import { applyWorkbookReupload } from '../../utils/spreadsheetReuploadDiff';
 import { DEFAULT_TRIAL_BALANCE_SHEET } from '../../data/defaultTrialBalanceSheet';
 
 export const SpreadsheetHubPage: React.FC = () => {
@@ -71,6 +74,15 @@ export const SpreadsheetHubPage: React.FC = () => {
   // File Upload Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Re-upload (replace an existing workbook after previewing the diff)
+  const reuploadInputRef = useRef<HTMLInputElement>(null);
+  const [reuploadTargetId, setReuploadTargetId] = useState<string | null>(null);
+  const [reuploadPreview, setReuploadPreview] = useState<{
+    current: AttachedSpreadsheet;
+    uploaded: AttachedSpreadsheet;
+    fileName: string;
+  } | null>(null);
 
   // Reload spreadsheets from service
   const refreshHub = () => {
@@ -179,6 +191,38 @@ export const SpreadsheetHubPage: React.FC = () => {
       setIsUploading(false);
       if (e.target) e.target.value = '';
     }
+  };
+
+  // Re-upload an updated .xlsx for an existing workbook: parse, then preview the diff before saving
+  const handleStartReupload = (sheet: AttachedSpreadsheet) => {
+    setReuploadTargetId(sheet.id);
+    reuploadInputRef.current?.click();
+  };
+
+  const handleReuploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const current = spreadsheets.find((s) => s.id === reuploadTargetId);
+    if (e.target) e.target.value = '';
+    if (!file || !current) return;
+    setIsUploading(true);
+    try {
+      const uploaded = await parseExcelFileToSpreadsheet(file);
+      setReuploadPreview({ current: ensureSpreadsheetTabs(current), uploaded, fileName: file.name });
+    } catch {
+      toast.error('Failed to parse Excel workbook. Please verify the file format.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleApplyReupload = () => {
+    if (!reuploadPreview) return;
+    const merged = applyWorkbookReupload(reuploadPreview.current, reuploadPreview.uploaded);
+    secFilingService.saveSpreadsheet(merged, true, true);
+    refreshHub();
+    setReuploadPreview(null);
+    setReuploadTargetId(null);
+    toast.success(`Updated "${merged.fileName}" from ${reuploadPreview.fileName}`);
   };
 
   // Load Starter Trial Balance Sample
@@ -302,6 +346,13 @@ export const SpreadsheetHubPage: React.FC = () => {
               type="file"
               accept=".xlsx,.xls"
               onChange={handleFileUpload}
+              className="hidden"
+            />
+            <input
+              ref={reuploadInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleReuploadFile}
               className="hidden"
             />
             <Button
@@ -633,15 +684,29 @@ export const SpreadsheetHubPage: React.FC = () => {
                         : 'Recently'}
                     </span>
 
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => setEditingSheet(safe)}
-                      className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1 font-semibold cursor-pointer"
-                    >
-                      <FileSpreadsheet className="w-3.5 h-3.5" />
-                      <span>Open Sheet Editor</span>
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleStartReupload(sheet)}
+                        disabled={isUploading}
+                        title="Re-upload updated .xlsx (preview changes first)"
+                        className="h-7 text-xs gap-1 font-semibold border-slate-300 dark:border-zinc-700 cursor-pointer"
+                      >
+                        <FileUp className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Re-upload</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setEditingSheet(safe)}
+                        className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1 font-semibold cursor-pointer"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5" />
+                        <span>Open Sheet Editor</span>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               );
@@ -838,6 +903,23 @@ export const SpreadsheetHubPage: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Re-upload Diff Preview */}
+      {reuploadPreview && (
+        <SpreadsheetReuploadPreviewModal
+          open={reuploadPreview !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setReuploadPreview(null);
+              setReuploadTargetId(null);
+            }
+          }}
+          currentSpreadsheet={reuploadPreview.current}
+          uploadedSpreadsheet={reuploadPreview.uploaded}
+          uploadedFileName={reuploadPreview.fileName}
+          onApply={handleApplyReupload}
+        />
+      )}
 
       {/* Full 2D-Virtual Grid Editor Modal */}
       {editingSheet && (

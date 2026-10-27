@@ -1177,12 +1177,16 @@ export function useSecFiling() {
   }, [refreshAll]);
 
   const handleUpdateAttachedSpreadsheet = useCallback((sheet: AttachedSpreadsheet, shiftedBlocks?: SecBlock[]) => {
-    queryClient.setQueryData(queryKeys.secFilingDocumentSpreadsheet(mainDoc.id), sheet);
     if (activeProposal) {
+      // Branch edits stay on the branch copy until merged. Do not touch Main's spreadsheet
+      // query cache here: its effect would write this sheet into Main's registry/backend.
+      const nextBlocks = shiftedBlocks && Array.isArray(shiftedBlocks) ? shiftedBlocks : activeProposal.blocks;
+      const baseSpreadsheet = mainDoc.attachedSpreadsheet || secFilingService.getAttachedSpreadsheet(mainDoc.id);
       const updatedProposal: SecChangeProposal = {
         ...activeProposal,
         attachedSpreadsheet: sheet,
-        blocks: shiftedBlocks && Array.isArray(shiftedBlocks) ? shiftedBlocks : activeProposal.blocks,
+        spreadsheetDiffs: computeSpreadsheetDiffs(baseSpreadsheet, sheet, nextBlocks),
+        blocks: nextBlocks,
         updatedAt: new Date().toISOString()
       };
       secFilingService.updateProposal(updatedProposal);
@@ -1192,12 +1196,13 @@ export function useSecFiling() {
       }
       return;
     }
+    queryClient.setQueryData(queryKeys.secFilingDocumentSpreadsheet(mainDoc.id), sheet);
     const updated = secFilingService.updateAttachedSpreadsheet(sheet, mainDoc.id, shiftedBlocks);
     setMainDoc({ ...updated });
     if (shiftedBlocks && Array.isArray(shiftedBlocks)) {
       setWorkingBlocks(shiftedBlocks);
     }
-  }, [activeProposal, mainDoc.id, queryClient, setWorkingBlocks]);
+  }, [activeProposal, mainDoc.id, mainDoc.attachedSpreadsheet, queryClient, setWorkingBlocks]);
 
   const handleUpdateSpreadsheetCell = useCallback((cellRef: string, newValue: any, updatedSheet?: AttachedSpreadsheet) => {
     if (activeProposal) {
