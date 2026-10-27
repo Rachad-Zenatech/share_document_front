@@ -62,7 +62,6 @@ import {
   deleteRowAtIndex,
   insertColAtIndex,
   deleteColAtIndex,
-  updateTabHeader,
   duplicateTab,
   pasteDataIntoGrid,
   shiftCellsRight,
@@ -97,6 +96,12 @@ export interface AttachedSpreadsheetModalProps {
   initialCellRef?: string;
   initialTabName?: string;
 }
+
+/** Excel look for the grid: light gridlines, grey headers, green selection. */
+const EXCEL_FONT = 'Calibri, "Segoe UI", Arial, sans-serif';
+const EXCEL_GRID_BORDER = 'border-[#e1e1e1] dark:border-zinc-800';
+const EXCEL_HEADER = 'bg-[#f3f3f3] dark:bg-zinc-800 text-[#444] dark:text-zinc-400 border-[#c6c6c6] dark:border-zinc-700';
+const EXCEL_HEADER_ACTIVE = 'bg-[#d3f0e0] dark:bg-[#1e3a2c] text-[#217346] dark:text-emerald-300 border-[#c6c6c6] dark:border-zinc-700';
 
 interface MemoizedGridCellProps {
   cellRef: string;
@@ -140,23 +145,24 @@ const MemoizedGridCell = React.memo<MemoizedGridCellProps>(
   }) => {
     const isNumeric = !isFormula ? typeof rawVal === 'number' : !isNaN(Number(display));
 
-    let cellVisualClasses = 'bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200 border-slate-200 dark:border-zinc-800';
+    let cellVisualClasses = `bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 ${EXCEL_GRID_BORDER}`;
     if (isSelected) {
-      cellVisualClasses = 'bg-blue-100/90 dark:bg-blue-900/60 ring-2 ring-blue-600 ring-inset font-bold text-blue-950 dark:text-white border-blue-400 z-10';
+      // Excel's selection: green border, cell keeps its normal look.
+      cellVisualClasses = `bg-white dark:bg-zinc-900 text-slate-900 dark:text-white outline-2 outline-[#217346] -outline-offset-2 ${EXCEL_GRID_BORDER} z-10`;
     } else if (formulaHighlight) {
       cellVisualClasses = `${formulaHighlight.bgClass} ${formulaHighlight.ringClass} font-semibold ${formulaHighlight.textClass} ${formulaHighlight.borderClass} z-10`;
     } else if (isSearchHit) {
       cellVisualClasses = 'bg-amber-100 dark:bg-amber-950/60 text-amber-950 font-bold border-amber-400';
     } else if (isLinked) {
-      cellVisualClasses = 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border-slate-200 dark:border-zinc-800';
+      cellVisualClasses = `bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ${EXCEL_GRID_BORDER}`;
     }
 
     return (
       <td
         key={cellRef}
         data-cell-ref={cellRef}
-        className={`w-32 min-w-[128px] max-w-[128px] h-7 px-1.5 border-r border-b text-xs truncate transition-all cursor-cell relative ${cellVisualClasses} ${
-          isNumeric && !isInlineEditing ? 'text-right font-mono' : 'text-left'
+        className={`w-32 min-w-[128px] max-w-[128px] h-7 px-2 border-r border-b text-[13px] truncate cursor-cell relative ${cellVisualClasses} ${
+          isNumeric && !isInlineEditing ? 'text-right tabular-nums' : 'text-left'
         }`}
         title={`${currentTabName ? `${currentTabName}!` : ''}${cellRef}${isFormula ? ` [Formula: ${rawVal}]` : ''}: ${display || '(empty)'}${
           isLinked ? ' (Linked in document)' : ''
@@ -171,7 +177,7 @@ const MemoizedGridCell = React.memo<MemoizedGridCellProps>(
             onChange={(e) => onInlineChange(e.target.value)}
             onKeyDown={(e) => onInlineKeyDown(e, cellRef)}
             onBlur={() => onInlineBlur(cellRef)}
-            className="w-full h-6 px-1 text-xs font-mono bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 outline-none ring-2 ring-blue-600 rounded-xs shadow-inner"
+            className="w-full h-6 px-1 text-[13px] bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 outline-none"
           />
         ) : (
           <>
@@ -200,7 +206,7 @@ const MemoizedGridCell = React.memo<MemoizedGridCellProps>(
                   e.stopPropagation();
                   onFillHandleDoubleClick?.();
                 }}
-                className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-blue-600 border border-white dark:border-zinc-900 cursor-crosshair z-20 hover:scale-125 transition-transform"
+                className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-[#217346] border border-white dark:border-zinc-900 cursor-crosshair z-20 hover:scale-125 transition-transform"
                 title="Double-click fill handle to autofill down with formula adjustment"
               />
             )}
@@ -258,7 +264,6 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const isMultiTab = tabs.length > 1;
 
   const currentCells = useMemo(() => currentTab?.cells || {}, [currentTab?.cells]);
-  const currentHeaders = currentTab?.headers || [];
 
   const [selectedCellRef, setSelectedCellRef] = useState<string>('A1');
   const [editingValue, setEditingValue] = useState<string>('');
@@ -288,10 +293,6 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     formulaCacheRef.current.clear();
     cellDisplayCacheRef.current.clear();
   }, [currentCells, activeTabId]);
-
-  // Column header editing state
-  const [editingColIdx, setEditingColIdx] = useState<number | null>(null);
-  const [editingColHeader, setEditingColHeader] = useState<string>('');
 
   // Workbook filename editing state
   const [isEditingWorkbookName, setIsEditingWorkbookName] = useState<boolean>(false);
@@ -425,7 +426,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   const redoHandlerRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     const handleSpreadsheetShortcuts = (e: KeyboardEvent) => {
-      if (editingColIdx !== null || isEditingWorkbookName || editingTabId !== null) return;
+      if (isEditingWorkbookName || editingTabId !== null) return;
       if (e.key === 'Enter') {
         if (isFormulaEditing || inlineEditingCellRef) {
           e.preventDefault();
@@ -458,7 +459,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     };
     window.addEventListener('keydown', handleSpreadsheetShortcuts);
     return () => window.removeEventListener('keydown', handleSpreadsheetShortcuts);
-  }, [inlineEditingCellRef, editingColIdx, isFormulaEditing, isEditingWorkbookName, editingTabId]);
+  }, [inlineEditingCellRef, isFormulaEditing, isEditingWorkbookName, editingTabId]);
 
   // Measure container height and width dynamically on resize
   useEffect(() => {
@@ -1355,21 +1356,6 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     setIsDeleteDialogOpen(false);
   };
 
-  // Column Header Rename
-  const handleStartRenameHeader = (colIdx: number, currentTitle: string) => {
-    setEditingColIdx(colIdx);
-    setEditingColHeader(currentTitle);
-  };
-
-  const handleFinishRenameHeader = () => {
-    if (editingColIdx !== null && editingColHeader.trim()) {
-      const next = updateTabHeader(spreadsheet, editingColIdx + 1, editingColHeader.trim());
-      onUpdateSpreadsheet(next);
-      toast.success(`Renamed header for Column ${colToLetter(editingColIdx + 1)} to "${editingColHeader.trim()}"`);
-    }
-    setEditingColIdx(null);
-  };
-
   // Tab Duplicate
   const handleDuplicateTab = (tabId: string) => {
     const next = duplicateTab(spreadsheet, tabId);
@@ -1379,7 +1365,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
   // Keyboard navigation & quick edit on grid
   const handleGridKeyDown = (e: React.KeyboardEvent) => {
-    if (isEditingWorkbookName || editingTabId !== null || editingColIdx !== null) return;
+    if (isEditingWorkbookName || editingTabId !== null) return;
 
     if (e.key === 'Enter') {
       if (isFormulaEditing || inlineEditingCellRef) {
@@ -2658,15 +2644,20 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                 onKeyDown={handleGridKeyDown}
                 onPaste={handleGridPaste}
                 onScroll={handleContainerScroll}
-                className="flex-1 min-h-0 overflow-auto bg-slate-50 dark:bg-zinc-950 font-sans select-none focus:outline-none focus:ring-1 focus:ring-blue-500/20"
+                className="flex-1 min-h-0 overflow-auto bg-white dark:bg-zinc-950 select-none focus:outline-none"
+                style={{ fontFamily: EXCEL_FONT }}
               >
-                <table className="border-separate border-spacing-0 text-xs table-fixed w-max">
+                <table className="border-separate border-spacing-0 text-[13px] table-fixed w-max">
                   {/* Sticky Top Header: Column Letters & Headers */}
-                  <thead className="sticky top-0 z-30 bg-slate-100 dark:bg-zinc-900 shadow-xs">
+                  <thead className="sticky top-0 z-30 bg-[#f3f3f3] dark:bg-zinc-900">
                     {/* Row 1: Column Letters */}
                     <tr>
-                      <th className="sticky left-0 z-40 w-14 min-w-[56px] max-w-[56px] h-7 bg-slate-200 dark:bg-zinc-800 border-r border-b border-slate-300 dark:border-zinc-700 text-center font-mono font-bold text-[11px] text-slate-500">
-                        #
+                      {/* Excel's select-all corner */}
+                      <th className={`sticky left-0 z-40 w-14 min-w-[56px] max-w-[56px] h-7 border-r border-b relative ${EXCEL_HEADER}`}>
+                        <span
+                          className="absolute right-1 bottom-1 w-0 h-0 border-l-[9px] border-l-transparent border-b-[9px] border-b-[#b4b4b4]"
+                          aria-hidden="true"
+                        />
                       </th>
                       {leftSpacerWidth > 0 && (
                         <th
@@ -2700,10 +2691,10 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                                 colIndex: parsed?.colIndex || 1
                               });
                             }}
-                            className={`w-32 min-w-[128px] max-w-[128px] h-7 px-2 border-r border-b border-slate-300 dark:border-zinc-700 text-center font-mono font-bold text-[11px] cursor-pointer transition-colors ${
+                            className={`w-32 min-w-[128px] max-w-[128px] h-7 px-2 border-r border-b text-center font-normal text-[13px] cursor-pointer transition-colors ${
                               isColActive
-                                ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200'
-                                : 'text-slate-700 dark:text-zinc-300 bg-slate-100 dark:bg-zinc-900 hover:bg-slate-200 dark:hover:bg-zinc-800'
+                                ? `${EXCEL_HEADER_ACTIVE} border-b-2 border-b-[#217346]`
+                                : `${EXCEL_HEADER} hover:bg-[#e6e6e6] dark:hover:bg-zinc-700`
                             }`}
                             title={`Column ${col}. Click to select column.`}
                           >
@@ -2720,72 +2711,6 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                       )}
                     </tr>
 
-                    {/* Row 2: Header Labels */}
-                    {currentHeaders.length > 0 && (
-                      <tr className="bg-slate-50 dark:bg-zinc-900/80">
-                        <th className="sticky left-0 z-40 w-14 min-w-[56px] max-w-[56px] h-6 bg-slate-200/90 dark:bg-zinc-800/90 border-r border-b border-slate-300 dark:border-zinc-700 text-center font-mono text-[9px] text-slate-400">
-                          Hdr
-                        </th>
-                        {leftSpacerWidth > 0 && (
-                          <th
-                            style={{ width: `${leftSpacerWidth}px`, minWidth: `${leftSpacerWidth}px` }}
-                            className="p-0 border-b border-slate-300 dark:border-zinc-700 pointer-events-none"
-                            aria-hidden="true"
-                          />
-                        )}
-                        {visibleColLetters.map((col, idx) => {
-                          const colIdx = startColIndex + idx;
-                          const headerTitle = currentHeaders[colIdx] || `Column ${col}`;
-                          const isEditingThisHeader = editingColIdx === colIdx;
-
-                          return (
-                            <th
-                              key={`hdr-${col}`}
-                              onDoubleClick={() => handleStartRenameHeader(colIdx, headerTitle)}
-                              className="group w-32 min-w-[128px] max-w-[128px] h-6 px-1.5 border-r border-b border-slate-300 dark:border-zinc-700 text-left font-normal text-[10px] text-slate-500 dark:text-zinc-400 truncate relative cursor-pointer hover:bg-slate-100 dark:hover:bg-zinc-800"
-                              title={`Header for Column ${col}. Double-click to rename.`}
-                            >
-                              {isEditingThisHeader ? (
-                                <input
-                                  autoFocus
-                                  type="text"
-                                  value={editingColHeader}
-                                  onChange={(e) => setEditingColHeader(e.target.value)}
-                                  onBlur={handleFinishRenameHeader}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleFinishRenameHeader();
-                                    if (e.key === 'Escape') setEditingColIdx(null);
-                                  }}
-                                  className="w-full h-5 px-1 text-[10px] bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 border border-blue-500 rounded outline-none"
-                                />
-                              ) : (
-                                <div className="flex items-center justify-between gap-1">
-                                  <span className="truncate">{headerTitle}</span>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleStartRenameHeader(colIdx, headerTitle);
-                                    }}
-                                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-blue-600 rounded text-slate-400 cursor-pointer"
-                                    title="Rename column header"
-                                  >
-                                    <Edit2 className="w-2.5 h-2.5" />
-                                  </button>
-                                </div>
-                              )}
-                            </th>
-                          );
-                        })}
-                        {rightSpacerWidth > 0 && (
-                          <th
-                            style={{ width: `${rightSpacerWidth}px`, minWidth: `${rightSpacerWidth}px` }}
-                            className="p-0 border-b border-slate-300 dark:border-zinc-700 pointer-events-none"
-                            aria-hidden="true"
-                          />
-                        )}
-                      </tr>
-                    )}
                   </thead>
 
                   {/* Body: Virtualized Data Cells with Event Delegation */}
@@ -2850,7 +2775,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                     {visibleRows.map((row) => (
                       <tr
                         key={row}
-                        className="h-7 hover:bg-blue-50/30 dark:hover:bg-blue-950/20"
+                        className="h-7"
                         style={{ height: `${ROW_HEIGHT}px` }}
                       >
                         {/* Sticky Left: Row Number Header with Click and Right-Click Support */}
@@ -2875,10 +2800,10 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                               colIndex: parsed?.colIndex || 1
                             });
                           }}
-                          className={`sticky left-0 z-20 w-14 min-w-[56px] max-w-[56px] h-7 border-r border-b border-slate-300 dark:border-zinc-800 text-center font-mono font-semibold text-[11px] cursor-pointer transition-colors ${
+                          className={`sticky left-0 z-20 w-14 min-w-[56px] max-w-[56px] h-7 border-r border-b text-center font-normal text-[12px] cursor-pointer transition-colors ${
                             selectedRow === row
-                              ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200'
-                              : 'bg-slate-100 dark:bg-zinc-900 text-slate-500 hover:bg-slate-200 dark:hover:bg-zinc-800'
+                              ? `${EXCEL_HEADER_ACTIVE} border-r-2 border-r-[#217346]`
+                              : `${EXCEL_HEADER} hover:bg-[#e6e6e6] dark:hover:bg-zinc-700`
                           }`}
                           title={`Row ${row}. Click to select row.`}
                         >
@@ -2889,7 +2814,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                         {leftSpacerWidth > 0 && (
                           <td
                             style={{ width: `${leftSpacerWidth}px`, minWidth: `${leftSpacerWidth}px` }}
-                            className="p-0 border-b border-slate-200 dark:border-zinc-800 pointer-events-none"
+                            className="p-0 border-b border-[#e1e1e1] dark:border-zinc-800 pointer-events-none"
                             aria-hidden="true"
                           />
                         )}
@@ -2936,7 +2861,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
                         {rightSpacerWidth > 0 && (
                           <td
                             style={{ width: `${rightSpacerWidth}px`, minWidth: `${rightSpacerWidth}px` }}
-                            className="p-0 border-b border-slate-200 dark:border-zinc-800 pointer-events-none"
+                            className="p-0 border-b border-[#e1e1e1] dark:border-zinc-800 pointer-events-none"
                             aria-hidden="true"
                           />
                         )}

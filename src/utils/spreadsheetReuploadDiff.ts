@@ -6,8 +6,11 @@ import type {
   WorkbookReuploadDiff
 } from '../types/spreadsheet';
 import {
+  colToLetter,
   parseCellRef,
   ensureSpreadsheetTabs,
+  evaluateSpreadsheetFormula,
+  letterToCol,
   shiftBlocksCellReferences,
   type CellShiftOperation
 } from './documentVariables';
@@ -193,23 +196,93 @@ function alignSequences(
   return slots;
 }
 
-/** Status of one cell at a matched row × matched column intersection. */
-export function getReuploadCellStatus(before: unknown, after: unknown): ReuploadCellStatus {
-  const a = normalize(before);
-  const b = normalize(after);
-  if (a === b) return 'unchanged';
-  if (a === '') return 'added';
-  if (b === '') return 'deleted';
-  return 'modified';
+const isFormula = (v: unknown): v is string => typeof v === 'string' && v.startsWith('=') && v.length > 1;
+
+/** A tab's cells as displayed: formulas replaced by their computed values. */
+function resolveTabValues(workbook: AttachedSpreadsheet, tab: SpreadsheetTab | null): Cells {
+  if (!tab) return {};
+  const cache = new Map<string, string | number>();
+  const values: Cells = {};
+  for (const [ref, raw] of Object.entries(tab.cells || {})) {
+    values[ref] = isFormula(raw) ? evaluateSpreadsheetFormula(raw, workbook, tab.name, 0, cache) : raw;
+  }
+  return values;
+}
+
+/**
+ * A formula with its relative references written as offsets from its own cell (R1C1
+ * style), so the same formula moved by an inserted row/column compares as unchanged.
+ * Constants return null.
+ */
+function relativeFormula(raw: unknown, row: number, col: number): string | null {
+  if (!isFormula(raw)) return null;
+  return raw
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/(?<![A-Z0-9_.$])(\$?)([A-Z]{1,3})(\$?)(\d+)(?![A-Z0-9_(])/g, (_m, colAbs, letters, rowAbs, digits) => {
+      const c = letterToCol(letters);
+      const r = parseInt(digits, 10);
+      const rPart = rowAbs ? `R${r}` : `R[${r - row}]`;
+      const cPart = colAbs ? `C${c}` : `C[${c - col}]`;
+      return `${rPart}${cPart}`;
+    });
+}
+
+export interface ReuploadCellChange {
+  status: ReuploadCellStatus;
+  before: unknown;
+  after: unknown;
+  /** Raw formulas ("=F9+B9"), when the cell holds one. */
+  beforeFormula?: string;
+  afterFormula?: string;
+  /** The formula was edited, added or removed (whether or not the value changed too). */
+  formulaChanged: boolean;
+}
+
+/** Compares one cell at a matched row × matched column intersection (values, then formulas). */
+export function getReuploadCellChange(
+  tab: ReuploadTabDiff,
+  baseRow: number,
+  baseCol: number,
+  nextRow: number,
+  nextCol: number
+): ReuploadCellChange {
+  const baseRef = colToLetter(baseCol) + baseRow;
+  const nextRef = colToLetter(nextCol) + nextRow;
+  const rawBefore = tab.baseTab?.cells?.[baseRef];
+  const rawAfter = tab.nextTab?.cells?.[nextRef];
+  const change: ReuploadCellChange = {
+    status: 'unchanged',
+    before: tab.baseValues[baseRef],
+    after: tab.nextValues[nextRef],
+    beforeFormula: isFormula(rawBefore) ? rawBefore : undefined,
+    afterFormula: isFormula(rawAfter) ? rawAfter : undefined,
+    formulaChanged: relativeFormula(rawBefore, baseRow, baseCol) !== relativeFormula(rawAfter, nextRow, nextCol)
+  };
+  const a = normalize(change.before);
+  const b = normalize(change.after);
+  if (a !== b) {
+    change.status = a === '' ? 'added' : b === '' ? 'deleted' : 'modified';
+  } else if (change.formulaChanged) {
+    change.status = 'formula';
+  }
+  return change;
 }
 
 const findTabByName = (tabs: SpreadsheetTab[], name: string) =>
   tabs.find((t) => t.name.trim().toLowerCase() === name.trim().toLowerCase());
 
-function diffTab(baseTab: SpreadsheetTab | null, nextTab: SpreadsheetTab | null): ReuploadTabDiff {
+function diffTab(
+  baseTab: SpreadsheetTab | null,
+  nextTab: SpreadsheetTab | null,
+  baseWorkbook: AttachedSpreadsheet,
+  nextWorkbook: AttachedSpreadsheet
+): ReuploadTabDiff {
   const name = (nextTab || baseTab)!.name;
-  const baseCells = baseTab?.cells || {};
-  const nextCells = nextTab?.cells || {};
+  // Rows and columns are aligned on what the sheet shows, not on formula text, which
+  // Excel rewrites for every cell below an inserted row.
+  const baseCells = resolveTabValues(baseWorkbook, baseTab);
+  const nextCells = resolveTabValues(nextWorkbook, nextTab);
   const baseExt = getUsedExtent(baseCells);
   const nextExt = getUsedExtent(nextCells);
   const status: ReuploadTabDiff['status'] = !baseTab ? 'added' : !nextTab ? 'deleted' : 'matched';
@@ -220,8 +293,30 @@ function diffTab(baseTab: SpreadsheetTab | null, nextTab: SpreadsheetTab | null)
   const baseColCache = Array.from({ length: baseExt.cols }, (_, c) => baseGrid.map((row) => row[c]));
   const nextColCache = Array.from({ length: nextExt.cols }, (_, c) => nextGrid.map((row) => row[c]));
 
+  // Comparing columns as bags of values breaks when a column has few values and one is
+  // edited (e.g. a single formula cell): it then looks like a different column. So also
+  // compare them row by row along a first-pass row alignment (columns taken by position).
+  const commonCols = Math.min(baseExt.cols, nextExt.cols);
+  const provisionalRows = alignSequences(baseExt.rows, nextExt.rows, (i, j) =>
+    lineSimilarity(baseGrid[i].slice(0, commonCols), nextGrid[j].slice(0, commonCols))
+  ).filter((s) => s.status === 'matched');
+  const pairedColumnSimilarity = (i: number, j: number): number => {
+    const a = provisionalRows.map((s) => baseColCache[i][s.baseIndex! - 1]);
+    const b = provisionalRows.map((s) => nextColCache[j][s.nextIndex! - 1]);
+    let filledEither = 0;
+    let filledBoth = 0;
+    for (let k = 0; k < a.length; k++) {
+      if (a[k] !== '' || b[k] !== '') filledEither++;
+      if (a[k] !== '' && b[k] !== '') filledBoth++;
+    }
+    // Same rows filled in: the same column with edited values. Exactly at the threshold,
+    // so a column whose values actually match always wins.
+    const sameShape = filledEither > 0 && filledBoth / filledEither >= 0.8 ? MATCH_THRESHOLD : 0;
+    return Math.max(lineSimilarity(a, b), sameShape);
+  };
+
   const cols = alignSequences(baseExt.cols, nextExt.cols, (i, j) =>
-    columnSimilarity(baseColCache[i], nextColCache[j])
+    Math.max(columnSimilarity(baseColCache[i], nextColCache[j]), pairedColumnSimilarity(i, j))
   );
 
   // Compare rows only across matched columns so inserted/deleted columns do not affect row matching.
@@ -232,45 +327,47 @@ function diffTab(baseTab: SpreadsheetTab | null, nextTab: SpreadsheetTab | null)
     lineSimilarity(baseRowVals[i], nextRowVals[j])
   );
 
-  let addedCells = 0;
-  let deletedCells = 0;
-  let modifiedCells = 0;
-  for (const r of rows) {
-    if (r.status !== 'matched') continue;
-    for (const c of pairedCols) {
-      const cellStatus = getReuploadCellStatus(
-        baseGrid[r.baseIndex! - 1][c.baseIndex! - 1],
-        nextGrid[r.nextIndex! - 1][c.nextIndex! - 1]
-      );
-      if (cellStatus === 'added') addedCells++;
-      else if (cellStatus === 'deleted') deletedCells++;
-      else if (cellStatus === 'modified') modifiedCells++;
-    }
-  }
-
   const addedRows = rows.filter((s) => s.status === 'added').length;
   const deletedRows = rows.filter((s) => s.status === 'deleted').length;
   const addedCols = cols.filter((s) => s.status === 'added').length;
   const deletedCols = cols.filter((s) => s.status === 'deleted').length;
 
-  return {
+  const result: ReuploadTabDiff = {
     name,
     status,
     baseTab,
     nextTab,
+    baseValues: baseCells,
+    nextValues: nextCells,
     rows,
     cols,
     addedRows,
     deletedRows,
     addedCols,
     deletedCols,
-    addedCells,
-    deletedCells,
-    modifiedCells,
-    hasChanges:
-      status !== 'matched' ||
-      addedRows + deletedRows + addedCols + deletedCols + addedCells + deletedCells + modifiedCells > 0
+    addedCells: 0,
+    deletedCells: 0,
+    modifiedCells: 0,
+    formulaCells: 0,
+    hasChanges: false
   };
+
+  for (const r of rows) {
+    if (r.status !== 'matched') continue;
+    for (const c of pairedCols) {
+      const change = getReuploadCellChange(result, r.baseIndex!, c.baseIndex!, r.nextIndex!, c.nextIndex!);
+      if (change.status === 'added') result.addedCells++;
+      else if (change.status === 'deleted') result.deletedCells++;
+      else if (change.status === 'modified') result.modifiedCells++;
+      if (change.formulaChanged) result.formulaCells++;
+    }
+  }
+
+  result.hasChanges =
+    status !== 'matched' ||
+    addedRows + deletedRows + addedCols + deletedCols +
+      result.addedCells + result.deletedCells + result.modifiedCells + result.formulaCells > 0;
+  return result;
 }
 
 /**
@@ -281,15 +378,17 @@ export function computeWorkbookReuploadDiff(
   current: AttachedSpreadsheet,
   uploaded: AttachedSpreadsheet
 ): WorkbookReuploadDiff {
-  const baseTabs = ensureSpreadsheetTabs(current).tabs || [];
-  const nextTabs = ensureSpreadsheetTabs(uploaded).tabs || [];
+  const baseWorkbook = ensureSpreadsheetTabs(current);
+  const nextWorkbook = ensureSpreadsheetTabs(uploaded);
+  const baseTabs = baseWorkbook.tabs || [];
+  const nextTabs = nextWorkbook.tabs || [];
 
   const tabs: ReuploadTabDiff[] = [];
   for (const nextTab of nextTabs) {
-    tabs.push(diffTab(findTabByName(baseTabs, nextTab.name) || null, nextTab));
+    tabs.push(diffTab(findTabByName(baseTabs, nextTab.name) || null, nextTab, baseWorkbook, nextWorkbook));
   }
   for (const baseTab of baseTabs) {
-    if (!findTabByName(nextTabs, baseTab.name)) tabs.push(diffTab(baseTab, null));
+    if (!findTabByName(nextTabs, baseTab.name)) tabs.push(diffTab(baseTab, null, baseWorkbook, nextWorkbook));
   }
 
   return { tabs, hasChanges: tabs.some((t) => t.hasChanges) };

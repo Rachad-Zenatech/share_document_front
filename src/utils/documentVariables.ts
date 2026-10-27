@@ -941,6 +941,61 @@ export function updateActiveTabCells(
 /**
  * Parses an uploaded .xlsx file with MULTIPLE worksheets into an AttachedSpreadsheet with tabs.
  */
+const isFormulaError = (v: unknown): boolean => typeof v === 'string' && v.startsWith('#');
+
+/**
+ * Whether the app's evaluator reproduces the value Excel cached for a formula. Inputs are
+ * stored rounded to cents, so long sums can drift by a little; anything the evaluator
+ * does not understand comes back as an error string instead.
+ */
+function matchesCachedResult(evaluated: string | number, cached: string | number | boolean): boolean {
+  // Excel shows an error too: keep the formula so edits to it still show up.
+  if (isFormulaError(cached)) return isFormulaError(evaluated);
+  if (isFormulaError(evaluated)) return false;
+  if (typeof cached === 'number') {
+    const n = typeof evaluated === 'number' ? evaluated : Number(evaluated);
+    return Number.isFinite(n) && Math.abs(n - cached) <= Math.max(1, Math.abs(cached) * 1e-6);
+  }
+  return String(evaluated).trim() === String(cached).trim();
+}
+
+/**
+ * Puts the Excel formulas back into parsed cells, so the workbook keeps its math (and
+ * formula edits show up in a re-upload). A formula is kept only where the app computes
+ * the same value Excel cached; otherwise the cell keeps Excel's number, so nothing
+ * displays as an error.
+ */
+function restoreParsedFormulas(
+  tabs: SpreadsheetTab[],
+  candidates: Array<Array<{ ref: string; formula: string; cached: string | number | boolean | null }>>
+): void {
+  const workbook = { tabs, cells: tabs[0]?.cells || {} } as AttachedSpreadsheet;
+  tabs.forEach((tab, i) => {
+    const cache = new Map<string, string | number>();
+    for (const { ref, formula, cached } of candidates[i] || []) {
+      const evaluated = evaluateSpreadsheetFormula(formula, workbook, tab.name, 0, cache);
+      const keep = cached === null ? !isFormulaError(evaluated) : matchesCachedResult(evaluated, cached);
+      if (keep) tab.cells[ref] = formula;
+    }
+  });
+}
+
+/** The Excel cell value for a stored cell: formulas are written as formulas with their computed result. */
+function toExcelCellValue(
+  val: string | number | boolean,
+  workbook: AttachedSpreadsheet,
+  tabName: string | undefined,
+  cache: Map<string, string | number>
+): ExcelJS.CellValue {
+  if (typeof val === 'string' && val.startsWith('=') && val.length > 1) {
+    const result = evaluateSpreadsheetFormula(val, workbook, tabName, 0, cache);
+    return isFormulaError(result)
+      ? ({ formula: val.slice(1) } as ExcelJS.CellFormulaValue)
+      : ({ formula: val.slice(1), result } as ExcelJS.CellFormulaValue);
+  }
+  return val;
+}
+
 export async function parseExcelFileToSpreadsheet(file: File): Promise<AttachedSpreadsheet> {
   const buffer = await file.arrayBuffer();
   const wb = new ExcelJS.Workbook();
@@ -951,9 +1006,13 @@ export async function parseExcelFileToSpreadsheet(file: File): Promise<AttachedS
   }
 
   const tabs: SpreadsheetTab[] = [];
+  // Per tab: formula cells with the value Excel cached for them (null when not cached).
+  const formulaCandidates: Array<Array<{ ref: string; formula: string; cached: string | number | boolean | null }>> = [];
 
   for (let i = 0; i < wb.worksheets.length; i++) {
     const ws = wb.worksheets[i];
+    const candidates: (typeof formulaCandidates)[number] = [];
+    formulaCandidates.push(candidates);
     const maxRows = Math.min(Math.max(30, ws.rowCount || 30), 800);
     const maxCols = Math.min(Math.max(10, ws.columnCount || 10), 100);
 
@@ -976,7 +1035,8 @@ export async function parseExcelFileToSpreadsheet(file: File): Promise<AttachedS
         const cell = row.getCell(c);
         let val: any = null;
         if (cell.result !== undefined && cell.result !== null) {
-          val = cell.result;
+          // An error result (e.g. #VALUE!) comes as { error: '#VALUE!' }.
+          val = typeof cell.result === 'object' && 'error' in cell.result ? cell.result.error : cell.result;
         } else if (cell.value !== null && cell.value !== undefined) {
           if (typeof cell.value === 'object') {
             if (cell.value instanceof Date) {
@@ -1001,8 +1061,21 @@ export async function parseExcelFileToSpreadsheet(file: File): Promise<AttachedS
           else val = Math.round(val * 100) / 100;
         }
 
+        const cellRef = colToLetter(c) + r;
+        let formula: string | null = null;
+        try {
+          // Includes shared formulas, translated to this cell.
+          const f = cell.formula;
+          if (typeof f === 'string' && f.trim()) formula = `=${f.trim()}`;
+        } catch {
+          // not a formula cell
+        }
+        if (formula) {
+          const hasCachedResult = cell.result !== undefined && cell.result !== null;
+          candidates.push({ ref: cellRef, formula, cached: hasCachedResult && val !== '' ? val : null });
+        }
+
         if (val !== null && val !== '') {
-          const cellRef = colToLetter(c) + r;
           cells[cellRef] = val;
         }
       }
@@ -1019,6 +1092,8 @@ export async function parseExcelFileToSpreadsheet(file: File): Promise<AttachedS
       cells
     });
   }
+
+  restoreParsedFormulas(tabs, formulaCandidates);
 
   // Find preferred default active tab (e.g. TB or first)
   let activeIdx = tabs.findIndex((t) => t.name.toLowerCase().includes('tb'));
@@ -1049,28 +1124,33 @@ export async function exportSpreadsheetToExcel(sheet: AttachedSpreadsheet): Prom
   const withTabs = ensureSpreadsheetTabs(sheet);
   const tabs = withTabs.tabs || [];
 
+  // Excel shows the cached results right away and recalculates the formulas on open.
+  wb.calcProperties.fullCalcOnLoad = true;
+
   if (tabs.length === 0) {
     const ws = wb.addWorksheet(sheet.sheetName || 'Sheet1');
+    const cache = new Map<string, string | number>();
     for (let r = 1; r <= (sheet.rowCount || 30); r++) {
       const row = ws.getRow(r);
       for (let c = 1; c <= (sheet.colCount || 10); c++) {
         const cellRef = colToLetter(c) + r;
         const val = sheet.cells[cellRef];
         if (val !== undefined && val !== null) {
-          row.getCell(c).value = val as any;
+          row.getCell(c).value = toExcelCellValue(val, withTabs, sheet.sheetName, cache);
         }
       }
     }
   } else {
     for (const tab of tabs) {
       const ws = wb.addWorksheet(tab.name || 'Sheet');
+      const cache = new Map<string, string | number>();
       for (let r = 1; r <= tab.rowCount; r++) {
         const row = ws.getRow(r);
         for (let c = 1; c <= tab.colCount; c++) {
           const cellRef = colToLetter(c) + r;
           const val = tab.cells[cellRef];
           if (val !== undefined && val !== null) {
-            row.getCell(c).value = val as any;
+            row.getCell(c).value = toExcelCellValue(val, withTabs, tab.name, cache);
           }
         }
       }

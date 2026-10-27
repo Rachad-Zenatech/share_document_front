@@ -75,6 +75,7 @@ export const SubmitProposalModal: React.FC<SubmitProposalModalProps> = ({
       addedCols: sum((t) => t.addedCols),
       deletedCols: sum((t) => t.deletedCols),
       changedCells: sum((t) => t.addedCells + t.deletedCells + t.modifiedCells),
+      formulaCells: sum((t) => t.formulaCells),
       tabChanges: workbookVsMain.tabs.filter((t) => t.status !== 'matched').length
     };
   }, [workbookVsMain]);
@@ -276,6 +277,11 @@ export const SubmitProposalModal: React.FC<SubmitProposalModalProps> = ({
                   {workbookTotals.changedCells > 0 && (
                     <Badge className="bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-0 font-mono">
                       {workbookTotals.changedCells} cells changed
+                    </Badge>
+                  )}
+                  {workbookTotals.formulaCells > 0 && (
+                    <Badge className="bg-violet-100 dark:bg-violet-950 text-violet-800 dark:text-violet-300 border-0 font-mono">
+                      {workbookTotals.formulaCells} formulas changed
                     </Badge>
                   )}
                   {workbookTotals.tabChanges > 0 && (
