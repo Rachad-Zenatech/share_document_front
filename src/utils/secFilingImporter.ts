@@ -8,6 +8,7 @@ import type {
 } from '../types/secFiling';
 import { sanitizeAndCompactBlocks } from '../services/secFilingService';
 import { ZENATECH_LOGO_DATA_URL } from '../data/zenatechLogoAsset';
+import { apiClient } from '../services/apiClient';
 
 export interface ImportDocOptions {
   file: File;
@@ -20,6 +21,23 @@ export interface ImportDocOptions {
   primaryCompany?: string;
   includeLogo?: boolean;
   defaultSection?: string;
+  /** PDF imports run on the server for a while; called as pages are converted. */
+  onProgress?: (progress: PdfImportProgress) => void;
+}
+
+export interface PdfImportProgress {
+  stage?: string;
+  donePages?: number;
+  totalPages?: number;
+}
+
+/** How a PDF was converted, and what to double-check. */
+export interface PdfImportReport {
+  pageCount: number;
+  ocrUsed: boolean;
+  aiUsed: boolean;
+  aiConfigured: boolean;
+  warnings: string[];
 }
 
 export interface ParsedDocumentResult {
@@ -34,6 +52,7 @@ export interface ParsedDocumentResult {
     images: number;
     totalBlocks: number;
   };
+  pdfReport?: PdfImportReport;
 }
 
 /**
@@ -807,6 +826,121 @@ function buildFinalResult(blocks: SecBlock[], file: File, options: Partial<Impor
  * Unified entry point that automatically detects file type (.docx, .md, .html, .xlsx, .json, .csv, .txt)
  * and returns parsed SecBlocks and SecFilingDocument.
  */
+/** A block as the server's PDF converter returns it. */
+interface ServerPdfBlock {
+  type: 'heading' | 'paragraph' | 'table';
+  level?: number;
+  text?: string;
+  bold?: boolean;
+  italic?: boolean;
+  alignment?: 'left' | 'center' | 'right' | 'justify';
+  title?: string;
+  headers?: string[];
+  rows?: Array<{ type?: SecTableRow['type']; cells?: string[]; indent?: number }>;
+}
+
+interface PdfImportJob {
+  status: 'running' | 'done' | 'error';
+  progress: PdfImportProgress;
+  error: string | null;
+  result: (PdfImportReport & { blocks: ServerPdfBlock[] }) | null;
+}
+
+const PDF_JOB_CHECK_MS = 2000;
+
+// The last converted PDF: changing import options re-maps it instead of converting
+// (and calling Gemini) again.
+let lastPdfConversion: { file: File; result: NonNullable<PdfImportJob['result']> } | null = null;
+
+async function convertPdfOnServer(file: File, options: Partial<ImportDocOptions>): Promise<NonNullable<PdfImportJob['result']>> {
+  if (lastPdfConversion?.file === file) return lastPdfConversion.result;
+
+  const form = new FormData();
+  form.append('file', file);
+  const { jobId } = await apiClient.post<{ jobId: string }>('/api/sec-filings/import/pdf', form, { skipGlobalLoading: true });
+
+  let job: PdfImportJob;
+  for (;;) {
+    await new Promise((r) => setTimeout(r, PDF_JOB_CHECK_MS));
+    job = await apiClient.get<PdfImportJob>(`/api/sec-filings/import/pdf/${encodeURIComponent(jobId)}`, {
+      skipGlobalLoading: true
+    });
+    options.onProgress?.(job.progress || {});
+    if (job.status !== 'running') break;
+  }
+  if (job.status === 'error' || !job.result) {
+    throw new Error(job.error || 'The PDF could not be converted.');
+  }
+  lastPdfConversion = { file, result: job.result };
+  return job.result;
+}
+
+/**
+ * Converts a PDF on the server (text layer, OCR for scans, Gemini AI checked against
+ * the page text) and maps the result to editor blocks.
+ */
+export async function parsePdfFile(file: File, options: Partial<ImportDocOptions> = {}): Promise<ParsedDocumentResult> {
+  const converted = await convertPdfOnServer(file, options);
+
+  const stamp = Date.now();
+  let blockIndex = 0;
+  let currentSection = options.defaultSection || 'General';
+  const blocks: SecBlock[] = [];
+
+  for (const b of converted.blocks) {
+    if (b.type === 'heading' && b.text) {
+      const level = Math.min(4, Math.max(1, b.level || 3)) as 1 | 2 | 3 | 4;
+      // Major headings (PART, ITEM, statement titles) start a section, as with Word imports.
+      if (level <= 2 && b.text.length < 80) currentSection = b.text;
+      blocks.push({
+        id: `blk-pdf-h-${stamp}-${blockIndex++}`,
+        type: 'heading',
+        section: currentSection,
+        level,
+        text: b.text,
+        alignment: b.alignment === 'center' || b.alignment === 'right' ? b.alignment : 'left',
+        bold: true
+      });
+    } else if (b.type === 'paragraph' && b.text) {
+      blocks.push({
+        id: `blk-pdf-p-${stamp}-${blockIndex++}`,
+        type: 'paragraph',
+        section: currentSection,
+        text: b.text,
+        alignment: b.alignment || 'left',
+        ...(b.bold ? { bold: true } : {}),
+        ...(b.italic ? { italic: true } : {})
+      });
+    } else if (b.type === 'table' && b.rows?.length && options.convertTables !== false) {
+      const width = Math.max(b.headers?.length || 0, ...b.rows.map((r) => r.cells?.length || 0), 1);
+      const pad = (cells: string[] = []) => [...cells, ...Array(Math.max(0, width - cells.length)).fill('')].slice(0, width);
+      const rows: SecTableRow[] = b.rows.map((r, i) => {
+        const type = r.type || 'data';
+        return {
+          id: `r-pdf-${stamp}-${blockIndex}-${i}`,
+          type,
+          cells: pad(r.cells),
+          ...(type === 'total' || type === 'subtotal' || type === 'header' || type === 'category_header' ? { bold: true } : {}),
+          ...(r.indent ? { indent: Math.min(3, r.indent) } : {})
+        };
+      });
+      const table: SecFinancialTableBlock = {
+        id: `blk-pdf-tbl-${stamp}-${blockIndex++}`,
+        type: 'financial_table',
+        section: currentSection,
+        title: b.title || undefined,
+        headers: pad(b.headers),
+        columnAlignments: Array.from({ length: width }, (_, i) => (i === 0 ? 'left' : 'right')),
+        rows
+      };
+      blocks.push(table);
+    }
+  }
+
+  const { blocks: _serverBlocks, ...report } = converted;
+  return { ...buildFinalResult(blocks, file, options), pdfReport: report };
+}
+
 export async function parseDocumentFile(file: File, options: Partial<ImportDocOptions> = {}): Promise<SecFilingDocument> {
   const result = await parseDocumentBlocks(file, options);
   return result.doc;
@@ -817,6 +951,10 @@ export async function parseDocumentBlocks(file: File, options: Partial<ImportDoc
 
   if (fileName.endsWith('.docx')) {
     return parseDocxBlocks(file, options);
+  }
+
+  if (fileName.endsWith('.pdf')) {
+    return parsePdfFile(file, options);
   }
 
   if (fileName.endsWith('.md') || fileName.endsWith('.markdown')) {

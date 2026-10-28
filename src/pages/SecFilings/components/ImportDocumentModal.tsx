@@ -24,7 +24,11 @@ import {
   FolderPlus,
   Loader2
 } from 'lucide-react';
-import { parseDocumentBlocks, type ParsedDocumentResult } from '../../../utils/secFilingImporter';
+import {
+  parseDocumentBlocks,
+  type ParsedDocumentResult,
+  type PdfImportProgress
+} from '../../../utils/secFilingImporter';
 import type { SecBlock } from '../../../types/secFiling';
 import { toast } from 'sonner';
 
@@ -57,6 +61,7 @@ export const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({
   const [includeLogo, setIncludeLogo] = useState(false);
   const [targetSection, setTargetSection] = useState(activeSection || currentSections[0] || 'General');
   const [isDragOver, setIsDragOver] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState<PdfImportProgress | null>(null);
 
   const fileInputId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,6 +84,7 @@ export const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({
     setParseError(null);
     setIsParsing(true);
     setParsedResult(null);
+    setPdfProgress(null);
 
     const baseTitle = pickedFile.name
       .replace(/\.[^/.]+$/, '')
@@ -91,6 +97,7 @@ export const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({
         convertTables: tablesOpt,
         includeLogo: logoOpt,
         defaultSection: sec,
+        onProgress: setPdfProgress,
       });
       setParsedResult(res);
       toast.success(
@@ -144,6 +151,7 @@ export const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({
   const getFormatBadge = (name: string) => {
     const ext = name.split('.').pop()?.toLowerCase();
     if (ext === 'docx') return <Badge className="bg-blue-600 text-white font-mono text-[10px]">WORD .DOCX</Badge>;
+    if (ext === 'pdf') return <Badge className="bg-red-600 text-white font-mono text-[10px]">PDF</Badge>;
     if (ext === 'xlsx' || ext === 'xls') return <Badge className="bg-emerald-600 text-white font-mono text-[10px]">EXCEL .XLSX</Badge>;
     if (ext === 'md' || ext === 'markdown') return <Badge className="bg-purple-600 text-white font-mono text-[10px]">MARKDOWN .MD</Badge>;
     if (ext === 'html' || ext === 'htm') return <Badge className="bg-orange-600 text-white font-mono text-[10px]">HTML</Badge>;
@@ -203,7 +211,7 @@ export const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({
                 ref={fileInputRef}
                 type="file"
                 onChange={handleFileChange}
-                accept=".docx,.xlsx,.xls,.md,.markdown,.html,.htm,.txt,.csv,.json"
+                accept=".docx,.pdf,.xlsx,.xls,.md,.markdown,.html,.htm,.txt,.csv,.json"
                 className="hidden"
               />
               <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-3 shadow-2xs">
@@ -213,12 +221,16 @@ export const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({
                 Drop your document here, or <span className="text-blue-600 dark:text-blue-400 underline">browse files</span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-md">
-                Supports Microsoft Word (<strong>.docx</strong>), Excel (<strong>.xlsx</strong>), Markdown (<strong>.md</strong>), HTML (<strong>.html</strong>), CSV, and Text.
+                Supports Microsoft Word (<strong>.docx</strong>), <strong>PDF</strong> (scans are read with OCR and AI), Excel (<strong>.xlsx</strong>), Markdown (<strong>.md</strong>), HTML (<strong>.html</strong>), CSV, and Text.
               </p>
 
               <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-200 dark:border-zinc-800 text-[11px] text-slate-400">
                 <span className="flex items-center gap-1">
                   <FileText className="w-3.5 h-3.5 text-blue-500" /> Word .docx
+                </span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5 text-red-500" /> PDF
                 </span>
                 <span>•</span>
                 <span className="flex items-center gap-1">
@@ -263,9 +275,24 @@ export const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({
 
               {/* Parsing Indicator */}
               {isParsing && (
-                <div className="flex items-center justify-center py-8 gap-2 text-sm text-slate-500">
-                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                  <span>Converting document structure, headings, and tables...</span>
+                <div className="flex flex-col items-center justify-center py-8 gap-2 text-sm text-slate-500">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                    <span>{pdfProgress?.stage || 'Converting document structure, headings, and tables...'}</span>
+                  </div>
+                  {pdfProgress?.totalPages ? (
+                    <div className="w-64 space-y-1">
+                      <div className="h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden">
+                        <div
+                          className="h-full bg-blue-600 transition-all duration-500"
+                          style={{ width: `${Math.round(((pdfProgress.donePages || 0) / pdfProgress.totalPages) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="text-[11px] text-center">
+                        {pdfProgress.donePages || 0} of {pdfProgress.totalPages} pages. Large filings take a few minutes.
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -316,6 +343,40 @@ export const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({
                       </span>
                     </div>
                   </div>
+
+                  {/* PDF conversion report: how it was read, and what to double-check */}
+                  {parsedResult.pdfReport && (
+                    <div
+                      className={`p-3 rounded-lg border text-xs space-y-1.5 ${
+                        parsedResult.pdfReport.warnings.length
+                          ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200'
+                          : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 text-emerald-900 dark:text-emerald-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 flex-wrap font-semibold">
+                        <span>{parsedResult.pdfReport.pageCount} pages</span>
+                        <span>•</span>
+                        <span>{parsedResult.pdfReport.ocrUsed ? 'Scanned PDF, read with OCR' : 'Digital PDF text'}</span>
+                        <span>•</span>
+                        <span>
+                          {parsedResult.pdfReport.aiUsed
+                            ? 'Converted with Gemini AI, checked against the page text'
+                            : parsedResult.pdfReport.aiConfigured
+                              ? 'Converted from the PDF layout (AI result failed the check)'
+                              : 'Converted from the PDF layout (Gemini AI not configured)'}
+                        </span>
+                      </div>
+                      {parsedResult.pdfReport.warnings.length > 0 ? (
+                        <ul className="list-disc pl-4 space-y-0.5 max-h-28 overflow-auto font-normal">
+                          {parsedResult.pdfReport.warnings.map((w) => (
+                            <li key={w}>{w}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="font-normal">Every page passed the check: all words and figures were kept.</div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Conversion Fine-Tuning */}
                   <div className="flex flex-wrap items-center gap-4 py-2 px-3 bg-slate-50 dark:bg-zinc-900/60 rounded-lg border border-slate-200 dark:border-zinc-800 text-xs">
