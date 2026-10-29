@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { CloudOff, Loader2, RotateCcw } from 'lucide-react';
-import { Button } from './ui/button';
-import { hydrateSecFilingData, isSecFilingDataHydrated } from '../services/secFiling/secFilingSync';
-import { getGuestInviteToken } from '../services/guestInvite';
+import { Button } from '../ui/button';
+import { hydrateSecFilingData, isSecFilingDataHydrated } from '../../services/secFiling/secFilingSync';
+import { getGuestInviteToken } from '../../services/guestInvite';
 
 /**
  * Renders the SEC filing pages only after their documents, proposals and history have

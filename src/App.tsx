@@ -4,8 +4,8 @@ import { AuthProvider } from "./lib/AuthContext";
 import { ShieldAlert, ArrowLeft } from "lucide-react";
 import { Button } from "./components/ui/button";
 
-import ProtectedRoute from "./components/ProtectedRoute";
-import SecFilingDataGate from "./components/SecFilingDataGate";
+import ProtectedRoute from "./components/common/ProtectedRoute";
+import SecFilingDataGate from "./components/SecFilings/SecFilingDataGate";
 
 const AppShell = lazy(() => import("./components/AppShell/AppShell"));
 const Users = lazy(() => import("./pages/Configurations/Users"));
@@ -15,10 +15,10 @@ const RoleGroupPermissions = lazy(() => import("./pages/Configurations/RoleGroup
 const RoleApiPermissions = lazy(() => import("./pages/Configurations/RoleApiPermissions"));
 const RoleMcpToolPermissions = lazy(() => import("./pages/Configurations/RoleMcpToolPermissions"));
 
-const AuditLog = lazy(() => import("./pages/Log/AuditLog"));
+const AuditLog = lazy(() => import("./pages/Logs/AuditLog"));
 const SystemLogsPage = lazy(() => import("./pages/Logs/SystemLogsPage"));
-const Login = lazy(() => import("./pages/Login"));
-const PendingAccess = lazy(() => import("./pages/PendingAccess"));
+const Login = lazy(() => import("./pages/Auth/Login"));
+const PendingAccess = lazy(() => import("./pages/Auth/PendingAccess"));
 
 const loadSecFilings = () => import("./pages/SecFilings/SecFilingsPage");
 const SecFilings = lazy(loadSecFilings);

@@ -2,13 +2,13 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import GlobalLoadingScreen from "@/components/GlobalLoadingScreen";
+import GlobalLoadingScreen from "@/components/common/GlobalLoadingScreen";
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "next-themes"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import ErrorBoundary from "@/components/ErrorBoundary"
+import ErrorBoundary from "@/components/common/ErrorBoundary"
 import { installGlobalErrorReporting } from "@/services/errorReporting"
 
 installGlobalErrorReporting();

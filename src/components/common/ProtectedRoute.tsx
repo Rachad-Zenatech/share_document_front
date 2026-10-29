@@ -1,8 +1,8 @@
 import React from 'react';
 import { Navigate, Outlet, useNavigate } from 'react-router-dom';
-import { useAuth } from '../lib/AuthContext';
+import { useAuth } from '../../lib/AuthContext';
 import { Loader2, ShieldAlert, ArrowLeft } from 'lucide-react';
-import { Button } from './ui/button';
+import { Button } from '../ui/button';
 
 interface ProtectedRouteProps {
   navigationCode?: string;
