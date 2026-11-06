@@ -1182,17 +1182,30 @@ export function useSecFiling() {
       // query cache here: its effect would write this sheet into Main's registry/backend.
       const nextBlocks = shiftedBlocks && Array.isArray(shiftedBlocks) ? shiftedBlocks : activeProposal.blocks;
       const baseSpreadsheet = mainDoc.attachedSpreadsheet || secFilingService.getAttachedSpreadsheet(mainDoc.id);
+      const diffs = secFilingService.calculateDiffs(mainDoc.blocks, nextBlocks);
       const updatedProposal: SecChangeProposal = {
         ...activeProposal,
         attachedSpreadsheet: sheet,
         spreadsheetDiffs: computeSpreadsheetDiffs(baseSpreadsheet, sheet, nextBlocks),
         blocks: nextBlocks,
+        changeSummary: {
+          ...activeProposal.changeSummary,
+          addedCount: diffs.filter((d) => d.status === 'added').length,
+          modifiedCount: diffs.filter((d) => d.status === 'modified').length,
+          deletedCount: diffs.filter((d) => d.status === 'deleted').length
+        },
         updatedAt: new Date().toISOString()
       };
       secFilingService.updateProposal(updatedProposal);
+      secFilingService.saveProposals(secFilingService.getProposals(), true);
       setProposals((prev) => prev.map((p) => (p.id === updatedProposal.id ? updatedProposal : p)));
       if (shiftedBlocks && Array.isArray(shiftedBlocks)) {
-        setWorkingBlocks(shiftedBlocks);
+        setUndoStack((prev) => {
+          const next = [...prev, workingBlocks];
+          if (next.length > 60) return next.slice(next.length - 60);
+          return next;
+        });
+        setRedoStack([]);
       }
       return;
     }
@@ -1200,9 +1213,14 @@ export function useSecFiling() {
     const updated = secFilingService.updateAttachedSpreadsheet(sheet, mainDoc.id, shiftedBlocks);
     setMainDoc({ ...updated });
     if (shiftedBlocks && Array.isArray(shiftedBlocks)) {
-      setWorkingBlocks(shiftedBlocks);
+      setUndoStack((prev) => {
+        const next = [...prev, workingBlocks];
+        if (next.length > 60) return next.slice(next.length - 60);
+        return next;
+      });
+      setRedoStack([]);
     }
-  }, [activeProposal, mainDoc.id, mainDoc.attachedSpreadsheet, queryClient, setWorkingBlocks]);
+  }, [activeProposal, mainDoc.id, mainDoc.attachedSpreadsheet, mainDoc.blocks, workingBlocks, queryClient]);
 
   const handleUpdateSpreadsheetCell = useCallback((cellRef: string, newValue: any, updatedSheet?: AttachedSpreadsheet) => {
     if (activeProposal) {
@@ -1269,7 +1287,12 @@ export function useSecFiling() {
       secFilingService.saveProposals(secFilingService.getProposals(), true);
       setProposals((prev) => prev.map((p) => (p.id === updatedProposal.id ? updatedProposal : p)));
       if (updatedCount > 0) {
-        setWorkingBlocks(nextBlocks);
+        setUndoStack((prev) => {
+          const next = [...prev, workingBlocks];
+          if (next.length > 60) return next.slice(next.length - 60);
+          return next;
+        });
+        setRedoStack([]);
       }
       return updatedCount;
     }
@@ -1287,7 +1310,7 @@ export function useSecFiling() {
       return { ...updatedDoc };
     });
     return updatedCount;
-  }, [activeProposal, mainDoc.attachedSpreadsheet, mainDoc.id, workingBlocks, setWorkingBlocks]);
+  }, [activeProposal, mainDoc.attachedSpreadsheet, mainDoc.id, workingBlocks]);
 
   const handleAssignSpreadsheet = useCallback((sheetId: string | null) => {
     secFilingService.assignSpreadsheetToDocument(mainDoc.id, sheetId);

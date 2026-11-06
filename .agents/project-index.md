@@ -61,7 +61,7 @@ For detailed function and route definitions, see `.agents/code-map.md`.
 - src/hooks/useFinancialTableTemplates.ts (59 lines) - Guest contributors have no login; the bundled templates are used instead.
 - src/hooks/useHeartbeat.ts (45 lines) - Track user activity
 - src/hooks/useNotifications.ts (256 lines) - use notifications (hooks)
-- src/hooks/useSecFiling.ts (1593 lines) - use sec filing (hooks)
+- src/hooks/useSecFiling.ts (1616 lines) - use sec filing (hooks)
 - src/hooks/useSecWorkflows.ts (88 lines) - Active platform users that can be put on a workflow step.
 - src/lib/AuthContext.tsx (207 lines) - auth context (lib)
 - src/lib/userDepartment.ts (170 lines) - user department (lib)
@@ -84,7 +84,7 @@ For detailed function and route definitions, see `.agents/code-map.md`.
 - src/pages/SecFilings/SecFilingsPage.tsx (1338 lines) - sec filings page (pages  sec filings)
 - src/pages/SecFilings/SpreadsheetHubPage.tsx (964 lines) - spreadsheet hub page (pages  sec filings)
 - src/pages/SecFilings/WorkflowAssignmentsPage.tsx (686 lines) - workflow assignments page (pages  sec filings)
-- src/pages/SecFilings/components/AttachedSpreadsheetModal.tsx (4045 lines) - attached spreadsheet modal (pages  sec filings components)
+- src/pages/SecFilings/components/AttachedSpreadsheetModal.tsx (4061 lines) - attached spreadsheet modal (pages  sec filings components)
 - src/pages/SecFilings/components/BlockBuilder.tsx (947 lines) - block builder (pages  sec filings components)
 - src/pages/SecFilings/components/BlockInspector.tsx (737 lines) - block inspector (pages  sec filings components)
 - src/pages/SecFilings/components/BlockItem.tsx (3741 lines) - block item (pages  sec filings components)
@@ -141,5 +141,5 @@ For detailed function and route definitions, see `.agents/code-map.md`.
 - src/utils/secFilingImporter.ts (1019 lines) - PDF imports run on the server for a while; called as pages are converted.
 - src/utils/secFilingPagination.ts (141 lines) - sec filing pagination (utils)
 - src/utils/secFilingSearch.ts (258 lines) - sec filing search (utils)
-- src/utils/spreadsheetReuploadDiff.ts (493 lines) - Minimum similarity for two rows/columns to be considered "the same" line.
+- src/utils/spreadsheetReuploadDiff.ts (494 lines) - Minimum similarity for two rows/columns to be considered "the same" line.
 - src/utils/textStandardizer.ts (78 lines) - Common standalone cities, states, provinces, and countries

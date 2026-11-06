@@ -23,8 +23,8 @@ export function isGuestInviteToken(token: unknown): token is string {
 
 /** The guest token of the current page, if it is a contributor link opened as a guest. */
 export function getGuestInviteToken(): string | null {
-  if (typeof window === 'undefined' || !window.location.pathname.startsWith(CONTRIBUTE_PATH)) return null;
-  const token = new URLSearchParams(window.location.hash.slice(1)).get('invite');
+  if (typeof window === 'undefined' || !window.location?.pathname?.startsWith(CONTRIBUTE_PATH)) return null;
+  const token = new URLSearchParams(window.location?.hash ? window.location.hash.slice(1) : '').get('invite');
   return isGuestInviteToken(token) ? token : null;
 }
 

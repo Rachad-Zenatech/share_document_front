@@ -348,7 +348,7 @@ How to use: check `.agents/project-index.md` first to locate the file, then insp
 - `useClearReadNotifications` (export function)
 - `useClearAllNotifications` (export function)
 
-## src/hooks/useSecFiling.ts (1593 lines) - use sec filing (hooks)
+## src/hooks/useSecFiling.ts (1616 lines) - use sec filing (hooks)
 - `UserFilingRole` (export type)
 - `moveRunToSection` (function) - Moves the run of blocks starting at `start` that are still in `fromSection` into  `toSection`, stopping at the first block from another s...
 - `repairLegacySectionHeadings` (function) - Gives each legacy placeholder heading that is still inside another section its own  section, carrying the blocks after it along.
@@ -654,7 +654,7 @@ How to use: check `.agents/project-index.md` first to locate the file, then insp
     - `handleSave` (fn)
     - `handleDelete` (fn)
 
-## src/pages/SecFilings/components/AttachedSpreadsheetModal.tsx (4045 lines) - attached spreadsheet modal (pages  sec filings components)
+## src/pages/SecFilings/components/AttachedSpreadsheetModal.tsx (4061 lines) - attached spreadsheet modal (pages  sec filings components)
 - `AttachedSpreadsheetModalProps` (export interface)
 - `MemoizedGridCellProps` (interface)
 - `MemoizedGridCell` (const)
@@ -1518,7 +1518,7 @@ How to use: check `.agents/project-index.md` first to locate the file, then insp
 - `blockMatchesQuery` (export function) - Tests whether a given SecBlock matches a search query string.
 - `countBlockMatches` (export function) - Counts total occurrences of query terms in a block.
 
-## src/utils/spreadsheetReuploadDiff.ts (493 lines) - Minimum similarity for two rows/columns to be considered "the same" line.
+## src/utils/spreadsheetReuploadDiff.ts (494 lines) - Minimum similarity for two rows/columns to be considered "the same" line.
 - `isSparseFill` (const) - Whether a line with `filled` values out of `length` positions is sparse enough to be a filled-in blank.
 - `Cells` (type)
 - `normalize` (const)
