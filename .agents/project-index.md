@@ -9,11 +9,12 @@ For detailed function and route definitions, see `.agents/code-map.md`.
 - src/components/AppShell/AppShell.tsx (51 lines) - Set initial state
 - src/components/AppShell/Breadcrumbs.tsx (144 lines) - breadcrumbs (components  app shell)
 - src/components/AppShell/ConnectionStatusLight.tsx (255 lines) - connection status light (components  app shell)
+- src/components/AppShell/MessageHubStatusDropdown.tsx (571 lines) - message hub status dropdown (components  app shell)
 - src/components/AppShell/Navigation.tsx (59 lines) - navigation (components  app shell)
 - src/components/AppShell/NotificationDropdown.tsx (180 lines) - notification dropdown (components  app shell)
 - src/components/AppShell/Sidebar.tsx (308 lines) - sidebar (components  app shell)
 - src/components/AppShell/ThemeSwitch.tsx (41 lines) - theme switch (components  app shell)
-- src/components/AppShell/TopBar.tsx (528 lines) - top bar (components  app shell)
+- src/components/AppShell/TopBar.tsx (530 lines) - top bar (components  app shell)
 - src/components/SecFilings/SecFilingDataGate.tsx (71 lines) - An external contributor's link carries a guest token instead of needing a login.
 - src/components/common/ErrorBoundary.tsx (48 lines) - error boundary (components common)
 - src/components/common/GlobalLoadingScreen.tsx (107 lines) - global loading screen (components common)
