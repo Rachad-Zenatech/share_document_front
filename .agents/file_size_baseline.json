@@ -1,0 +1,129 @@
+{
+  "limit": 500,
+  "files": {
+    "src/components/AppShell/TopBar.tsx": {
+      "max_lines": 527,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/data/initialSecFilingData.ts": {
+      "max_lines": 16044,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/data/secDocumentTemplates.ts": {
+      "max_lines": 1021,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/hooks/useSecFiling.ts": {
+      "max_lines": 1615,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/Configurations/Roles.tsx": {
+      "max_lines": 798,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/Configurations/Users.tsx": {
+      "max_lines": 691,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/Logs/SystemLogsPage.tsx": {
+      "max_lines": 1064,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/AttachedSpreadsheetModal.tsx": {
+      "max_lines": 4060,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/BlockBuilder.tsx": {
+      "max_lines": 946,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/BlockInspector.tsx": {
+      "max_lines": 736,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx": {
+      "max_lines": 3740,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/ContributorInviteModal.tsx": {
+      "max_lines": 915,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/EmbeddedSpreadsheetDiffViewer.tsx": {
+      "max_lines": 924,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/ImportDocumentModal.tsx": {
+      "max_lines": 622,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/MediaBucketModal.tsx": {
+      "max_lines": 578,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/MergeReviewModal.tsx": {
+      "max_lines": 2487,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/MobileSigningModal.tsx": {
+      "max_lines": 915,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/SpreadsheetReuploadPreviewModal.tsx": {
+      "max_lines": 698,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/SpreadsheetSelectorModal.tsx": {
+      "max_lines": 501,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/TableTemplateModal.tsx": {
+      "max_lines": 664,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/CreateSecFilingPage.tsx": {
+      "max_lines": 1806,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/SecFilingContributorPage.tsx": {
+      "max_lines": 762,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/SecFilingsPage.tsx": {
+      "max_lines": 1337,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/SpreadsheetHubPage.tsx": {
+      "max_lines": 963,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/WorkflowAssignmentsPage.tsx": {
+      "max_lines": 685,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/services/secFiling/secFilingCore.ts": {
+      "max_lines": 974,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/services/secFiling/secFilingProposals.ts": {
+      "max_lines": 575,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/services/secFiling/secFilingSpreadsheet.ts": {
+      "max_lines": 669,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/utils/documentVariables.ts": {
+      "max_lines": 2472,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/utils/secFilingExport.ts": {
+      "max_lines": 986,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/utils/secFilingImporter.ts": {
+      "max_lines": 1018,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    }
+  }
+}
