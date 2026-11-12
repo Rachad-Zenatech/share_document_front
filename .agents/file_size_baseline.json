@@ -1,5 +1,9 @@
 {
   "limit": 500,
+  "block_limits": {
+    "jsx_return": 80,
+    "py_function": 120
+  },
   "files": {
     "src/components/AppShell/TopBar.tsx": {
       "max_lines": 527,
@@ -124,6 +128,208 @@
     "src/utils/secFilingImporter.ts": {
       "max_lines": 1018,
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    }
+  },
+  "blocks": {
+    "src/App.tsx#App": {
+      "max_lines": 199,
+      "kind": "jsx_return"
+    },
+    "src/components/AppShell/ConnectionStatusLight.tsx#ConnectionStatusLight": {
+      "max_lines": 93,
+      "kind": "jsx_return"
+    },
+    "src/components/AppShell/NotificationDropdown.tsx#NotificationDropdownContent": {
+      "max_lines": 112,
+      "kind": "jsx_return"
+    },
+    "src/components/AppShell/Sidebar.tsx#Icon": {
+      "max_lines": 102,
+      "kind": "jsx_return"
+    },
+    "src/components/AppShell/Sidebar.tsx#Sidebar": {
+      "max_lines": 224,
+      "kind": "jsx_return"
+    },
+    "src/components/AppShell/TopBar.tsx#TopBar": {
+      "max_lines": 273,
+      "kind": "jsx_return"
+    },
+    "src/components/ui/calendar.tsx#Calendar": {
+      "max_lines": 151,
+      "kind": "jsx_return"
+    },
+    "src/components/ui/FloatingVerticalFilter.tsx#FloatingVerticalFilter": {
+      "max_lines": 121,
+      "kind": "jsx_return"
+    },
+    "src/pages/Configurations/RoleApiPermissions.tsx#RoleApiPermissions": {
+      "max_lines": 173,
+      "kind": "jsx_return"
+    },
+    "src/pages/Configurations/RoleGroupPermissions.tsx#RoleGroupPermissions": {
+      "max_lines": 323,
+      "kind": "jsx_return"
+    },
+    "src/pages/Configurations/RoleMcpToolPermissions.tsx#RoleMcpToolPermissions": {
+      "max_lines": 158,
+      "kind": "jsx_return"
+    },
+    "src/pages/Configurations/Roles.tsx#Roles": {
+      "max_lines": 354,
+      "kind": "jsx_return"
+    },
+    "src/pages/Configurations/UserRoleAssignment.tsx#UserRoleAssignment": {
+      "max_lines": 127,
+      "kind": "jsx_return"
+    },
+    "src/pages/Configurations/Users.tsx#Users": {
+      "max_lines": 273,
+      "kind": "jsx_return"
+    },
+    "src/pages/Dashboard/Dashboard.tsx#Dashboard": {
+      "max_lines": 199,
+      "kind": "jsx_return"
+    },
+    "src/pages/Logs/AuditLog.tsx#AuditLog": {
+      "max_lines": 205,
+      "kind": "jsx_return"
+    },
+    "src/pages/Logs/SystemLogsPage.tsx#SystemLogsPage": {
+      "max_lines": 709,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/AttachedSpreadsheetModal.tsx#AttachedSpreadsheetModal": {
+      "max_lines": 2242,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockBuilder.tsx#BlockBuilder": {
+      "max_lines": 701,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockInspector.tsx#BlockInspector": {
+      "max_lines": 694,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#BlockItemComponent": {
+      "max_lines": 831,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#CalloutBlockEditor": {
+      "max_lines": 102,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#FinancialTableBlockEditor": {
+      "max_lines": 875,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#HeadingBlockEditor": {
+      "max_lines": 104,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#ImageBlockEditor": {
+      "max_lines": 86,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#ParagraphBlockEditor": {
+      "max_lines": 117,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#SignatureBlockEditor": {
+      "max_lines": 168,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#TableCellInput": {
+      "max_lines": 115,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/ContributorInviteModal.tsx#ContributorInviteModal": {
+      "max_lines": 626,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/DocumentOutline.tsx#DocumentOutlineComponent": {
+      "max_lines": 188,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/EmbeddedSpreadsheetDiffViewer.tsx#COL_OVERSCAN": {
+      "max_lines": 108,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/EmbeddedSpreadsheetDiffViewer.tsx#EmbeddedSpreadsheetDiffViewer": {
+      "max_lines": 612,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/ImportDocumentModal.tsx#ImportDocumentModal": {
+      "max_lines": 459,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/MediaBucketModal.tsx#MediaBucketModal": {
+      "max_lines": 430,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/MergeReviewModal.tsx#MergeReviewModal": {
+      "max_lines": 1385,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/MergeReviewModal.tsx#SecDocBlockRenderer": {
+      "max_lines": 226,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/MobileSigningModal.tsx#MobileSigningModal": {
+      "max_lines": 561,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/SpreadsheetReuploadPreviewModal.tsx#SpreadsheetReuploadPreviewModal": {
+      "max_lines": 325,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/SpreadsheetSelectorModal.tsx#SpreadsheetSelectorModal": {
+      "max_lines": 330,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/SubmitProposalModal.tsx#SubmitProposalModal": {
+      "max_lines": 250,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/TableTemplateModal.tsx#TableTemplateModal": {
+      "max_lines": 305,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/VersionHistoryModal.tsx#VersionHistoryModal": {
+      "max_lines": 89,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/WorkflowAssigneePicker.tsx#WorkflowAssigneePicker": {
+      "max_lines": 133,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/CreateSecFilingPage.tsx#CreateSecFilingPage": {
+      "max_lines": 1178,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/CreateSecFilingPage.tsx#DocumentThumbnailPreview": {
+      "max_lines": 97,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/MobileSignerPage.tsx#MobileSignerPage": {
+      "max_lines": 138,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/SecFilingContributorPage.tsx#SecFilingContributorPage": {
+      "max_lines": 518,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/SecFilingsPage.tsx#SecFilingsPage": {
+      "max_lines": 919,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/SpreadsheetHubPage.tsx#SpreadsheetHubPage": {
+      "max_lines": 645,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/WorkflowAssignmentsPage.tsx#WorkflowAssignmentsPage": {
+      "max_lines": 416,
+      "kind": "jsx_return"
     }
   }
 }
