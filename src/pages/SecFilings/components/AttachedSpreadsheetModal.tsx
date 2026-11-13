@@ -552,6 +552,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     undoStack.current = undoStack.current.slice(1);
     setCanUndo(undoStack.current.length > 0);
     setCanRedo(true);
+    setLocalSpreadsheet(prev);
+    formulaCacheRef.current.clear();
+    cellDisplayCacheRef.current.clear();
     onUpdateSpreadsheet(prev, blocks);
     toast.info('Undo');
   }, [spreadsheet, blocks, onUpdateSpreadsheet]);
@@ -563,6 +566,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     redoStack.current = redoStack.current.slice(1);
     setCanUndo(true);
     setCanRedo(redoStack.current.length > 0);
+    setLocalSpreadsheet(next);
+    formulaCacheRef.current.clear();
+    cellDisplayCacheRef.current.clear();
     onUpdateSpreadsheet(next, blocks);
     toast.info('Redo');
   }, [spreadsheet, blocks, onUpdateSpreadsheet]);
@@ -713,6 +719,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
   // Tab Switching
   const handleSwitchTab = (tabId: string) => {
     const next = switchActiveTab(spreadsheet, tabId);
+    setLocalSpreadsheet(next);
     onUpdateSpreadsheet(next);
     setSelectedCellRef('A1');
     scrollToRow(1);
@@ -723,6 +730,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
 
   const handleAddTab = () => {
     const next = addTabToSpreadsheet(spreadsheet, `Sheet${tabs.length + 1}`, 30, 10);
+    setLocalSpreadsheet(next);
     onUpdateSpreadsheet(next);
     setSelectedCellRef('A1');
     setEditingValue('');
@@ -738,6 +746,7 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     }
     if (confirm(`Delete worksheet tab "${tabName}" and its cells?`)) {
       const next = removeTabFromSpreadsheet(spreadsheet, tabId);
+      setLocalSpreadsheet(next);
       onUpdateSpreadsheet(next);
       scrollToRow(1);
       setScrollTop(0);
@@ -1630,7 +1639,11 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
         return;
       }
       // Keep the workbook id so links (and branch merges) still point at the same workbook
-      onUpdateSpreadsheet(spreadsheet?.id ? applyWorkbookReupload(spreadsheet, parsed) : parsed);
+      const next = spreadsheet?.id ? applyWorkbookReupload(spreadsheet, parsed) : parsed;
+      setLocalSpreadsheet(next);
+      formulaCacheRef.current.clear();
+      cellDisplayCacheRef.current.clear();
+      onUpdateSpreadsheet(next);
       setSelectedCellRef('A1');
       const firstVal = parsed.cells?.['A1'];
       setEditingValue(firstVal !== undefined && firstVal !== null ? String(firstVal) : '');
@@ -1662,6 +1675,9 @@ export const AttachedSpreadsheetModal: React.FC<AttachedSpreadsheetModalProps> =
     );
 
     pushHistory(spreadsheet);
+    setLocalSpreadsheet(merged);
+    formulaCacheRef.current.clear();
+    cellDisplayCacheRef.current.clear();
     onUpdateSpreadsheet(merged, shiftedBlocks);
     setReuploadPreview(null);
     setSelectedCellRef('A1');

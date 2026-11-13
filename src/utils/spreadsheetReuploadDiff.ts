@@ -414,6 +414,7 @@ export function applyWorkbookReupload(
 
   return {
     ...safeCurrent,
+    fileName: uploaded.fileName || safeCurrent.fileName,
     tabs,
     activeTabId: activeTab.id,
     sheetName: activeTab.name,

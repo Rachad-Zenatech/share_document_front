@@ -1,0 +1,335 @@
+{
+  "limit": 500,
+  "block_limits": {
+    "jsx_return": 80,
+    "py_function": 120
+  },
+  "files": {
+    "src/components/AppShell/TopBar.tsx": {
+      "max_lines": 527,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/data/initialSecFilingData.ts": {
+      "max_lines": 16044,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/data/secDocumentTemplates.ts": {
+      "max_lines": 1021,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/hooks/useSecFiling.ts": {
+      "max_lines": 1615,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/Configurations/Roles.tsx": {
+      "max_lines": 798,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/Configurations/Users.tsx": {
+      "max_lines": 691,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/Logs/SystemLogsPage.tsx": {
+      "max_lines": 1064,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/AttachedSpreadsheetModal.tsx": {
+      "max_lines": 4060,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/BlockBuilder.tsx": {
+      "max_lines": 946,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/BlockInspector.tsx": {
+      "max_lines": 736,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx": {
+      "max_lines": 3740,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/ContributorInviteModal.tsx": {
+      "max_lines": 915,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/EmbeddedSpreadsheetDiffViewer.tsx": {
+      "max_lines": 924,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/ImportDocumentModal.tsx": {
+      "max_lines": 622,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/MediaBucketModal.tsx": {
+      "max_lines": 578,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/MergeReviewModal.tsx": {
+      "max_lines": 2487,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/MobileSigningModal.tsx": {
+      "max_lines": 915,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/SpreadsheetReuploadPreviewModal.tsx": {
+      "max_lines": 698,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/SpreadsheetSelectorModal.tsx": {
+      "max_lines": 501,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/components/TableTemplateModal.tsx": {
+      "max_lines": 664,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/CreateSecFilingPage.tsx": {
+      "max_lines": 1806,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/SecFilingContributorPage.tsx": {
+      "max_lines": 762,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/SecFilingsPage.tsx": {
+      "max_lines": 1337,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/SpreadsheetHubPage.tsx": {
+      "max_lines": 963,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/pages/SecFilings/WorkflowAssignmentsPage.tsx": {
+      "max_lines": 685,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/services/secFiling/secFilingCore.ts": {
+      "max_lines": 974,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/services/secFiling/secFilingProposals.ts": {
+      "max_lines": 575,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/services/secFiling/secFilingSpreadsheet.ts": {
+      "max_lines": 669,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/utils/documentVariables.ts": {
+      "max_lines": 2472,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/utils/secFilingExport.ts": {
+      "max_lines": 986,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    },
+    "src/utils/secFilingImporter.ts": {
+      "max_lines": 1018,
+      "reason": "Over the limit when the check was introduced; split it when you next work on it."
+    }
+  },
+  "blocks": {
+    "src/App.tsx#App": {
+      "max_lines": 199,
+      "kind": "jsx_return"
+    },
+    "src/components/AppShell/ConnectionStatusLight.tsx#ConnectionStatusLight": {
+      "max_lines": 93,
+      "kind": "jsx_return"
+    },
+    "src/components/AppShell/NotificationDropdown.tsx#NotificationDropdownContent": {
+      "max_lines": 112,
+      "kind": "jsx_return"
+    },
+    "src/components/AppShell/Sidebar.tsx#Icon": {
+      "max_lines": 102,
+      "kind": "jsx_return"
+    },
+    "src/components/AppShell/Sidebar.tsx#Sidebar": {
+      "max_lines": 224,
+      "kind": "jsx_return"
+    },
+    "src/components/AppShell/TopBar.tsx#TopBar": {
+      "max_lines": 273,
+      "kind": "jsx_return"
+    },
+    "src/components/ui/calendar.tsx#Calendar": {
+      "max_lines": 151,
+      "kind": "jsx_return"
+    },
+    "src/components/ui/FloatingVerticalFilter.tsx#FloatingVerticalFilter": {
+      "max_lines": 121,
+      "kind": "jsx_return"
+    },
+    "src/pages/Configurations/RoleApiPermissions.tsx#RoleApiPermissions": {
+      "max_lines": 173,
+      "kind": "jsx_return"
+    },
+    "src/pages/Configurations/RoleGroupPermissions.tsx#RoleGroupPermissions": {
+      "max_lines": 323,
+      "kind": "jsx_return"
+    },
+    "src/pages/Configurations/RoleMcpToolPermissions.tsx#RoleMcpToolPermissions": {
+      "max_lines": 158,
+      "kind": "jsx_return"
+    },
+    "src/pages/Configurations/Roles.tsx#Roles": {
+      "max_lines": 354,
+      "kind": "jsx_return"
+    },
+    "src/pages/Configurations/UserRoleAssignment.tsx#UserRoleAssignment": {
+      "max_lines": 127,
+      "kind": "jsx_return"
+    },
+    "src/pages/Configurations/Users.tsx#Users": {
+      "max_lines": 273,
+      "kind": "jsx_return"
+    },
+    "src/pages/Dashboard/Dashboard.tsx#Dashboard": {
+      "max_lines": 199,
+      "kind": "jsx_return"
+    },
+    "src/pages/Logs/AuditLog.tsx#AuditLog": {
+      "max_lines": 205,
+      "kind": "jsx_return"
+    },
+    "src/pages/Logs/SystemLogsPage.tsx#SystemLogsPage": {
+      "max_lines": 709,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/AttachedSpreadsheetModal.tsx#AttachedSpreadsheetModal": {
+      "max_lines": 2242,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockBuilder.tsx#BlockBuilder": {
+      "max_lines": 701,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockInspector.tsx#BlockInspector": {
+      "max_lines": 694,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#BlockItemComponent": {
+      "max_lines": 831,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#CalloutBlockEditor": {
+      "max_lines": 102,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#FinancialTableBlockEditor": {
+      "max_lines": 875,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#HeadingBlockEditor": {
+      "max_lines": 104,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#ImageBlockEditor": {
+      "max_lines": 86,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#ParagraphBlockEditor": {
+      "max_lines": 117,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#SignatureBlockEditor": {
+      "max_lines": 168,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/BlockItem.tsx#TableCellInput": {
+      "max_lines": 115,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/ContributorInviteModal.tsx#ContributorInviteModal": {
+      "max_lines": 626,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/DocumentOutline.tsx#DocumentOutlineComponent": {
+      "max_lines": 188,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/EmbeddedSpreadsheetDiffViewer.tsx#COL_OVERSCAN": {
+      "max_lines": 108,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/EmbeddedSpreadsheetDiffViewer.tsx#EmbeddedSpreadsheetDiffViewer": {
+      "max_lines": 612,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/ImportDocumentModal.tsx#ImportDocumentModal": {
+      "max_lines": 459,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/MediaBucketModal.tsx#MediaBucketModal": {
+      "max_lines": 430,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/MergeReviewModal.tsx#MergeReviewModal": {
+      "max_lines": 1385,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/MergeReviewModal.tsx#SecDocBlockRenderer": {
+      "max_lines": 226,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/MobileSigningModal.tsx#MobileSigningModal": {
+      "max_lines": 561,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/SpreadsheetReuploadPreviewModal.tsx#SpreadsheetReuploadPreviewModal": {
+      "max_lines": 325,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/SpreadsheetSelectorModal.tsx#SpreadsheetSelectorModal": {
+      "max_lines": 330,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/SubmitProposalModal.tsx#SubmitProposalModal": {
+      "max_lines": 250,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/TableTemplateModal.tsx#TableTemplateModal": {
+      "max_lines": 305,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/VersionHistoryModal.tsx#VersionHistoryModal": {
+      "max_lines": 89,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/components/WorkflowAssigneePicker.tsx#WorkflowAssigneePicker": {
+      "max_lines": 133,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/CreateSecFilingPage.tsx#CreateSecFilingPage": {
+      "max_lines": 1178,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/CreateSecFilingPage.tsx#DocumentThumbnailPreview": {
+      "max_lines": 97,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/MobileSignerPage.tsx#MobileSignerPage": {
+      "max_lines": 138,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/SecFilingContributorPage.tsx#SecFilingContributorPage": {
+      "max_lines": 518,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/SecFilingsPage.tsx#SecFilingsPage": {
+      "max_lines": 919,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/SpreadsheetHubPage.tsx#SpreadsheetHubPage": {
+      "max_lines": 645,
+      "kind": "jsx_return"
+    },
+    "src/pages/SecFilings/WorkflowAssignmentsPage.tsx#WorkflowAssignmentsPage": {
+      "max_lines": 416,
+      "kind": "jsx_return"
+    }
+  }
+}
