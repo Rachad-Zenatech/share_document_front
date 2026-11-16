@@ -89,115 +89,132 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
     - `handleInlineKeyDown` (fn) L1771
     - `handleInlineBlur` (fn) L1806
 
-## src/pages/SecFilings/components/BlockBuilder.tsx (947 lines) - block builder (pages  sec filings components)
-- `BlockBuilderProps` (interface) L34
-- `BlockBuilder` (export const) L70
-    - `diffMap` (fn) L103
-    - `blockIndexMap` (fn) L104
-    - `headingsInsideSection` (fn) L106 - they get a "Start new section here" action.
-    - `handlersRef` (fn) L119 - a ref that always holds this render's handlers.
-    - `updateBlockLatest` (fn) L121
-    - `moveBlockLatest` (fn) L122
-    - `duplicateBlockLatest` (fn) L123
-    - `deleteBlockLatest` (fn) L124
-    - `startSectionHandler` (fn) L125
-    - `selectedSet` (fn) L129
-    - `handleKeyDown` (fn) L145
-    - `handlePointerDown` (fn) L186
-    - `update` (fn) L212
-    - `pages` (fn) L226 - Paginate blocks dynamically taking global spacing into account
-    - `handleZoom` (fn) L230
-    - `scrollToPage` (fn) L234
+## src/pages/SecFilings/components/BlockBuilder.tsx (937 lines) - block builder (pages  sec filings components)
+- `BlockBuilderProps` (interface) L35
+- `BlockBuilder` (export const) L71
+    - `diffMap` (fn) L104
+    - `blockIndexMap` (fn) L105
+    - `headingsInsideSection` (fn) L107 - they get a "Start new section here" action.
+    - `handlersRef` (fn) L120 - a ref that always holds this render's handlers.
+    - `updateBlockLatest` (fn) L122
+    - `moveBlockLatest` (fn) L123
+    - `duplicateBlockLatest` (fn) L124
+    - `deleteBlockLatest` (fn) L125
+    - `startSectionHandler` (fn) L126
+    - `selectedSet` (fn) L130
+    - `handleKeyDown` (fn) L146
+    - `handlePointerDown` (fn) L187
+    - `update` (fn) L213
+    - `pages` (fn) L227 - Paginate blocks dynamically taking global spacing into account
+    - `handleZoom` (fn) L231
+    - `scrollToPage` (fn) L235
 
-## src/pages/SecFilings/components/BlockInspector.tsx (737 lines) - block inspector (pages  sec filings components)
-- `BlockInspectorProps` (interface) L19
-- `BlockInspector` (export const) L26
+## src/pages/SecFilings/components/BlockInspector.tsx (736 lines) - block inspector (pages  sec filings components)
+- `BlockInspectorProps` (interface) L20
+- `BlockInspector` (export const) L27
 
-## src/pages/SecFilings/components/BlockItem.tsx (3741 lines) - block item (pages  sec filings components)
-- `isComparativeDateHeaderCell` (const) L79
-    - `trimmed` (fn) L80
-- `isMajorStatementHeaderCell` (export const) L107
-- `BlockItemProps` (interface) L124
-- `BlockItemComponent` (const) L154
-    - `currentAlign` (fn) L218
-    - `isBold` (fn) L219
-    - `currentColor` (fn) L222
-    - `currentFontFamily` (fn) L233
-    - `updateSpacingTop` (fn) L261
-    - `setDirectSpacingTop` (fn) L266
-    - `updateFontSize` (fn) L270
-    - `setAlignment` (fn) L275
-    - `convertBlockType` (fn) L279
-- `BlockItem` (export const) L1132
-    - `handleClick` (fn) L1175
-    - `handleInsertSpreadsheetCell` (fn) L1180
-    - `handleChange` (fn) L1207
-    - `handleBlur` (fn) L1216
-    - `adjustHeight` (fn) L1223
-    - `setTextareaRef` (fn) L1230
-    - `handleClick` (fn) L1380
-    - `handleInsertSpreadsheetCell` (fn) L1385
-    - `handleChange` (fn) L1412
-    - `handleBlur` (fn) L1421
-    - `adjustHeight` (fn) L1428
-    - `setTextareaRef` (fn) L1435
-    - `handleClick` (fn) L1616
-    - `handleChange` (fn) L1621
-    - `handleBlur` (fn) L1630
-    - `handleKeyDown` (fn) L1638
-    - `handleLinkCell` (fn) L1652
-    - `handleUnlinkCell` (fn) L1668
-    - `updateTemplateMutation` (fn) L1837
-    - `cellDiffMap` (fn) L1844
-    - `matchedTemplate` (fn) L1854
-    - `openCreateTemplateModal` (fn) L1858
-    - `openUpdateTemplateModal` (fn) L1864
-    - `handleDirectQuickUpdate` (fn) L1870
-    - `reorderRow` (fn) L1978
-    - `handleCellChange` (fn) L1985
-    - `handleHeaderChange` (fn) L1995
-    - `addRow` (fn) L2001
-    - `addRowAt` (fn) L2005
-    - `moveRow` (fn) L2021
-    - `duplicateRow` (fn) L2031
-    - `deleteRow` (fn) L2043
-    - `addColumn` (fn) L2048
-    - `addColumnAt` (fn) L2052
-    - `moveColumn` (fn) L2077
-    - `duplicateColumn` (fn) L2104
-    - `deleteColumn` (fn) L2126
-    - `setColumnAlignment` (fn) L2143
-    - `toggleRowIndent` (fn) L2149
-    - `setRowShading` (fn) L2161 - Sets or clears a row's background fill.
-    - `setCellAlignment` (fn) L2174 - Sets or clears a single cell's alignment override (e.g.
-    - `setRowAlignment` (fn) L2196 - Sets or clears a per-row alignment override.
-    - `setRowType` (fn) L2208
-    - `rowMetadata` (fn) L2232 - Memoize row-level classification to avoid running 1,200 regexes per render
-    - `handleClick` (fn) L3178
-    - `handleInsertSpreadsheetCell` (fn) L3183
-    - `addOfficer` (fn) L3325
-    - `updateOfficer` (fn) L3338
-    - `removeOfficer` (fn) L3345
-    - `handleFileUpload` (fn) L3619
+## src/pages/SecFilings/components/BlockItem.tsx (3740 lines) - block item (pages  sec filings components)
+- `isComparativeDateHeaderCell` (const) L80
+    - `trimmed` (fn) L81
+- `isMajorStatementHeaderCell` (export const) L108
+- `BlockItemProps` (interface) L125
+- `BlockItemComponent` (const) L155
+    - `currentAlign` (fn) L219
+    - `isBold` (fn) L220
+    - `currentColor` (fn) L223
+    - `currentFontFamily` (fn) L234
+    - `updateSpacingTop` (fn) L262
+    - `setDirectSpacingTop` (fn) L267
+    - `updateFontSize` (fn) L271
+    - `setAlignment` (fn) L276
+    - `convertBlockType` (fn) L280
+- `BlockItem` (export const) L1131
+    - `handleClick` (fn) L1174
+    - `handleInsertSpreadsheetCell` (fn) L1179
+    - `handleChange` (fn) L1206
+    - `handleBlur` (fn) L1215
+    - `adjustHeight` (fn) L1222
+    - `setTextareaRef` (fn) L1229
+    - `handleClick` (fn) L1379
+    - `handleInsertSpreadsheetCell` (fn) L1384
+    - `handleChange` (fn) L1411
+    - `handleBlur` (fn) L1420
+    - `adjustHeight` (fn) L1427
+    - `setTextareaRef` (fn) L1434
+    - `handleClick` (fn) L1615
+    - `handleChange` (fn) L1620
+    - `handleBlur` (fn) L1629
+    - `handleKeyDown` (fn) L1637
+    - `handleLinkCell` (fn) L1651
+    - `handleUnlinkCell` (fn) L1667
+    - `updateTemplateMutation` (fn) L1836
+    - `cellDiffMap` (fn) L1843
+    - `matchedTemplate` (fn) L1853
+    - `openCreateTemplateModal` (fn) L1857
+    - `openUpdateTemplateModal` (fn) L1863
+    - `handleDirectQuickUpdate` (fn) L1869
+    - `reorderRow` (fn) L1977
+    - `handleCellChange` (fn) L1984
+    - `handleHeaderChange` (fn) L1994
+    - `addRow` (fn) L2000
+    - `addRowAt` (fn) L2004
+    - `moveRow` (fn) L2020
+    - `duplicateRow` (fn) L2030
+    - `deleteRow` (fn) L2042
+    - `addColumn` (fn) L2047
+    - `addColumnAt` (fn) L2051
+    - `moveColumn` (fn) L2076
+    - `duplicateColumn` (fn) L2103
+    - `deleteColumn` (fn) L2125
+    - `setColumnAlignment` (fn) L2142
+    - `toggleRowIndent` (fn) L2148
+    - `setRowShading` (fn) L2160 - Sets or clears a row's background fill.
+    - `setCellAlignment` (fn) L2173 - Sets or clears a single cell's alignment override (e.g.
+    - `setRowAlignment` (fn) L2195 - Sets or clears a per-row alignment override.
+    - `setRowType` (fn) L2207
+    - `rowMetadata` (fn) L2231 - Memoize row-level classification to avoid running 1,200 regexes per render
+    - `handleClick` (fn) L3177
+    - `handleInsertSpreadsheetCell` (fn) L3182
+    - `addOfficer` (fn) L3324
+    - `updateOfficer` (fn) L3337
+    - `removeOfficer` (fn) L3344
+    - `handleFileUpload` (fn) L3618
 
-## src/pages/SecFilings/components/ContributorInviteModal.tsx (916 lines) - contributor invite modal (pages  sec filings components)
-- `ContributorInviteModalProps` (interface) L35
-- `ContributorInviteModal` (export const) L54
-    - `availableUsers` (fn) L112
-    - `applyStepAssignee` (fn) L142 - system directory (for job title), external people switch to the custom source.
-    - `applyWorkflowStep` (fn) L164
-    - `handleSelectWorkflowStep` (fn) L184
-    - `handleSelectSystemUser` (fn) L195
-    - `handleResetToBlank` (fn) L206
-    - `handleRoleGovernanceChange` (fn) L224
-    - `handleGenerate` (fn) L242
-    - `handleCopyExistingLink` (fn) L268
-    - `handleSwitchToContributorSession` (fn) L276
+## src/pages/SecFilings/components/ContributorInviteModal.tsx (898 lines) - contributor invite modal (pages  sec filings components)
+- `ContributorInviteModalProps` (interface) L33
+- `ContributorInviteModal` (export const) L52
+    - `availableUsers` (fn) L94
+    - `applyStepAssignee` (fn) L124 - system directory (for job title), external people switch to the custom source.
+    - `applyWorkflowStep` (fn) L146
+    - `handleSelectWorkflowStep` (fn) L166
+    - `handleSelectSystemUser` (fn) L177
+    - `handleResetToBlank` (fn) L188
+    - `handleRoleGovernanceChange` (fn) L206
+    - `handleGenerate` (fn) L224
+    - `handleCopyExistingLink` (fn) L250
+    - `handleSwitchToContributorSession` (fn) L258
+
+## src/pages/SecFilings/components/DocumentMergeReview.tsx (14 lines) - The merge review that fits the open document: the script's own for a script, the filing's for everything else.
+- `DocumentMergeReview` (export const) L7 - The merge review that fits the open document: the script's own for a script, the filing's for everything else.
 
 ## src/pages/SecFilings/components/DocumentOutline.tsx (339 lines) - document outline (pages  sec filings components)
 - `DocumentOutlineProps` (interface) L26
 - `DocumentOutlineComponent` (const) L39
 - `DocumentOutline` (export const) L339
+
+## src/pages/SecFilings/components/DocumentRunningHeader.tsx (51 lines) - Whether the open document is a script (dialogs and labels then speak of scripts, not SEC filings).
+- `isScriptDocument` (export const) L11 - Whether the open document is a script (dialogs and labels then speak of scripts, not SEC filings).
+- `documentKindLabel` (export const) L14 - What the open document is called in titles and hints.
+- `blockTypeLabel` (export const) L17 - A block type as people read it: a script's table is a script table, not a financial one.
+- `tableTemplatesTitle` (export const) L21 - Heading of the table-layout menu.
+- `DocumentRunningTitle` (export function) L24 - The title along the top of a page (nothing for a script).
+- `documentPeriodLabel` (export function) L30 - The period label at the right of the top of a page (`fallback` is the filing's own).
+- `documentFontFamily` (export function) L35 - The font of the pages: a script is set in Arial, as in the Social Media portal; filings keep the Word look (Calibri).
+- `DocumentPageFooter` (export function) L41 - The foot of a page.
+
+## src/pages/SecFilings/components/DocumentSelectionBar.tsx (92 lines) - document selection bar (pages  sec filings components)
+- `DocumentSelectionBarProps` (interface) L14
+- `DocumentSelectionBar` (export const) L24 - Select all" with the count of ticked documents and a button to delete them (after a confirmation).
 
 ## src/pages/SecFilings/components/DocumentVariableRenderer.tsx (162 lines) - document variable renderer (pages  sec filings components)
 - `DocumentVariableRendererProps` (interface) L12
@@ -248,47 +265,47 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
     - `handleAddUrl` (fn) L111
     - `handleDeleteAsset` (fn) L139
 
-## src/pages/SecFilings/components/MergeReviewModal.tsx (2488 lines) - merge review modal (pages  sec filings components)
-- `formatSubmissionTime` (function) L67
-- `formatRelativeTime` (function) L82
-- `sanitizeTableCells` (const) L97
-    - `c` (fn) L100
-    - `nextC` (fn) L101
-    - `last` (fn) L110
-- `isComparativeDateHeaderCell` (const) L118
-    - `trimmed` (fn) L119
-- `MergeReviewModalProps` (interface) L140
-- `ChangeTypeBadges` (export const) L157 - -------------------------------------------------------------------------
-- `MergeReviewModal` (export const) L236
-    - `handleOpenSpreadsheetToCell` (fn) L266
-    - `changedDiffs` (fn) L272
-    - `spreadsheetDiffs` (fn) L274
-    - `spacingChangeCount` (fn) L306
-    - `typographyChangeCount` (fn) L310
-    - `contentChangeCount` (fn) L314
-    - `tableChangeCount` (fn) L318
-    - `workbookBase` (fn) L323
-    - `workbookDiff` (fn) L328
-    - `spreadsheetStructureSummary` (fn) L334
-    - `unifiedDocBlocks` (fn) L378 - Construct the unified full document block list preserving Live Main Document backbone and order
-    - `sectionStats` (fn) L448 - Extract all sections and aggregate their change statistics
-    - `filteredUnifiedBlocks` (fn) L491 - Filtered unified doc blocks
-    - `paginatedPages` (fn) L503 - Paginated Document Pages (full white sheet background)
-    - `mergedLiveBlocks` (fn) L516 - Clean Merged Live Document Preview Blocks (with accepted changes applied, 0 diff clutter)
-    - `mergedLivePages` (fn) L542
-    - `originalLivePages` (fn) L547 - Current Live Main Document Pages
-    - `sideBySideAlignedRows` (fn) L555 - Synchronized Side-by-Side Aligned Rows (so Right document spaces out to match Left document row-for-row)
-    - `currentSectionStat` (fn) L596 - Selected section stat object
-    - `toggleDiffAcceptance` (fn) L610
-    - `handleSelectAll` (fn) L616
-    - `handleDeselectAll` (fn) L620
-    - `performMerge` (fn) L624
-    - `requestMerge` (fn) L637 - Merging replaces Main's workbook with the branch's, so confirm against a row/column preview first.
-    - `handleConfirmMergeSelected` (fn) L646
-    - `handleApproveAndMergeAll` (fn) L654
-    - `handleRejectClick` (fn) L658
-    - `scrollToDiff` (fn) L664
-    - `targetIdx` (fn) L666
+## src/pages/SecFilings/components/MergeReviewModal.tsx (2484 lines) - merge review modal (pages  sec filings components)
+- `formatSubmissionTime` (function) L68
+- `formatRelativeTime` (function) L83
+- `sanitizeTableCells` (const) L98
+    - `c` (fn) L101
+    - `nextC` (fn) L102
+    - `last` (fn) L111
+- `isComparativeDateHeaderCell` (const) L119
+    - `trimmed` (fn) L120
+- `MergeReviewModalProps` (interface) L141
+- `ChangeTypeBadges` (export const) L158 - -------------------------------------------------------------------------
+- `MergeReviewModal` (export const) L237
+    - `handleOpenSpreadsheetToCell` (fn) L267
+    - `changedDiffs` (fn) L273
+    - `spreadsheetDiffs` (fn) L275
+    - `spacingChangeCount` (fn) L307
+    - `typographyChangeCount` (fn) L311
+    - `contentChangeCount` (fn) L315
+    - `tableChangeCount` (fn) L319
+    - `workbookBase` (fn) L324
+    - `workbookDiff` (fn) L329
+    - `spreadsheetStructureSummary` (fn) L335
+    - `unifiedDocBlocks` (fn) L379 - Construct the unified full document block list preserving Live Main Document backbone and order
+    - `sectionStats` (fn) L449 - Extract all sections and aggregate their change statistics
+    - `filteredUnifiedBlocks` (fn) L492 - Filtered unified doc blocks
+    - `paginatedPages` (fn) L504 - Paginated Document Pages (full white sheet background)
+    - `mergedLiveBlocks` (fn) L517 - Clean Merged Live Document Preview Blocks (with accepted changes applied, 0 diff clutter)
+    - `mergedLivePages` (fn) L543
+    - `originalLivePages` (fn) L548 - Current Live Main Document Pages
+    - `sideBySideAlignedRows` (fn) L556 - Synchronized Side-by-Side Aligned Rows (so Right document spaces out to match Left document row-for-row)
+    - `currentSectionStat` (fn) L597 - Selected section stat object
+    - `toggleDiffAcceptance` (fn) L611
+    - `handleSelectAll` (fn) L617
+    - `handleDeselectAll` (fn) L621
+    - `performMerge` (fn) L625
+    - `requestMerge` (fn) L638 - Merging replaces Main's workbook with the branch's, so confirm against a row/column preview first.
+    - `handleConfirmMergeSelected` (fn) L647
+    - `handleApproveAndMergeAll` (fn) L655
+    - `handleRejectClick` (fn) L659
+    - `scrollToDiff` (fn) L665
+    - `targetIdx` (fn) L667
 
 ## src/pages/SecFilings/components/MobileSigningModal.tsx (916 lines) - mobile signing modal (pages  sec filings components)
 - `MobileSigningModalProps` (interface) L45
@@ -307,6 +324,28 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 ## src/pages/SecFilings/components/NewProposalModal.tsx (103 lines) - new proposal modal (pages  sec filings components)
 - `NewProposalModalProps` (interface) L8
 - `NewProposalModal` (export const) L15
+
+## src/pages/SecFilings/components/ScriptChangeCard.tsx (101 lines) - What a block of a script is called to the person reviewing it.
+- `scriptBlockLabel` (export function) L6 - What a block of a script is called to the person reviewing it.
+- `blockText` (const) L17
+- `Before` (const) L29
+- `After` (const) L33
+- `TextChange` (const) L37
+- `CellChanges` (const) L49
+- `ScriptChangeCardProps` (interface) L63
+- `ScriptChangeCard` (export const) L72 - One block of the script that was changed: what it was, what it is now, and whether to take it.
+
+## src/pages/SecFilings/components/ScriptMergeParts.tsx (110 lines) - Who changed the script, against which version, and the one close button.
+- `when` (const) L8
+- `ScriptMergeHeader` (export const) L14 - Who changed the script, against which version, and the one close button.
+- `ToolbarProps` (interface) L42
+- `ScriptMergeToolbar` (export const) L54 - One row: how many changes are taken, select all, jump between changes, and show the rest of the script.
+- `FooterProps` (interface) L73
+- `ScriptMergeFooter` (export const) L87 - Notes, then the decision, in one short bar so the changes keep the screen.
+
+## src/pages/SecFilings/components/ScriptMergeReviewModal.tsx (109 lines) - script merge review modal (pages  sec filings components)
+- `ScriptMergeReviewModalProps` (interface) L7
+- `ScriptMergeReviewModal` (export const) L23 - The merge review for a script: what the contributor changed, line by line (title, storyline, hook line, the script  table's beats), each ...
 
 ## src/pages/SecFilings/components/SpreadsheetReuploadPreviewModal.tsx (699 lines) - spreadsheet reupload preview modal (pages  sec filings components)
 - `SpreadsheetReuploadPreviewModalProps` (interface) L23
@@ -367,9 +406,13 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
     - `handleSave` (fn) L280
     - `handleDelete` (fn) L337
 
-## src/pages/SecFilings/components/VersionHistoryModal.tsx (114 lines) - version history modal (pages  sec filings components)
-- `VersionHistoryModalProps` (interface) L7
-- `VersionHistoryModal` (export const) L16
+## src/pages/SecFilings/components/TemplateCategoryTabs.tsx (27 lines) - The template gallery's tabs.
+- `TemplateCategory` (export type) L1
+- `TemplateCategoryTabs` (export function) L12
+
+## src/pages/SecFilings/components/VersionHistoryModal.tsx (115 lines) - version history modal (pages  sec filings components)
+- `VersionHistoryModalProps` (interface) L8
+- `VersionHistoryModal` (export const) L17
 
 ## src/pages/SecFilings/components/WorkflowAssigneePicker.tsx (202 lines) - Display text stored as the step's `assignedTo` (used by export, cards and the invite modal).
 - `WorkflowAssigneePickerProps` (interface) L11

@@ -4,36 +4,36 @@
 
 Each symbol shows its start line (`L<n>`); read from there to the next symbol's line, not the whole file.
 
-## src/services/secFiling/secFilingCore.ts (975 lines) - sec filing core (services sec filing)
-- `getMainDocument` (export function) L37
-- `saveMainDocument` (export function) L105
-- `getDocumentsList` (export function) L130
-- `getDocumentPreview` (export function) L286
-- `saveDocumentsList` (export function) L325
-- `getAllDocuments` (export function) L335
-- `setActiveDocumentId` (export function) L339
-- `getDocumentContent` (export function) L345
-- `getActiveDocumentId` (export function) L397
-- `openDocument` (export function) L401
-- `createDocumentFromTemplate` (export function) L499
-- `duplicateDocument` (export function) L564
-- `renameDocument` (export function) L612
-- `deleteDocument` (export function) L646
-- `currentMainDocId` (function) L662
-- `getAllVersionHistory` (function) L674
-- `getVersionHistory` (export function) L693 - Snapshots of the open document (older untagged snapshots show for every document).
-- `saveVersionHistory` (export function) L698
-- `restoreVersion` (export function) L711
-- `applyElectronicSignature` (export function) L751
-- `resetToDefault` (export function) L823
-- `DocumentAuthUser` (export interface) L840
-- `canUserAccessDocument` (export function) L855 - Checks whether a user is authorized to view/access a document.
-    - `userEmail` (fn) L863
-    - `docOwner` (fn) L870
-- `isDocumentOwner` (export function) L901
-    - `userEmail` (fn) L906
-- `addDocumentInvitee` (export function) L915
-    - `cleanEmail` (fn) L920
+## src/services/secFiling/secFilingCore.ts (970 lines) - sec filing core (services sec filing)
+- `getMainDocument` (export function) L33
+- `saveMainDocument` (export function) L101
+- `getDocumentsList` (export function) L126
+- `getDocumentPreview` (export function) L282
+- `saveDocumentsList` (export function) L321
+- `getAllDocuments` (export function) L331
+- `setActiveDocumentId` (export function) L335
+- `getDocumentContent` (export function) L341
+- `getActiveDocumentId` (export function) L393
+- `openDocument` (export function) L397
+- `createDocumentFromTemplate` (export function) L495
+- `duplicateDocument` (export function) L559
+- `renameDocument` (export function) L607
+- `deleteDocument` (export function) L641
+- `currentMainDocId` (function) L657
+- `getAllVersionHistory` (function) L669
+- `getVersionHistory` (export function) L688 - Snapshots of the open document (older untagged snapshots show for every document).
+- `saveVersionHistory` (export function) L693
+- `restoreVersion` (export function) L706
+- `applyElectronicSignature` (export function) L746
+- `resetToDefault` (export function) L818
+- `DocumentAuthUser` (export interface) L835
+- `canUserAccessDocument` (export function) L850 - Checks whether a user is authorized to view/access a document.
+    - `userEmail` (fn) L858
+    - `docOwner` (fn) L865
+- `isDocumentOwner` (export function) L896
+    - `userEmail` (fn) L901
+- `addDocumentInvitee` (export function) L910
+    - `cleanEmail` (fn) L915
 
 ## src/services/secFiling/secFilingDiff.ts (498 lines) - sec filing diff (services sec filing)
 - `compactFinancialTableBlock` (export function) L10
@@ -162,7 +162,7 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `onSyncStatus` (export function) L465
 - `setDocReplacedHandler` (export function) L472 - Lets the storage layer drop its in-memory pending copy when the server copy replaces it.
 
-## src/services/secFiling/secFilingSync.ts (316 lines) - Loads filing documents, proposals and version history from the server into the in-memory docStore (secFilingStore.ts) before the SEC page...
+## src/services/secFiling/secFilingSync.ts (321 lines) - Loads filing documents, proposals and version history from the server into the in-memory docStore (secFilingStore.ts) before the SEC page...
 - `ServerSummary` (type) L22
 - `ServerDoc` (type) L27
 - `readLocal` (function) L36
@@ -175,4 +175,4 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `isSecFilingDataHydrated` (export function) L239
 - `ensureProposalLoaded` (function) L243
 - `loadVersions` (function) L254
-- `refreshActiveDocument` (function) L269 - Pick up what other people saved to the open document (and its proposals).
+- `refreshActiveDocument` (export function) L272 - Pick up what other people saved to the open document (and its proposals).

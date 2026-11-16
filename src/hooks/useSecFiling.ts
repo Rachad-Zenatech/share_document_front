@@ -14,10 +14,9 @@ import type {
   SecTableRow,
   AttachedSpreadsheet
 } from '../types/secFiling';
-import { secFilingService, setStorageFailureListener, getProposalInviteUrl } from '../services/secFilingService';
+import { secFilingService, setStorageFailureListener, getProposalInviteUrl, canUserAccessDocument, isDocumentOwner } from '../services/secFilingService';
 import { queryKeys } from '../services/queryKeys';
 import { useAuth } from '../lib/AuthContext';
-import { canUserAccessDocument } from '../services/secFilingService';
 import { toast } from 'sonner';
 import { ZENATECH_LOGO_DATA_URL } from '../data/zenatechLogoAsset';
 import { blockMatchesQuery } from '../utils/secFilingSearch';
@@ -78,7 +77,7 @@ export function useSecFiling() {
   // --------------------------------------------------------------------------
   // 1. ALL STATE & REFS (Strictly ordered at the top)
   // --------------------------------------------------------------------------
-  const [activeRole, setActiveRole] = useState<UserFilingRole>('LEAD_CONTROLLER');
+  const [activeRole, setActiveRole] = useState<UserFilingRole>(() => (user && (user.is_super_admin || isDocumentOwner(secFilingService.getMainDocument(), user)) ? 'LEAD_CONTROLLER' : 'CONTRIBUTOR'));
   const [mainDoc, setMainDoc] = useState<SecFilingDocument>(() => secFilingService.getMainDocument());
   const [proposals, setProposals] = useState<SecChangeProposal[]>(() => secFilingService.getProposals());
   const [versionHistory, setVersionHistory] = useState<SecVersionSnapshot[]>(() =>
@@ -102,9 +101,9 @@ export function useSecFiling() {
   const [redoStack, setRedoStack] = useState<SecBlock[][]>([]);
 
   // Document security verification: Owner, Invited Contributor, or Super Admin
-  const isAccessGranted = useMemo(() => {
-    return canUserAccessDocument(mainDoc, user, proposals);
-  }, [mainDoc, user, proposals]);
+  const isAccessGranted = useMemo(() => canUserAccessDocument(mainDoc, user, proposals), [mainDoc, user, proposals]);
+  // Only the owner (and a super admin) is the Lead Controller and may switch persona; everyone else is a Contributor.
+  const canSwitchRole = !!user && (user.is_super_admin || isDocumentOwner(mainDoc, user));
   const isUndoRedoActionRef = useRef<boolean>(false);
 
   // --------------------------------------------------------------------------
@@ -455,7 +454,7 @@ export function useSecFiling() {
             section: customFt?.section || section,
             title: customFt?.title || 'Schedule of Financial Details',
             headers: customFt?.headers ? [...customFt.headers] : ['Description / Line Item', 'Note Ref', 'Q2 2026 ($)', 'Q2 2025 ($)'],
-            ...(customFt?.headerShading ? { headerShading: customFt.headerShading } : {}),
+            ...(customFt?.headerShading ? { headerShading: customFt.headerShading } : {}), ...(customFt?.headerTextColor ? { headerTextColor: customFt.headerTextColor } : {}), ...(customFt?.boldColumns ? { boldColumns: [...customFt.boldColumns] } : {}),
             ...(customFt?.periodHeaders
               ? {
                   periodHeaders: customFt.periodHeaders.map((header) => ({
@@ -1610,6 +1609,7 @@ export function useSecFiling() {
     updateSpreadsheetCell: handleUpdateSpreadsheetCell,
     assignSpreadsheet: handleAssignSpreadsheet,
     setWorkingBlocks,
-    isAccessGranted
+    isAccessGranted,
+    canSwitchRole
   };
 }

@@ -16,11 +16,9 @@ import {
   UserPlus,
   Crown
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '../../../services/apiClient';
+import { useInviteDirectory } from '../../../hooks/useInviteDirectory';
 import type { SecFilingDocument, SecChangeProposal } from '../../../types/secFiling';
 import type { ContributorPermissions } from '../../../types/collaborator';
-import type { User } from '../../../lib/AuthContext';
 import { ensureGuestInviteToken, getProposalInviteUrl } from '../../../services/secFilingService';
 import { formatWorkflowStepTitle, getStepAssignees } from '../../../services/secWorkflowService';
 import { useDocumentWorkflow } from '../../../hooks/useSecWorkflows';
@@ -31,7 +29,7 @@ import { Input } from '../../../components/ui/input';
 import { Badge } from '../../../components/ui/badge';
 import { Checkbox } from '../../../components/ui/checkbox';
 import { toast } from 'sonner';
-
+import { documentKindLabel, isScriptDocument } from './DocumentRunningHeader';
 interface ContributorInviteModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -90,24 +88,8 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Fetch real users from backend Security & System Directory
-  const { data: systemUsersData = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: async () => {
-      try {
-        const res = await apiClient.get<User[]>('/api/configuration/users');
-        if (Array.isArray(res) && res.length > 0) {
-          return res;
-        }
-      } catch {
-        // Directory unavailable (offline or no permission): the contributor is typed in.
-        // No made-up fallback people: picking one would invite, and give document access
-        // to, an address nobody chose.
-      }
-      return [];
-    },
-    staleTime: 60_000
-  });
+  // The people an invite can go to: this portal's directory, or the Social Media portal's for a script.
+  const { data: systemUsersData = [] } = useInviteDirectory();
 
   const availableUsers = useMemo(() => {
     const list = Array.isArray(systemUsersData) && systemUsersData.length > 0
@@ -334,7 +316,7 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
           </button>
         </div>
 
-        <div className="p-6 space-y-4 text-xs max-h-[70vh] overflow-y-auto">
+        <div className="p-6 space-y-4 text-xs max-h-[calc(100dvh-13rem)] overflow-y-auto">
           {activeTab === 'create' ? (
             <>
               {/* Workflow Task: picking a step fills in the title and its assigned person */}
@@ -558,7 +540,7 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
                       setContributorRole(e.target.value);
                       setGeneratedInvite(null);
                     }}
-                    placeholder="e.g. Senior Financial Analyst"
+                    placeholder={isScriptDocument() ? 'e.g. Content Reviewer' : 'e.g. Senior Financial Analyst'}
                     className="h-8 text-xs"
                   />
                 </div>
@@ -612,7 +594,7 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
                     setDescription(e.target.value);
                     setGeneratedInvite(null);
                   }}
-                  placeholder="e.g. Please update fair value numbers and sign off when finished."
+                  placeholder={isScriptDocument() ? 'e.g. Please tighten the voiceover and check the on-screen text.' : 'e.g. Please update fair value numbers and sign off when finished.'}
                   className="h-8 text-xs"
                 />
               </div>
@@ -643,7 +625,7 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-relaxed">
-                      Edits are isolated in a draft branch. All changes <strong>must be reviewed and merged by a Lead Controller</strong> before reaching the master filing.
+                      Edits are isolated in a draft branch. All changes <strong>must be reviewed and merged by a Lead Controller</strong> before reaching the master {documentKindLabel().toLowerCase()}.
                     </p>
                   </div>
 
@@ -672,11 +654,11 @@ export const ContributorInviteModal: React.FC<ContributorInviteModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                   {(
                     [
-                      { key: 'canEditDocument', label: 'Edit Document Draft', hint: 'Edit blocks in filing' },
+                      { key: 'canEditDocument', label: 'Edit Document Draft', hint: isScriptDocument() ? 'Edit the script' : 'Edit blocks in filing' },
                       { key: 'canEditSpreadsheet', label: 'Edit Attached Sheet', hint: 'Modify linked workbook cells' },
                       { key: 'canMergeAndApprove', label: 'Merge & Approve Rights', hint: 'Direct merge authority' }
                     ] as const
-                  ).map((opt) => (
+                  ).filter((opt) => !(isScriptDocument() && opt.key === 'canEditSpreadsheet')).map((opt) => (
                     <label
                       key={opt.key}
                       className="flex items-start gap-2 p-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/70 dark:bg-zinc-800/40 cursor-pointer hover:border-blue-500 transition-all"

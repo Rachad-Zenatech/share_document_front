@@ -138,7 +138,7 @@ export const SubmitProposalModal: React.FC<SubmitProposalModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-lg sm:max-w-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-0 overflow-hidden shadow-2xl">
+      <DialogContent className="w-full max-w-lg sm:max-w-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-0 overflow-y-auto max-h-[calc(100dvh-1.5rem)] shadow-2xl">
         {/* Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-purple-900 to-indigo-950 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">

@@ -4,5 +4,5 @@
 
 Each symbol shows its start line (`L<n>`); read from there to the next symbol's line, not the whole file.
 
-## src/components/SecFilings/SecFilingDataGate.tsx (71 lines) - An external contributor's link carries a guest token instead of needing a login.
-- `SecFilingDataGate` (export function) L13 - Renders the SEC filing pages only after their documents, proposals and history have  been loaded from the server (they are read synchrono...
+## src/components/SecFilings/SecFilingDataGate.tsx (73 lines) - An external contributor's link carries a guest token instead of needing a login.
+- `SecFilingDataGate` (export function) L14 - Renders the SEC filing pages only after their documents, proposals and history have  been loaded from the server (they are read synchrono...

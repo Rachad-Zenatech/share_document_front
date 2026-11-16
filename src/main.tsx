@@ -10,8 +10,10 @@ import { ThemeProvider } from "next-themes"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import ErrorBoundary from "@/components/common/ErrorBoundary"
 import { installGlobalErrorReporting } from "@/services/errorReporting"
+import { adoptEmbedToken } from "@/lib/embedBridge"
 
 installGlobalErrorReporting();
+adoptEmbedToken(); // a script embedded in the Social Media portal arrives already signed in
 
 // Create a client
 const queryClient = new QueryClient({

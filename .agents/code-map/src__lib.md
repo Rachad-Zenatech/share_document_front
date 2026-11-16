@@ -4,14 +4,25 @@
 
 Each symbol shows its start line (`L<n>`); read from there to the next symbol's line, not the whole file.
 
-## src/lib/AuthContext.tsx (207 lines) - auth context (lib)
-- `User` (export interface) L4
-- `Role` (export interface) L14
-- `PermissionsData` (interface) L27
-- `AuthContextType` (interface) L35
-- `AuthContext` (const) L48
-- `AuthProvider` (export function) L50
-- `useAuth` (export function) L200
+## src/lib/AuthContext.tsx (221 lines) - auth context (lib)
+- `User` (export interface) L5
+- `Role` (export interface) L15
+- `PermissionsData` (interface) L28
+- `AuthContextType` (interface) L36
+- `AuthContext` (const) L49
+- `AuthProvider` (export function) L51
+- `useAuth` (export function) L214
+
+## src/lib/embedBridge.ts (65 lines) - The hosting portal signs this person in by putting a short-lived token in the URL's #token=; it is kept for this tab and the URL cleaned.
+- `isEmbedRoute` (export const) L10
+- `isEditorOnly` (export const) L13 - ?mode=editor`: only the script editor, the hosting portal runs the review around it.
+- `adoptEmbedToken` (export function) L16 - The hosting portal signs this person in by putting a short-lived token in the URL's #token=; it is kept for this tab and the URL cleaned.
+- `isEmbedded` (export const) L24
+- `allowedParentOrigins` (export function) L26
+- `originOf` (const) L31
+- `parentOrigin` (export function) L40 - The hosting page's origin when it is on the allow-list, else null (from ?parent=, else the referrer).
+- `postToParent` (export function) L47
+- `listenToParent` (export function) L53 - Calls `handler` for each valid message from the hosting page.
 
 ## src/lib/userDepartment.ts (170 lines) - user department (lib)
 - `isGenericRole` (function) L22

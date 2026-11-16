@@ -385,7 +385,7 @@ export async function exportSecFilingToDocx(doc: SecFilingDocument): Promise<Blo
                       text: line,
                       bold: true,
                       size: 18,
-                      color: '0E2841',
+                      color: (block.headerTextColor || '#0E2841').replace('#', ''),
                       font: 'Calibri'
                     })
                   ]
@@ -877,7 +877,7 @@ export function printSecFiling(doc: SecFilingDocument) {
                 return `
                   <table style="margin-top: ${topMargin};">
                     <thead>
-                      <tr style="background-color: ${headerBg};">
+                      <tr style="background-color: ${headerBg};${b.headerTextColor ? ` color: ${b.headerTextColor};` : ''}">
                         ${b.headers
                           .map((h, i) => {
                             const cleaned = /^Col\s*\d+$/i.test(h?.trim() || '') ? '' : interpolateVariables(h || '', doc.attachedSpreadsheet);

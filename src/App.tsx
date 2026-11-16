@@ -40,6 +40,7 @@ const MobileSignerPage = lazy(() => import("./pages/SecFilings/MobileSignerPage"
 const SpreadsheetHubPage = lazy(() => import("./pages/SecFilings/SpreadsheetHubPage").then(m => ({ default: m.SpreadsheetHubPage })));
 
 const WorkflowAssignmentsPage = lazy(() => import("./pages/SecFilings/WorkflowAssignmentsPage"));
+const ScriptEmbedPage = lazy(() => import("./pages/SecFilings/embed/ScriptEmbedPage"));
 
 function SpreadsheetHubRoute() {
   return (
@@ -131,7 +132,6 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/pending-access" element={<PendingAccess />} />
-
             {/* Document Routes & Aliases */}
             <Route path="/document" element={<Navigate to="/sec-filings" replace />} />
             <Route path="/documents" element={<Navigate to="/sec-filings" replace />} />
@@ -146,6 +146,7 @@ function App() {
               }
             />
 
+            <Route path="/embed/script/:documentId" element={<ScriptEmbedPage />} /> {/* Social Media portal dialog */}
             {/* Main app layout routes (AppShell stays permanently mounted) */}
             <Route
               element={

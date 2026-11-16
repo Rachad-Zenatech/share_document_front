@@ -1,3 +1,4 @@
+import { isEmbedded, isEmbedRoute, postToParent } from '../lib/embedBridge';
 import { isGuestSession } from './guestInvite';
 
 export class ApiError extends Error {
@@ -20,6 +21,7 @@ export const POST_LOGIN_REDIRECT_KEY = 'postLoginRedirect';
 export const SESSION_EXPIRED_REASON = 'session_expired';
 
 let sessionExpiryHandled = false;
+let lastEmbedAuthRequestAt = 0;
 
 export function handleUnauthorized(res: Response): void {
   if (res.status !== 401 || sessionExpiryHandled) return;
@@ -27,6 +29,16 @@ export function handleUnauthorized(res: Response): void {
   if (window.location.pathname.startsWith('/login')) return;
   // Guest contributors have no session to expire; app-wide calls (permissions...) 401 for them.
   if (isGuestSession()) return;
+  // Embedded editor gets its token from the hosting portal; ask it for a fresh one instead of redirecting to /login.
+  if (isEmbedRoute() && isEmbedded()) {
+    const now = Date.now();
+    if (now - lastEmbedAuthRequestAt > 5000) {
+      lastEmbedAuthRequestAt = now;
+      postToParent({ type: 'script-embed:auth-required' });
+      window.dispatchEvent(new Event('script-embed:auth-required'));
+    }
+    return;
+  }
 
   sessionExpiryHandled = true;
   sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, window.location.pathname + window.location.search);

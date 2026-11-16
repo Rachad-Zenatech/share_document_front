@@ -4,6 +4,7 @@ import { CloudOff, Loader2, RotateCcw } from 'lucide-react';
 import { Button } from '../ui/button';
 import { hydrateSecFilingData, isSecFilingDataHydrated } from '../../services/secFiling/secFilingSync';
 import { getGuestInviteToken } from '../../services/guestInvite';
+import { useDocumentLiveSync } from '../../hooks/useDocumentLiveSync';
 
 /**
  * Renders the SEC filing pages only after their documents, proposals and history have
@@ -18,6 +19,7 @@ export default function SecFilingDataGate({ children }: { children: ReactNode })
   const [ready, setReady] = useState(() => isSecFilingDataHydrated() && !proposalId);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  useDocumentLiveSync(); // the open document refreshes when the server says someone changed it
 
   useEffect(() => {
     let cancelled = false;

@@ -31,6 +31,8 @@ import {
   UploadCloud,
   Loader2
 } from 'lucide-react';
+import { useDocumentSelection } from '../../hooks/useDocumentSelection';
+import { DocumentSelectionBar } from './components/DocumentSelectionBar';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
@@ -56,6 +58,7 @@ import { toast } from 'sonner';
 import { secFilingService, canUserAccessDocument, isDocumentOwner } from '../../services/secFilingService';
 import { docStore } from '../../services/secFiling/secFilingStore';
 import { DOCUMENT_TEMPLATES } from '../../data/secDocumentTemplates';
+import TemplateCategoryTabs, { type TemplateCategory } from './components/TemplateCategoryTabs';
 import type { DocumentTemplateDefinition } from '../../data/secDocumentTemplates';
 import type { SecDocumentSummary, SecFilingDocument, SecBlock } from '../../types/secFiling';
 import { exportSecFilingToDocx, downloadBlob } from '../../utils/secFilingExport';
@@ -246,7 +249,7 @@ export default function CreateSecFilingPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState<'last_modified' | 'title' | 'last_opened'>('last_modified');
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
-  const [templateCategory, setTemplateCategory] = useState<'all' | 'sec' | 'operations' | 'executive'>('all');
+  const [templateCategory, setTemplateCategory] = useState<TemplateCategory>('all');
 
   // Modal states
   const [renameDocId, setRenameDocId] = useState<string | null>(null);
@@ -327,6 +330,9 @@ export default function CreateSecFilingPage() {
     return list;
   }, [documents, user, searchQuery, ownershipFilter, sortBy]);
 
+  const visibleIds = useMemo(() => filteredDocuments.map((d) => d.id), [filteredDocuments]);
+  const selection = useDocumentSelection(visibleIds);
+
   // Handlers
   const handleOpenDoc = (id: string) => {
     secFilingService.openDocument(id);
@@ -379,6 +385,14 @@ export default function CreateSecFilingPage() {
     secFilingService.deleteDocument(deleteDocId);
     toast.success('Document removed');
     setDeleteDocId(null);
+    refreshDocuments();
+  };
+
+  const handleDeleteSelected = () => {
+    const ids = selection.selectedIds;
+    ids.forEach((id) => secFilingService.deleteDocument(id));
+    toast.success(`${ids.length} document${ids.length === 1 ? '' : 's'} removed`);
+    selection.clear();
     refreshDocuments();
   };
 
@@ -1031,6 +1045,15 @@ export default function CreateSecFilingPage() {
           </div>
         </div>
 
+        <DocumentSelectionBar
+          total={filteredDocuments.length}
+          count={selection.count}
+          allSelected={selection.allSelected}
+          onToggleAll={selection.toggleAll}
+          onClear={selection.clear}
+          onDeleteSelected={handleDeleteSelected}
+        />
+
         {/* ----------------------------------------------------------- */}
         {/* DOCUMENTS GRID VIEW (Clean Document Style)               */}
         {/* ----------------------------------------------------------- */}
@@ -1052,6 +1075,14 @@ export default function CreateSecFilingPage() {
                     onClick={() => handleOpenDoc(doc.id)}
                     className="aspect-[1/1.22] bg-white dark:bg-slate-900/90 p-3 cursor-pointer border-b border-slate-100 dark:border-slate-800/80 overflow-hidden relative select-none"
                   >
+                    <div className="absolute top-2 left-2 z-10" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selection.selected.has(doc.id)}
+                        onCheckedChange={() => selection.toggle(doc.id)}
+                        className="bg-white dark:bg-slate-900"
+                        aria-label={`Select ${doc.title}`}
+                      />
+                    </div>
                     {isActiveFiling && (
                       <div className="absolute top-2 right-2 z-10">
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-600/90 text-white text-[9px] font-medium shadow-xs backdrop-blur-xs">
@@ -1171,6 +1202,13 @@ export default function CreateSecFilingPage() {
                       }`}
                     >
                       <td className="px-4 py-3 flex items-center gap-2.5 font-medium text-slate-800 dark:text-slate-200">
+                        <span onClick={(e) => e.stopPropagation()} className="flex items-center">
+                          <Checkbox
+                            checked={selection.selected.has(doc.id)}
+                            onCheckedChange={() => selection.toggle(doc.id)}
+                            aria-label={`Select ${doc.title}`}
+                          />
+                        </span>
                         <div className="w-5 h-5 rounded-xs flex items-center justify-center shrink-0 bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 p-0.5 overflow-hidden">
                           <img src={ZENATECH_LOGO_DATA_URL} alt="ZenaTech" className="w-full h-full object-contain" />
                         </div>
@@ -1269,49 +1307,7 @@ export default function CreateSecFilingPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Category Tabs */}
-          <div className="flex items-center gap-2 border-b border-border pb-2 text-xs">
-            <button
-              onClick={() => setTemplateCategory('all')}
-              className={`px-3 py-1.5 rounded-full font-medium ${
-                templateCategory === 'all'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              All Templates
-            </button>
-            <button
-              onClick={() => setTemplateCategory('sec')}
-              className={`px-3 py-1.5 rounded-full font-medium ${
-                templateCategory === 'sec'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              SEC Filings
-            </button>
-            <button
-              onClick={() => setTemplateCategory('operations')}
-              className={`px-3 py-1.5 rounded-full font-medium ${
-                templateCategory === 'operations'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              Checklists & Ops
-            </button>
-            <button
-              onClick={() => setTemplateCategory('executive')}
-              className={`px-3 py-1.5 rounded-full font-medium ${
-                templateCategory === 'executive'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              Proposals & Memos
-            </button>
-          </div>
+          <TemplateCategoryTabs value={templateCategory} onChange={setTemplateCategory} />
 
           {/* Templates Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 py-3">

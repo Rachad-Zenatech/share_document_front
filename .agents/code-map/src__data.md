@@ -7,6 +7,9 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 ## src/data/defaultTrialBalanceSheet.ts (17 lines) - Pre-loaded Trial Balance master data from sheet '06.30.26 TB' (Rows 1 to 272, Columns A to AW)
 - `DEFAULT_TRIAL_BALANCE_SHEET` (export const) L5
 
+## src/data/documentTemplateRegistry.ts (96 lines) - Every template offered when creating a document (re-exported by secDocumentTemplates.ts).
+- `DOCUMENT_TEMPLATES` (export const) L14 - Every template offered when creating a document (re-exported by secDocumentTemplates.ts).
+
 ## src/data/financialTableTemplates.ts (352 lines) - Structure copied into a financial_table block.
 - `FinancialTableTemplate` (export interface) L13
 - `FINANCIAL_TABLE_TEMPLATES` (export const) L24
@@ -18,7 +21,11 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `INITIAL_PROPOSALS` (export const) L16014
 - `INITIAL_VERSION_HISTORY` (export const) L16016
 
-## src/data/secDocumentTemplates.ts (1022 lines) - sec document templates (data)
+## src/data/scriptTableTemplates.ts (43 lines) - script table templates (data)
+- `SCRIPT_BEATS_TEMPLATE` (export const) L13
+- `SCRIPT_TABLE_TEMPLATES` (export const) L42 - The script tables (only the beats table for now).
+
+## src/data/secDocumentTemplates.ts (950 lines) - sec document templates (data)
 - `DocumentTemplateDefinition` (export interface) L5
 - `generateOnboardingChecklistDoc` (export function) L16
 - `generateOffboardingChecklistDoc` (export function) L160
@@ -30,7 +37,14 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `generate6KDoc` (export function) L770
 - `generateS1Doc` (export function) L859
 - `generateDef14aDoc` (export function) L908
-- `DOCUMENT_TEMPLATES` (export const) L949
+
+## src/data/socialMediaScriptTemplate.ts (71 lines) - social media script template (data)
+- `SCRIPT_TABLE_HEADERS` (export const) L15 - Social Media Script": the script page of the "Shaun Instagram Reels - AV Scripts" document, as it is in the Social Media  portal: a numbe...
+- `SCRIPT_HEADER_FILL` (export const) L16
+- `SCRIPT_BAND_FILL` (export const) L17
+- `SCRIPT_COLUMN_WIDTHS` (export const) L18
+- `beatRows` (function) L42
+- `generateSocialMediaScriptDoc` (export function) L51
 
 ## src/data/zenatechLogoAsset.ts (4 lines) - zenatech logo asset (data)
 - `ZENATECH_LOGO_DATA_URL` (export const) L3

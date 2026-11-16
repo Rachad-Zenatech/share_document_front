@@ -4,30 +4,33 @@
 
 Each symbol shows its start line (`L<n>`); read from there to the next symbol's line, not the whole file.
 
-## src/pages/SecFilings/CreateSecFilingPage.tsx (1807 lines) - create sec filing page (pages  sec filings)
-- `PublicCompanyEntity` (interface) L68
-- `DocumentThumbnailPreview` (function) L122
-    - `fullDoc` (fn) L123
-    - `page1Blocks` (fn) L127
-- `CreateSecFilingPage` (export function) L236
-    - `navigate` (fn) L237
-    - `allSpreadsheets` (fn) L259
-    - `getAssignedSpreadsheet` (fn) L260
-    - `refreshDocuments` (fn) L294 - Refresh document list
-    - `filteredDocuments` (fn) L299 - Filtered & Sorted Documents
-    - `handleOpenDoc` (fn) L331 - Handlers
-    - `handleCreateFromTemplate` (fn) L336
-    - `handleStartBlank` (fn) L346
-    - `handleDuplicate` (fn) L356
-    - `handleOpenRename` (fn) L364
-    - `handleSaveRename` (fn) L369
-    - `handleConfirmDelete` (fn) L377
-    - `handleExportDoc` (fn) L385
-    - `handleFilePicked` (fn) L396
-    - `handleImportFileInputChange` (fn) L415
-    - `handleExecuteImportAndLock` (fn) L424
-    - `formatDateLabel` (fn) L482
-    - `handleCreateCustomFilingWizard` (fn) L490 - Step 4 of custom multi-company wizard
+## src/pages/SecFilings/CreateSecFilingPage.tsx (1803 lines) - create sec filing page (pages  sec filings)
+- `PublicCompanyEntity` (interface) L71
+- `DocumentThumbnailPreview` (function) L125
+    - `fullDoc` (fn) L126
+    - `page1Blocks` (fn) L130
+- `CreateSecFilingPage` (export function) L239
+    - `navigate` (fn) L240
+    - `allSpreadsheets` (fn) L262
+    - `getAssignedSpreadsheet` (fn) L263
+    - `refreshDocuments` (fn) L297 - Refresh document list
+    - `filteredDocuments` (fn) L302 - Filtered & Sorted Documents
+    - `visibleIds` (fn) L333
+    - `selection` (fn) L334
+    - `handleOpenDoc` (fn) L337 - Handlers
+    - `handleCreateFromTemplate` (fn) L342
+    - `handleStartBlank` (fn) L352
+    - `handleDuplicate` (fn) L362
+    - `handleOpenRename` (fn) L370
+    - `handleSaveRename` (fn) L375
+    - `handleConfirmDelete` (fn) L383
+    - `handleDeleteSelected` (fn) L391
+    - `handleExportDoc` (fn) L399
+    - `handleFilePicked` (fn) L410
+    - `handleImportFileInputChange` (fn) L429
+    - `handleExecuteImportAndLock` (fn) L438
+    - `formatDateLabel` (fn) L496
+    - `handleCreateCustomFilingWizard` (fn) L504 - Step 4 of custom multi-company wizard
 
 ## src/pages/SecFilings/MobileSignerPage.tsx (335 lines) - mobile signer page (pages  sec filings)
 - `MobileSignerPage` (export const) L12

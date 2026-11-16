@@ -112,7 +112,7 @@ export function sanitizeTableBlock(block: SecFinancialTableBlock): SecFinancialT
   return {
     title: block.title || 'Schedule of Financial Details',
     headers,
-    ...(block.headerShading ? { headerShading: block.headerShading } : {}),
+    ...(block.headerShading ? { headerShading: block.headerShading } : {}), ...(block.headerTextColor ? { headerTextColor: block.headerTextColor } : {}), ...(block.boldColumns ? { boldColumns: [...block.boldColumns] } : {}),
     ...(periodHeaders && periodHeaders.length > 0 ? { periodHeaders } : {}),
     columnAlignments,
     ...(block.columnWidths && block.columnWidths.length === colCount ? { columnWidths: [...block.columnWidths] } : {}),

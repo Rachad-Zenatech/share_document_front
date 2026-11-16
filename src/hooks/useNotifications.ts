@@ -34,6 +34,12 @@ export interface Notification {
 
 type NotificationListener = (payload: any) => void;
 
+/**
+ * WORKFLOW_SYNC only tells open editors to read a document again (one is sent per script saved, so a file with 10
+ * scripts sends 10): it is never something to show the person.
+ */
+export const isSilentNotification = (payload: { type?: string } | null | undefined): boolean => payload?.type === "WORKFLOW_SYNC";
+
 const RECONNECT_DELAY_MS = 5000;
 const MAX_AUTH_RETRIES = 3;
 // Once credentials are exhausted, keep a slow poll rather than giving up, so
@@ -144,26 +150,41 @@ function openSocket() {
   }
 }
 
+// A page that unmounts and mounts again straight away (React StrictMode in development, or a route change that
+// re-creates its subscribers) must keep the socket: closing one that is still connecting only logs "closed before the
+// connection is established" and starts over. So the socket is closed only once nobody has subscribed for a moment.
+const TEARDOWN_GRACE_MS = 1500;
+let teardownTimer: ReturnType<typeof setTimeout> | null = null;
+
+function closeIfUnused() {
+  teardownTimer = null;
+  if (listeners.size > 0) return;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  authRetries = 0;
+  if (socket) {
+    const ws = socket;
+    socket = null;
+    // Detach first so teardown does not schedule a reconnect.
+    ws.onclose = null;
+    ws.close();
+  }
+}
+
 function subscribeToNotifications(listener: NotificationListener) {
+  if (teardownTimer) {
+    clearTimeout(teardownTimer);
+    teardownTimer = null;
+  }
   listeners.add(listener);
   openSocket();
 
   return () => {
     listeners.delete(listener);
-    if (listeners.size > 0) return;
-
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-    authRetries = 0;
-    if (socket) {
-      const ws = socket;
-      socket = null;
-      // Detach first so teardown does not schedule a reconnect.
-      ws.onclose = null;
-      ws.close();
-    }
+    if (listeners.size > 0 || teardownTimer) return;
+    teardownTimer = setTimeout(closeIfUnused, TEARDOWN_GRACE_MS);
   };
 }
 

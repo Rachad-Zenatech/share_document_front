@@ -90,6 +90,10 @@ export interface SecFinancialTableBlock {
   headers: string[];
   periodHeaders?: SecTablePeriodHeader[];
   headerShading?: string;
+  /** Colour of the header row's text (for a dark `headerShading`). */
+  headerTextColor?: string;
+  /** Columns (0-based) whose cells are bold in every row. */
+  boldColumns?: number[];
   columnAlignments: ('left' | 'center' | 'right')[];
   columnWidths?: string[];
   rows: SecTableRow[];

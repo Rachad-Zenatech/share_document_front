@@ -1,4 +1,5 @@
 import type { SecFinancialTableBlock } from './secFiling';
+import type { DocumentType } from './documentType';
 
 /**
  * The structure a template copies into a `financial_table` block. Matches
@@ -7,7 +8,7 @@ import type { SecFinancialTableBlock } from './secFiling';
  */
 export type SecFinancialTableTemplateBlock = Pick<
   SecFinancialTableBlock,
-  'title' | 'headers' | 'headerShading' | 'columnAlignments' | 'columnWidths' | 'rows' | 'footnotes'
+  'title' | 'headers' | 'headerShading' | 'headerTextColor' | 'boldColumns' | 'columnAlignments' | 'columnWidths' | 'rows' | 'footnotes'
   | 'periodHeaders'
 >;
 
@@ -24,6 +25,8 @@ export interface SecFinancialTableTemplate {
   sortOrder: number;
   /** Seeded templates can be edited but not deleted. */
   isBuiltin: boolean;
+  /** Which kind of document the template is for (SEC filings and scripts have different tables). */
+  documentType: DocumentType;
   block: SecFinancialTableTemplateBlock;
   createdAt: string;
   updatedAt: string;
@@ -42,6 +45,7 @@ export interface SecFinancialTableTemplateCreate {
   icon?: string;
   color?: string;
   sortOrder?: number;
+  documentType?: DocumentType;
   templateKey?: string;
   block: SecFinancialTableTemplateBlock;
 }

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
+import { isEmbedded, isEmbedRoute, postToParent } from '../../lib/embedBridge';
 import { Loader2, ShieldAlert, ArrowLeft } from 'lucide-react';
 import { Button } from '../ui/button';
 
@@ -13,6 +14,13 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ navigationCode, actionCode = 'VIEW', children }: ProtectedRouteProps) {
   const { user, roles, isLoading, hasPermission } = useAuth();
   const navigate = useNavigate();
+  const embedded = isEmbedRoute() && isEmbedded();
+
+  useEffect(() => {
+    if (!isLoading && !user && embedded) {
+      postToParent({ type: 'script-embed:auth-required' });
+    }
+  }, [isLoading, user, embedded]);
 
   if (isLoading) {
     return (
@@ -23,6 +31,14 @@ export default function ProtectedRoute({ navigationCode, actionCode = 'VIEW', ch
   }
 
   if (!user) {
+    if (embedded) {
+      return (
+        <div className="flex h-screen w-full items-center justify-center gap-2 bg-slate-50 text-sm text-slate-600 dark:bg-zinc-950 dark:text-slate-300">
+          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+          <span>Reconnecting session…</span>
+        </div>
+      );
+    }
     return <Navigate to="/login" replace />;
   }
 

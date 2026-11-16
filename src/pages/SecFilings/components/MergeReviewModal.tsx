@@ -63,6 +63,7 @@ import { EmbeddedSpreadsheetDiffViewer } from './EmbeddedSpreadsheetDiffViewer';
 import { SpreadsheetReuploadPreviewModal } from './SpreadsheetReuploadPreviewModal';
 import { computeWorkbookReuploadDiff } from '../../../utils/spreadsheetReuploadDiff';
 import { secFilingService } from '../../../services/secFilingService';
+import { DocumentRunningTitle } from './DocumentRunningHeader';
 
 function formatSubmissionTime(dateString?: string): string {
   if (!dateString) return '';
@@ -677,6 +678,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        showCloseButton={false}
         className="p-0 overflow-hidden flex flex-col bg-slate-100 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-800 shadow-2xl transition-all !max-w-[98vw] !w-[98vw] !h-[96vh] sm:!max-w-[98vw] sm:!w-[98vw] sm:!h-[96vh] max-w-[98vw] sm:max-w-[98vw] w-[98vw] sm:w-[98vw] h-[96vh] sm:h-[96vh]"
       >
         <DialogTitle className="sr-only">Merge Review & Controller Authority</DialogTitle>
@@ -1235,9 +1237,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                     <div>
                       {/* Document Header */}
                       <div className="pb-3 mb-6 border-b border-slate-200 flex items-center justify-between text-[11px] text-slate-500 font-sans select-none">
-                        <span className="font-semibold tracking-tight text-[#0E2841]">
-                          ZenaTech, Inc. — Form 6-K Interim Report
-                        </span>
+                        <span className="font-semibold tracking-tight text-[#0E2841]"><DocumentRunningTitle /></span>
                         <span className="text-[10px] uppercase tracking-wider font-mono bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 mr-24">
                           Live Document Preview • v{mainDoc.versionNumber + 1} Draft
                         </span>
@@ -1286,9 +1286,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                     <div>
                       {/* Document Header */}
                       <div className="pb-3 mb-6 border-b border-slate-200 flex items-center justify-between text-[11px] text-slate-500 font-sans select-none">
-                        <span className="font-semibold tracking-tight text-[#0E2841]">
-                          ZenaTech, Inc. — Form 6-K Interim Report
-                        </span>
+                        <span className="font-semibold tracking-tight text-[#0E2841]"><DocumentRunningTitle /></span>
                         <span className="text-[10px] uppercase tracking-wider font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 mr-24">
                           Current Live Main Version (v{mainDoc.versionNumber})
                         </span>
@@ -1338,9 +1336,7 @@ export const MergeReviewModal: React.FC<MergeReviewModalProps> = ({
                   <div>
                     {/* Document Header */}
                     <div className="pb-3 mb-6 border-b border-slate-200 flex items-center justify-between text-[11px] text-slate-500 font-sans select-none">
-                      <span className="font-semibold tracking-tight text-[#0E2841]">
-                        ZenaTech, Inc. — Form 6-K Interim Report
-                      </span>
+                      <span className="font-semibold tracking-tight text-[#0E2841]"><DocumentRunningTitle /></span>
                       <span className="text-[10px] uppercase tracking-wider font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200 mr-24">
                         Track Changes Review • Page {page.pageNumber} of {paginatedPages.length}
                       </span>

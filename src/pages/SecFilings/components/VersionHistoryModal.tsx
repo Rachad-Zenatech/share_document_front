@@ -1,5 +1,6 @@
 import { History, RotateCcw, Clock, User, CheckCircle2 } from 'lucide-react';
 import type { SecVersionSnapshot } from '../../../types/secFiling';
+import { documentKindLabel } from './DocumentRunningHeader';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
@@ -28,7 +29,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
           <div className="flex items-center gap-2">
             <History className="w-5 h-5 text-blue-600" />
             <DialogTitle className="text-base font-bold text-slate-900 dark:text-zinc-100">
-              SEC Filing Version History & Revisions
+              {documentKindLabel()} Version History & Revisions
             </DialogTitle>
           </div>
         </DialogHeader>

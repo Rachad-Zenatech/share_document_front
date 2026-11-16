@@ -6,13 +6,9 @@ import type {
 } from '../../types/secFiling';
 import { INITIAL_SEC_FILING_DOC, INITIAL_VERSION_HISTORY } from '../../data/initialSecFilingData';
 import {
-  generateOnboardingChecklistDoc,
-  generateOffboardingChecklistDoc,
-  generateBlankDocument,
-  generate10QDoc,
-  generate10KDoc,
-  generate8KDoc,
-  generateProjectProposalDoc
+  DOCUMENT_TEMPLATES,
+  generateOnboardingChecklistDoc, generateOffboardingChecklistDoc, generateBlankDocument,
+  generate10QDoc, generate10KDoc, generate8KDoc, generateProjectProposalDoc
 } from '../../data/secDocumentTemplates';
 import {
   docStore,
@@ -523,9 +519,8 @@ export function createDocumentFromTemplate(
       case 'proposal':
         newDoc = generateProjectProposalDoc(title);
         break;
-      case 'blank':
-      default:
-        newDoc = generateBlankDocument(title);
+      default: // the other templates of the gallery (Social Media Script...); an unknown id is a blank document
+        newDoc = (DOCUMENT_TEMPLATES.find((t) => t.id === templateId && t.id !== 'blank')?.generateDoc ?? (() => generateBlankDocument(title)))(customTitle);
         break;
     }
 

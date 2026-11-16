@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { SecBlock, SecBlockType, SecBlockDiff, SecBlockSpacing, AttachedSpreadsheet } from '../../../types/secFiling';
 import { BlockItem } from './BlockItem';
+import { DocumentPageFooter, DocumentRunningTitle, documentFontFamily, documentPeriodLabel } from './DocumentRunningHeader';
 import { InlineAddBlock } from './InlineAddBlock';
 import type { FinancialTableTemplate } from '../../../data/financialTableTemplates';
 import { paginateBlocks } from '../../../utils/secFilingPagination';
@@ -241,7 +242,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
   return (
     <div className="w-full flex flex-col items-center space-y-3">
       {/* Document Canvas Header & Ribbon Strip */}
-      <div ref={toolbarRef} className={`${sheetWidthClass} flex items-center justify-between px-4 py-2 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-xl border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-300 shadow-sm sticky top-[108px] z-20 transition-all duration-150`}>
+      <div ref={toolbarRef} data-chrome className={`${sheetWidthClass} flex items-center justify-between px-4 py-2 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-xl border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-300 shadow-sm sticky top-[108px] z-20 transition-all duration-150`}>
         <div className="flex items-center gap-3">
           {/* Document / Block Mode Indicator & Page Count */}
           <div className="flex items-center gap-1.5 font-bold text-[#0E2841] dark:text-blue-400">
@@ -517,7 +518,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
 
       {/* Document Horizontal Ruler */}
       {showRuler && viewMode === 'word' && (
-        <div className={`${sheetWidthClass} bg-slate-200 dark:bg-zinc-800 rounded-t-sm border-x border-t border-slate-300 dark:border-zinc-700 select-none overflow-hidden transition-all duration-150`}>
+        <div data-chrome className={`${sheetWidthClass} bg-slate-200 dark:bg-zinc-800 rounded-t-sm border-x border-t border-slate-300 dark:border-zinc-700 select-none overflow-hidden transition-all duration-150`}>
           <div className="flex items-center h-5 text-[9px] font-mono text-slate-600 dark:text-zinc-400">
             {/* Left 1-inch margin gray zone */}
             <div className="w-12 sm:w-16 md:w-20 lg:w-22 bg-slate-300 dark:bg-zinc-700 h-full border-r border-slate-400 flex items-center justify-center font-bold text-[8px]">
@@ -627,22 +628,20 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
                 } mb-8 relative transition-all duration-200 flex flex-col justify-between overflow-hidden`}
                 style={{
                   minHeight: viewMode === 'word' ? '1056px' : 'auto',
-                  fontFamily: viewMode === 'word' ? 'Calibri, "Segoe UI", Arial, sans-serif' : undefined
+                  fontFamily: documentFontFamily(viewMode)
                 }}
               >
                 {/* Floating Page Number Indicator on Top Corner */}
-                <div className="absolute right-4 top-3 text-[10px] font-mono font-bold text-slate-400 bg-slate-100 dark:bg-zinc-800 px-2.5 py-0.5 rounded-full select-none z-10 border border-slate-200 dark:border-zinc-700">
+                <div data-chrome className="absolute right-4 top-3 text-[10px] font-mono font-bold text-slate-400 bg-slate-100 dark:bg-zinc-800 px-2.5 py-0.5 rounded-full select-none z-10 border border-slate-200 dark:border-zinc-700">
                   Page {page.pageNumber} of {pages.length}
                 </div>
 
                 <div className="relative z-10">
                   {/* Document Header */}
                   <div className="pb-3 mb-5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400 font-sans select-none">
-                    <span className="font-semibold tracking-tight text-[#0E2841] dark:text-blue-400">
-                      ZenaTech, Inc. — Form 6-K Interim Report
-                    </span>
+                    <span className="font-semibold tracking-tight text-[#0E2841] dark:text-blue-400"><DocumentRunningTitle /></span>
                     <span className="text-[10px] uppercase tracking-wider font-mono bg-slate-100 dark:bg-zinc-800 px-2 py-0.5 rounded">
-                      {viewMode === 'blocks' ? `Page ${page.pageNumber} • Block View` : 'Six Months Ended June 30, 2026'}
+                      {viewMode === 'blocks' ? `Page ${page.pageNumber} • Block View` : documentPeriodLabel('Six Months Ended June 30, 2026')}
                     </span>
                   </div>
 
@@ -697,14 +696,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
                   </div>
                 </div>
 
-                {/* Document Page Footer */}
-                <div className="pt-6 mt-8 border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400 font-sans select-none relative z-10">
-                  <span className="italic">Confidential — Review Copy (v22)</span>
-                  <span className="font-bold text-[#0E2841] dark:text-blue-400">
-                    Page {page.pageNumber} of {pages.length}
-                  </span>
-                  <span>Unaudited</span>
-                </div>
+                <DocumentPageFooter page={page.pageNumber} pages={pages.length} />
               </div>
 
               {/* Visual Page Break Gap between Sheets */}
@@ -730,15 +722,13 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
             } transition-all duration-200 relative overflow-hidden`}
             style={{
               minHeight: '1100px',
-              fontFamily: viewMode === 'word' ? 'Calibri, "Segoe UI", Arial, sans-serif' : undefined
+              fontFamily: documentFontFamily(viewMode)
             }}
           >
             {/* Header */}
             <div className="pb-4 mb-6 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400 font-sans select-none relative z-10">
-              <span className="font-semibold tracking-tight text-[#0E2841] dark:text-blue-400">
-                ZenaTech, Inc. — Form 6-K Interim Report
-              </span>
-              <span>Six Months Ended June 30, 2026</span>
+              <span className="font-semibold tracking-tight text-[#0E2841] dark:text-blue-400"><DocumentRunningTitle /></span>
+              <span>{documentPeriodLabel('Six Months Ended June 30, 2026')}</span>
             </div>
 
             {/* Top Add Block Bar */}

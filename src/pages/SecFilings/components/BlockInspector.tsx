@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { SecBlock } from '../../../types/secFiling';
 import { MediaBucketModal } from './MediaBucketModal';
+import { blockTypeLabel } from './DocumentRunningHeader';
 import { mediaBucketService } from '../../../services/mediaBucketService';
 import { ZENATECH_LOGO_DATA_URL } from '../../../data/zenatechLogoAsset';
 import { Input } from '../../../components/ui/input';
@@ -79,9 +80,7 @@ export const BlockInspector: React.FC<BlockInspectorProps> = ({
             Block Type
           </label>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs capitalize">
-              {block.type.replace('_', ' ')}
-            </Badge>
+            <Badge variant="outline" className="font-mono text-xs capitalize">{blockTypeLabel(block.type)}</Badge>
             <span className="text-[11px] text-slate-400 font-mono">ID: {block.id}</span>
           </div>
         </div>

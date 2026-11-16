@@ -39,19 +39,31 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `getGuestInviteToken` (export function) L25 - The guest token of the current page, if it is a contributor link opened as a guest.
 - `isGuestSession` (export function) L31
 
-## src/services/helper.ts (53 lines) - The response's raw `detail`, which may be an object (e.g.
-- `ApiError` (export class) L3
-- `getApiErrorStatus` (export function) L15
-- `POST_LOGIN_REDIRECT_KEY` (export const) L19
-- `SESSION_EXPIRED_REASON` (export const) L20
-- `handleUnauthorized` (export function) L24
-- `handleResponse` (export function) L39
+## src/services/helper.ts (65 lines) - The response's raw `detail`, which may be an object (e.g.
+- `ApiError` (export class) L4
+- `getApiErrorStatus` (export function) L16
+- `POST_LOGIN_REDIRECT_KEY` (export const) L20
+- `SESSION_EXPIRED_REASON` (export const) L21
+- `handleUnauthorized` (export function) L26
+- `handleResponse` (export function) L51
 
 ## src/services/mediaBucketService.ts (124 lines) - media bucket service (services)
 - `mediaBucketService` (export const) L20
 
-## src/services/queryKeys.ts (31 lines) - Centralized React Query keys for consistent invalidation and caching.
+## src/services/queryKeys.ts (33 lines) - Centralized React Query keys for consistent invalidation and caching.
 - `queryKeys` (export const) L4
+
+## src/services/scriptReviewService.ts (35 lines) - script review service (services)
+- `base` (const) L9
+- `getScriptReview` (export const) L11
+- `getScriptHistory` (export const) L13
+- `setScriptInvitees` (export const) L16
+- `sendScriptForReview` (export const) L19
+- `checkInScript` (export const) L22
+- `withdrawScriptCheckIn` (export const) L25
+- `finalizeScript` (export const) L27
+- `decideScript` (export const) L30
+- `createPostFromScript` (export const) L33
 
 ## src/services/secFilingService.ts (190 lines) - Unified SEC Filing Service Facade Consolidates the modular SEC Filing subsystems: - secFilingStorage: LocalStorage quota handling, reclai...
 - `secFilingService` (export const) L126 - Unified SEC Filing Service Facade Object  Preserves 100% backwards compatibility with all existing callers.

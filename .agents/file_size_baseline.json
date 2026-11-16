@@ -5,16 +5,12 @@
     "py_function": 120
   },
   "files": {
-    "src/components/AppShell/TopBar.tsx": {
-      "max_lines": 527,
-      "reason": "Over the limit when the check was introduced; split it when you next work on it."
-    },
     "src/data/initialSecFilingData.ts": {
       "max_lines": 16044,
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/data/secDocumentTemplates.ts": {
-      "max_lines": 1021,
+      "max_lines": 949,
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/hooks/useSecFiling.ts": {
@@ -38,19 +34,19 @@
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/pages/SecFilings/components/BlockBuilder.tsx": {
-      "max_lines": 946,
+      "max_lines": 936,
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/pages/SecFilings/components/BlockInspector.tsx": {
-      "max_lines": 736,
+      "max_lines": 735,
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/pages/SecFilings/components/BlockItem.tsx": {
-      "max_lines": 3740,
+      "max_lines": 3739,
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/pages/SecFilings/components/ContributorInviteModal.tsx": {
-      "max_lines": 915,
+      "max_lines": 897,
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/pages/SecFilings/components/EmbeddedSpreadsheetDiffViewer.tsx": {
@@ -66,7 +62,7 @@
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/pages/SecFilings/components/MergeReviewModal.tsx": {
-      "max_lines": 2487,
+      "max_lines": 2483,
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/pages/SecFilings/components/MobileSigningModal.tsx": {
@@ -86,7 +82,7 @@
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/pages/SecFilings/CreateSecFilingPage.tsx": {
-      "max_lines": 1806,
+      "max_lines": 1802,
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/pages/SecFilings/SecFilingContributorPage.tsx": {
@@ -106,7 +102,7 @@
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/services/secFiling/secFilingCore.ts": {
-      "max_lines": 974,
+      "max_lines": 969,
       "reason": "Over the limit when the check was introduced; split it when you next work on it."
     },
     "src/services/secFiling/secFilingProposals.ts": {
@@ -152,7 +148,7 @@
       "kind": "jsx_return"
     },
     "src/components/AppShell/TopBar.tsx#TopBar": {
-      "max_lines": 273,
+      "max_lines": 83,
       "kind": "jsx_return"
     },
     "src/components/ui/calendar.tsx#Calendar": {
@@ -204,15 +200,15 @@
       "kind": "jsx_return"
     },
     "src/pages/SecFilings/components/BlockBuilder.tsx#BlockBuilder": {
-      "max_lines": 701,
+      "max_lines": 690,
       "kind": "jsx_return"
     },
     "src/pages/SecFilings/components/BlockInspector.tsx#BlockInspector": {
-      "max_lines": 694,
+      "max_lines": 692,
       "kind": "jsx_return"
     },
     "src/pages/SecFilings/components/BlockItem.tsx#BlockItemComponent": {
-      "max_lines": 831,
+      "max_lines": 829,
       "kind": "jsx_return"
     },
     "src/pages/SecFilings/components/BlockItem.tsx#CalloutBlockEditor": {
@@ -268,7 +264,7 @@
       "kind": "jsx_return"
     },
     "src/pages/SecFilings/components/MergeReviewModal.tsx#MergeReviewModal": {
-      "max_lines": 1385,
+      "max_lines": 1380,
       "kind": "jsx_return"
     },
     "src/pages/SecFilings/components/MergeReviewModal.tsx#SecDocBlockRenderer": {
@@ -304,7 +300,7 @@
       "kind": "jsx_return"
     },
     "src/pages/SecFilings/CreateSecFilingPage.tsx#CreateSecFilingPage": {
-      "max_lines": 1178,
+      "max_lines": 1160,
       "kind": "jsx_return"
     },
     "src/pages/SecFilings/CreateSecFilingPage.tsx#DocumentThumbnailPreview": {

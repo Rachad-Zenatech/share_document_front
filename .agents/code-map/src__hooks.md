@@ -4,90 +4,106 @@
 
 Each symbol shows its start line (`L<n>`); read from there to the next symbol's line, not the whole file.
 
-## src/hooks/useFinancialTableTemplates.ts (59 lines) - Guest contributors have no login; the bundled templates are used instead.
-- `useFinancialTableTemplates` (export function) L17
-- `useCreateFinancialTableTemplate` (export function) L26
-- `useUpdateFinancialTableTemplate` (export function) L36
-- `useDeleteFinancialTableTemplate` (export function) L50
+## src/hooks/useDocumentLiveSync.ts (35 lines) - use document live sync (hooks)
+- `useDocumentLiveSync` (export function) L17 - Keeps the open document up to date: when the server announces a change to it (a save, a proposal, a merge, a check-in or a  decision by s...
+
+## src/hooks/useDocumentSelection.ts (38 lines) - Which documents of the visible list are ticked, for deleting several at once.
+- `useDocumentSelection` (export function) L4 - Which documents of the visible list are ticked, for deleting several at once.
+
+## src/hooks/useFinancialTableTemplates.ts (87 lines) - The kind of the document being edited (its list entry is in memory once the documents have loaded).
+- `activeDocumentType` (export function) L22 - The kind of the document being edited (its list entry is in memory once the documents have loaded).
+- `templatesFor` (function) L32 - The templates for one kind of document: the ones saved on the server for it, and for scripts the bundled script  templates too (a saved o...
+- `useFinancialTableTemplates` (export function) L41 - The table templates of the document being edited (or of `documentType` when given): scripts get script tables.
+- `useCreateFinancialTableTemplate` (export function) L53
+- `useUpdateFinancialTableTemplate` (export function) L64
+- `useDeleteFinancialTableTemplate` (export function) L78
 
 ## src/hooks/useHeartbeat.ts (45 lines) - Track user activity
 - `useHeartbeat` (export function) L4
 
-## src/hooks/useNotifications.ts (256 lines) - use notifications (hooks)
+## src/hooks/useInviteDirectory.ts (32 lines) - Directory unavailable (offline or no permission).
+- `useInviteDirectory` (export function) L12 - The people an invite can be sent to.
+
+## src/hooks/useNotifications.ts (277 lines) - use notifications (hooks)
 - `Notification` (export interface) L5
 - `NotificationListener` (type) L35
-- `toWebSocketScheme` (const) L48
-- `isTokenUsable` (function) L55 - An already-expired JWT is worse than none: it is checked first and rejected,  whereas omitting it lets the handshake fall back to the Htt...
-- `scheduleReconnect` (function) L65
-- `openSocket` (function) L73
-- `subscribeToNotifications` (function) L147
-- `useNotificationStream` (export function) L175 - Subscribe to the shared notification stream.
-- `useNotifications` (export function) L191
-- `useUnreadNotificationCount` (export function) L201
-- `useMarkNotificationAsRead` (export function) L210
-- `useMarkAllNotificationsAsRead` (export function) L222
-- `useClearReadNotifications` (export function) L233
-- `useClearAllNotifications` (export function) L245
+- `isSilentNotification` (export const) L41 - WORKFLOW_SYNC only tells open editors to read a document again (one is sent per script saved, so a file with 10  scripts sends 10): it is...
+- `toWebSocketScheme` (const) L54
+- `isTokenUsable` (function) L61 - An already-expired JWT is worse than none: it is checked first and rejected,  whereas omitting it lets the handshake fall back to the Htt...
+- `scheduleReconnect` (function) L71
+- `openSocket` (function) L79
+- `closeIfUnused` (function) L159
+- `subscribeToNotifications` (function) L176
+- `useNotificationStream` (export function) L196 - Subscribe to the shared notification stream.
+- `useNotifications` (export function) L212
+- `useUnreadNotificationCount` (export function) L222
+- `useMarkNotificationAsRead` (export function) L231
+- `useMarkAllNotificationsAsRead` (export function) L243
+- `useClearReadNotifications` (export function) L254
+- `useClearAllNotifications` (export function) L266
+
+## src/hooks/useScriptReview.ts (77 lines) - use script review (hooks)
+- `useScriptReview` (export function) L23 - A script document's review: its state, what the signed-in person may do (`state.access`), and the moves.
 
 ## src/hooks/useSecFiling.ts (1616 lines) - use sec filing (hooks)
-- `UserFilingRole` (export type) L31
-- `moveRunToSection` (function) L38 - Moves the run of blocks starting at `start` that are still in `fromSection` into  `toSection`, stopping at the first block from another s...
-- `repairLegacySectionHeadings` (function) L55 - Gives each legacy placeholder heading that is still inside another section its own  section, carrying the blocks after it along.
-- `useSecFiling` (export function) L74
-    - `queryClient` (fn) L76
-    - `isAccessGranted` (fn) L105 - Document security verification: Owner, Invited Contributor, or Super Admin
-    - `activeProposal` (fn) L113 - --------------------------------------------------------------------------
-    - `workingBlocks` (fn) L117
-    - `documentSections` (fn) L124
-    - `sectionCounts` (fn) L136
-    - `effectiveSpreadsheet` (fn) L146
-    - `matchingBlocks` (fn) L154
-    - `matchingBlockIds` (fn) L162
-    - `filteredBlocks` (fn) L167
-    - `refreshAll` (fn) L177 - --------------------------------------------------------------------------
-    - `toggleBlockSelection` (fn) L183
-    - `selectAllBlocks` (fn) L200
-    - `clearBlockSelection` (fn) L207
-    - `calculateDiffForProposal` (fn) L212
-    - `handleForkProposal` (fn) L236
-    - `applyWorkingBlocks` (fn) L269
-    - `setWorkingBlocks` (fn) L308
-    - `handleUndo` (fn) L337
-    - `handleRedo` (fn) L355
-    - `addBlock` (fn) L373
-    - `updateBlock` (fn) L587
-    - `latestBlocksRef` (fn) L667 - rather than this callback's closure.
-    - `latestSectionFilterRef` (fn) L669
-    - `startSectionAtBlock` (fn) L672
-    - `moveBlock` (fn) L698
-    - `moveMultipleBlocks` (fn) L714
-    - `duplicateMultipleBlocks` (fn) L750
-    - `deleteMultipleBlocks` (fn) L778
-    - `moveMultipleBlocksToSection` (fn) L795
-    - `updateMultipleBlocksSpacing` (fn) L811
-    - `moveSection` (fn) L827
-    - `reorderSection` (fn) L864
-    - `createSection` (fn) L899
-    - `duplicateBlock` (fn) L957
-    - `deleteBlock` (fn) L979
-    - `handleCreateProposal` (fn) L996
-    - `handleCreateContributorInvite` (fn) L1013
-    - `ensureActiveProposalId` (fn) L1038 - Resolves the change proposal that the current session is editing, creating the    contributor draft on demand when the session came in th...
-    - `handleSubmitForReview` (fn) L1062
-    - `handleMergeProposal` (fn) L1102
-    - `handleSelectiveMerge` (fn) L1121
-    - `handleRejectProposal` (fn) L1145
-    - `handleRestoreVersion` (fn) L1155
-    - `handleResetToDefault` (fn) L1171
-    - `handleUpdateAttachedSpreadsheet` (fn) L1179
-    - `handleUpdateSpreadsheetCell` (fn) L1225
-    - `handleAssignSpreadsheet` (fn) L1315
-    - `activeDiffs` (fn) L1328 - --------------------------------------------------------------------------
-    - `handleStorage` (fn) L1444
-    - `handleRemoteUpdate` (fn) L1485
-    - `handleConflict` (fn) L1486
-    - `handleSyncError` (fn) L1494
-    - `handleKeyDown` (fn) L1518
+- `UserFilingRole` (export type) L30
+- `moveRunToSection` (function) L37 - Moves the run of blocks starting at `start` that are still in `fromSection` into  `toSection`, stopping at the first block from another s...
+- `repairLegacySectionHeadings` (function) L54 - Gives each legacy placeholder heading that is still inside another section its own  section, carrying the blocks after it along.
+- `useSecFiling` (export function) L73
+    - `queryClient` (fn) L75
+    - `isAccessGranted` (fn) L104 - Document security verification: Owner, Invited Contributor, or Super Admin
+    - `activeProposal` (fn) L112 - --------------------------------------------------------------------------
+    - `workingBlocks` (fn) L116
+    - `documentSections` (fn) L123
+    - `sectionCounts` (fn) L135
+    - `effectiveSpreadsheet` (fn) L145
+    - `matchingBlocks` (fn) L153
+    - `matchingBlockIds` (fn) L161
+    - `filteredBlocks` (fn) L166
+    - `refreshAll` (fn) L176 - --------------------------------------------------------------------------
+    - `toggleBlockSelection` (fn) L182
+    - `selectAllBlocks` (fn) L199
+    - `clearBlockSelection` (fn) L206
+    - `calculateDiffForProposal` (fn) L211
+    - `handleForkProposal` (fn) L235
+    - `applyWorkingBlocks` (fn) L268
+    - `setWorkingBlocks` (fn) L307
+    - `handleUndo` (fn) L336
+    - `handleRedo` (fn) L354
+    - `addBlock` (fn) L372
+    - `updateBlock` (fn) L586
+    - `latestBlocksRef` (fn) L666 - rather than this callback's closure.
+    - `latestSectionFilterRef` (fn) L668
+    - `startSectionAtBlock` (fn) L671
+    - `moveBlock` (fn) L697
+    - `moveMultipleBlocks` (fn) L713
+    - `duplicateMultipleBlocks` (fn) L749
+    - `deleteMultipleBlocks` (fn) L777
+    - `moveMultipleBlocksToSection` (fn) L794
+    - `updateMultipleBlocksSpacing` (fn) L810
+    - `moveSection` (fn) L826
+    - `reorderSection` (fn) L863
+    - `createSection` (fn) L898
+    - `duplicateBlock` (fn) L956
+    - `deleteBlock` (fn) L978
+    - `handleCreateProposal` (fn) L995
+    - `handleCreateContributorInvite` (fn) L1012
+    - `ensureActiveProposalId` (fn) L1037 - Resolves the change proposal that the current session is editing, creating the    contributor draft on demand when the session came in th...
+    - `handleSubmitForReview` (fn) L1061
+    - `handleMergeProposal` (fn) L1101
+    - `handleSelectiveMerge` (fn) L1120
+    - `handleRejectProposal` (fn) L1144
+    - `handleRestoreVersion` (fn) L1154
+    - `handleResetToDefault` (fn) L1170
+    - `handleUpdateAttachedSpreadsheet` (fn) L1178
+    - `handleUpdateSpreadsheetCell` (fn) L1224
+    - `handleAssignSpreadsheet` (fn) L1314
+    - `activeDiffs` (fn) L1327 - --------------------------------------------------------------------------
+    - `handleStorage` (fn) L1443
+    - `handleRemoteUpdate` (fn) L1484
+    - `handleConflict` (fn) L1485
+    - `handleSyncError` (fn) L1493
+    - `handleKeyDown` (fn) L1517
 
 ## src/hooks/useSecWorkflows.ts (88 lines) - Active platform users that can be put on a workflow step.
 - `useAssignableUsers` (export function) L22 - Active platform users that can be put on a workflow step.

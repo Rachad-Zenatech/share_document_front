@@ -27,4 +27,6 @@ export const queryKeys = {
   secFilingDocumentSpreadsheet: (docId: string) => ["sec-filing-document-spreadsheet", docId] as const,
   secWorkflows: () => ["sec-workflows"] as const,
   secDocumentWorkflow: (docId: string) => ["sec-document-workflow", docId] as const,
+  secScriptReview: (docId: string) => ["sec-script-review", docId] as const,
+  secScriptHistory: (docId: string) => ["sec-script-review", docId, "history"] as const,
 };

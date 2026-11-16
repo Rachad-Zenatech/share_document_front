@@ -265,10 +265,14 @@ async function loadVersions(documentId: string) {
   }
 }
 
-/** Pick up what other people saved to the open document (and its proposals). */
-async function refreshActiveDocument(reason: string) {
+/**
+ * Pick up what other people saved to the open document (and its proposals). Returns false when it could not be done yet because
+ * this person's own changes are still being saved (the caller tries again), true otherwise.
+ */
+export async function refreshActiveDocument(reason: string): Promise<boolean> {
   const id = localStorage.getItem(DOC_STORE_KEYS.ACTIVE_DOC_ID);
-  if (!id || !docStoreInternals.isServerBacked() || hasUnsyncedChanges() || isGuestSession()) return;
+  if (!id || !docStoreInternals.isServerBacked() || isGuestSession()) return true;
+  if (hasUnsyncedChanges()) return false;
   try {
     const [doc, { proposals }] = await Promise.all([
       apiClient.get<ServerDoc>(`/sec-filings/documents/${enc(id)}`, quiet),
@@ -288,6 +292,7 @@ async function refreshActiveDocument(reason: string) {
   } catch (err) {
     console.warn('[sec-filing] could not refresh document', err);
   }
+  return true;
 }
 
 if (typeof window !== 'undefined') {

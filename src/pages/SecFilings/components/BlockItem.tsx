@@ -44,6 +44,7 @@ import { useUpdateFinancialTableTemplate } from '../../../hooks/useFinancialTabl
 import { toast } from 'sonner';
 import { mediaBucketService } from '../../../services/mediaBucketService';
 import { compactFinancialTableBlock } from '../../../services/secFilingService';
+import { blockTypeLabel, tableTemplatesTitle } from './DocumentRunningHeader';
 import { FINANCIAL_TABLE_TEMPLATES } from '../../../data/financialTableTemplates';
 import type { FinancialTableTemplate } from '../../../data/financialTableTemplates';
 import { ZENATECH_LOGO_DATA_URL } from '../../../data/zenatechLogoAsset';
@@ -461,9 +462,7 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
-          <span className="text-[9px] font-mono uppercase font-bold text-slate-500 px-1">
-            {block.type.replace('_', ' ')}
-          </span>
+          <span className="text-[9px] font-mono uppercase font-bold text-slate-500 px-1">{blockTypeLabel(block.type)}</span>
         )}
 
         {/* Text Formatting Controls */}
@@ -1958,7 +1957,7 @@ const FinancialTableBlockEditor: React.FC<{
     onUpdate({
       title: tpl.title ?? block.title,
       headers: [...(tpl.headers || block.headers)],
-      headerShading: tpl.headerShading,
+      headerShading: tpl.headerShading, headerTextColor: tpl.headerTextColor, boldColumns: tpl.boldColumns ? [...tpl.boldColumns] : undefined,
       periodHeaders: tpl.periodHeaders?.map((header) => ({
         ...header,
         lines: [...header.lines]
@@ -2313,7 +2312,7 @@ const FinancialTableBlockEditor: React.FC<{
             <DropdownMenuContent align="end" className="w-[21rem] p-1.5 text-xs">
               <div className="px-2 py-1.5 border-b border-slate-100 dark:border-zinc-800 mb-1">
                 <p className="text-[11px] font-semibold text-slate-800 dark:text-zinc-200">
-                  Financial Statement Templates
+                  {tableTemplatesTitle()}
                 </p>
                 <p className="text-[10px] text-slate-500 dark:text-zinc-400">
                   Click to apply layout. Undo with Ctrl+Z.
@@ -2603,7 +2602,7 @@ const FinancialTableBlockEditor: React.FC<{
         <table className="w-full text-[13px] border-collapse">
           <thead>
             <tr
-              style={{ backgroundColor: block.headerShading || undefined }}
+              style={{ backgroundColor: block.headerShading || undefined, '--hdr-fg': block.headerTextColor } as React.CSSProperties}
               className="border-t border-b-2 border-slate-900 text-[#0E2841] bg-white dark:bg-zinc-900"
             >
               {/* Left Sandwich Bar Column Header */}
@@ -2620,7 +2619,7 @@ const FinancialTableBlockEditor: React.FC<{
                 return (
                   <th
                     key={colIdx}
-                    className={`p-1 font-bold text-[#0E2841] ${align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"} group/col relative ${
+                    className={`p-1 font-bold text-[color:var(--hdr-fg,#0E2841)] ${align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"} group/col relative ${
                       isFirst ? 'min-w-[220px] w-2/5' : 'min-w-[70px]'
                     }`}
                   >
@@ -2633,7 +2632,7 @@ const FinancialTableBlockEditor: React.FC<{
                         onChange={(e) => handleHeaderChange(colIdx, e.target.value)}
                         onFocus={() => setActiveColIdx(colIdx)}
                         style={{ textAlign: align }}
-                        className={`w-full bg-transparent font-bold text-[#0E2841] ${align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"} hover:bg-white/60 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                        className={`w-full bg-transparent font-bold text-[color:var(--hdr-fg,#0E2841)] ${align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"} hover:bg-white/60 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                           isHeaderChanged ? 'ring-2 ring-amber-400 bg-amber-50/80 dark:bg-amber-950/50' : ''
                         }`}
                       />
@@ -3116,7 +3115,7 @@ const FinancialTableBlockEditor: React.FC<{
                           // No placeholder: a dash here read as real content in empty cells.
                           style={{ textAlign: align }}
                           className={`w-full bg-transparent hover:bg-white/80 dark:hover:bg-zinc-800/80 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 ${align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"} ${
-                            isTotal || row.bold || isHeaderLikeRow
+                            isTotal || row.bold || isHeaderLikeRow || block.boldColumns?.includes(colIdx)
                               ? 'font-bold text-slate-900 dark:text-zinc-100'
                               : 'text-slate-900 dark:text-zinc-200'
                           } ${row.italic ? 'italic text-slate-700 dark:text-zinc-300' : ''} ${

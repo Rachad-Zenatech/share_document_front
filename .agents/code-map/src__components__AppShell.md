@@ -36,12 +36,16 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 ## src/components/AppShell/ThemeSwitch.tsx (41 lines) - theme switch (components  app shell)
 - `ThemeSwitch` (export function) L5
 
-## src/components/AppShell/TopBar.tsx (528 lines) - top bar (components  app shell)
-- `TopBarClock` (function) L35
-- `sendWindowsNotification` (function) L65
-- `TopBar` (export function) L103
-    - `handleToggleWindowsNotifications` (fn) L117
-    - `handleTestWindowsNotification` (fn) L161
-    - `navigate` (fn) L181
-    - `queryClient` (fn) L198
-    - `handleNotification` (fn) L202 - rather than opening a second connection of its own.
+## src/components/AppShell/TopBar.tsx (326 lines) - top bar (components  app shell)
+- `TopBarClock` (function) L23
+- `sendWindowsNotification` (function) L53
+- `TopBar` (export function) L91
+
+## src/components/AppShell/TopBarDialogs.tsx (304 lines) - top bar dialogs (components  app shell)
+- `TopBarUserMenuProps` (interface) L25
+- `TopBarUserMenu` (export function) L33 - User avatar dropdown menu in the top bar.
+- `TopBarProfileDialogProps` (interface) L77
+- `TopBarProfileDialog` (export function) L92 - Profile and notification preferences dialog opened from the top bar.
+- `ProfileGeneralTab` (function) L152
+- `ProfilePreferencesTab` (function) L183
+- `TopBarLogoutDialog` (export function) L267 - Logout confirmation dialog opened from the top bar user menu.

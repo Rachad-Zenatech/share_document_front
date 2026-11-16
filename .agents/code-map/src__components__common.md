@@ -12,6 +12,6 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 ## src/components/common/GlobalLoadingScreen.tsx (107 lines) - global loading screen (components common)
 - `GlobalLoadingScreen` (export function) L6
 
-## src/components/common/ProtectedRoute.tsx (69 lines) - protected route (components common)
-- `ProtectedRouteProps` (interface) L7
-- `ProtectedRoute` (export function) L13
+## src/components/common/ProtectedRoute.tsx (85 lines) - protected route (components common)
+- `ProtectedRouteProps` (interface) L8
+- `ProtectedRoute` (export function) L14

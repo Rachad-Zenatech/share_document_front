@@ -1,0 +1,78 @@
+/* The script embed in its editor-only mode (?mode=editor): the page, and the editor's controls laid out as one tidy toolbar.
+   Everything marked data-chrome (the title block, the search strip, the page tools, the ruler) is hidden: the Social Media
+   portal supplies the title, the pages list and the review around the editor. The controls (marked data-tb, in three groups)
+   keep all their functions; here they sit in one compact bar above the page, grouped:
+
+     edit      undo / redo, Lead Controller / Contributor, version or branch
+     review    invite, submit or merge, revisions
+     content   media, spreadsheet, import, export                                                                          */
+[data-editor-only] [data-chrome] {
+  display: none !important;
+}
+
+[data-editor-only] > div {
+  min-height: 0;
+  padding-bottom: 0;
+}
+
+/* The toolbar: one bar, sticky at the top of the editor. */
+[data-editor-only] header {
+  padding: 0.375rem 0.75rem;
+  box-shadow: 0 1px 0 rgb(15 23 42 / 0.04);
+}
+
+[data-editor-only] header > div {
+  max-width: none;
+  gap: 0;
+}
+
+[data-editor-only] [data-toolbar] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  width: 100%;
+}
+
+/* The three groups, in the order a script goes through: edit, then review, then content. */
+[data-editor-only] [data-tb='edit'] {
+  order: 10;
+}
+[data-editor-only] [data-tb='div1'] {
+  order: 15;
+}
+[data-editor-only] [data-tb='review'] {
+  order: 20;
+}
+[data-editor-only] [data-tb='div2'] {
+  order: 25;
+}
+[data-editor-only] [data-tb='content'] {
+  order: 30;
+}
+
+[data-editor-only] [data-tb-divider],
+[data-editor-only] [data-tb='div1'],
+[data-editor-only] [data-tb='div2'] {
+  display: block;
+  width: 1px;
+  height: 1.25rem;
+  margin: 0 0.25rem;
+  background: rgb(148 163 184 / 0.45);
+}
+
+/* Compact, even controls. */
+[data-editor-only] [data-toolbar] button {
+  white-space: nowrap;
+}
+
+[data-editor-only] [data-toolbar] > button,
+[data-editor-only] [data-toolbar] [data-tb] {
+  height: 1.875rem;
+  font-size: 0.75rem;
+}
+
+[data-editor-only] main {
+  padding-top: 0.75rem;
+  padding-bottom: 1.5rem;
+}

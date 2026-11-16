@@ -6,7 +6,7 @@ export interface DocumentTemplateDefinition {
   id: string;
   name: string;
   subtitle: string;
-  category: 'core' | 'sec' | 'operations' | 'executive';
+  category: 'core' | 'sec' | 'operations' | 'executive' | 'script';
   color: string;
   thumbnailType: 'blank' | 'serif_resume' | 'coral_resume' | 'spearmint_letter' | 'tropic_proposal' | 'geometric_brochure' | 'luxe_report' | 'checklist_onboarding' | 'checklist_offboarding';
   description: string;
@@ -946,76 +946,4 @@ export function generateDef14aDoc(title = 'DEF 14A (Proxy Statement)'): SecFilin
   };
 }
 
-export const DOCUMENT_TEMPLATES: DocumentTemplateDefinition[] = [
-  {
-    id: 'blank',
-    name: 'Blank document',
-    subtitle: 'Blank document',
-    category: 'core',
-    color: '#4285F4',
-    thumbnailType: 'blank',
-    description: 'Start fresh with a clean SEC filing canvas',
-    generateDoc: generateBlankDocument,
-  },
-  {
-    id: '10-q',
-    name: 'Form 10-Q',
-    subtitle: 'Quarterly report',
-    category: 'sec',
-    color: '#1e3a8a',
-    thumbnailType: 'serif_resume',
-    description: 'Form 10-Q Quarterly Report with financial statements',
-    generateDoc: generate10QDoc,
-  },
-  {
-    id: '10-k',
-    name: 'Form 10-K',
-    subtitle: 'Annual report',
-    category: 'sec',
-    color: '#e11d48',
-    thumbnailType: 'coral_resume',
-    description: 'Form 10-K Comprehensive Annual Audited Report',
-    generateDoc: generate10KDoc,
-  },
-  {
-    id: '8-k',
-    name: 'Form 8-K',
-    subtitle: 'Current report',
-    category: 'sec',
-    color: '#059669',
-    thumbnailType: 'spearmint_letter',
-    description: 'Form 8-K Current Event Disclosure and Notice',
-    generateDoc: generate8KDoc,
-  },
-  {
-    id: '6-k',
-    name: 'Form 6-K',
-    subtitle: 'Interim report',
-    category: 'sec',
-    color: '#0284c7',
-    thumbnailType: 'tropic_proposal',
-    description: 'Form 6-K Foreign Private Issuer Periodic Report',
-    generateDoc: generate6KDoc,
-  },
-  {
-    id: 's-1',
-    name: 'Form S-1',
-    subtitle: 'Registration',
-    category: 'sec',
-    color: '#d97706',
-    thumbnailType: 'geometric_brochure',
-    description: 'Form S-1 General Registration Statement',
-    generateDoc: generateS1Doc,
-  },
-  {
-    id: 'def-14a',
-    name: 'DEF 14A',
-    subtitle: 'Proxy statement',
-    category: 'sec',
-    color: '#7c3aed',
-    thumbnailType: 'luxe_report',
-    description: 'Schedule 14A Annual Shareholder Proxy Statement',
-    generateDoc: generateDef14aDoc,
-  },
-];
-
+export { DOCUMENT_TEMPLATES } from './documentTemplateRegistry';

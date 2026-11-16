@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState, useRef } from 'react';
+import { isEmbedded, isEmbedRoute, listenToParent } from './embedBridge';
 import { apiClient } from '../services/apiClient';
 
 export interface User {
@@ -65,10 +66,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       if (requestId === fetchRequestId.current) {
         setPermissions(null);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('ms_id_token');
-        sessionStorage.clear();
+        if (!(isEmbedRoute() && isEmbedded())) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          localStorage.removeItem('ms_id_token');
+          sessionStorage.clear();
+        }
       }
       return null;
     } finally {
@@ -83,7 +86,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const handleBeforeUnload = () => {
       const token = sessionStorage.getItem('token');
-      if (token) {
+      // An embed's tab closing must not sign this person out of the portal elsewhere.
+      if (token && !window.location.pathname.startsWith('/embed/')) {
         const data = new FormData();
         data.append('token', token);
         const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
@@ -93,8 +97,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
+    const unlistenEmbed =
+      isEmbedRoute() && isEmbedded()
+        ? listenToParent((message) => {
+            if (message.type === 'script-embed:token') {
+              sessionStorage.setItem('token', message.token);
+              void fetchPermissions();
+            }
+          })
+        : undefined;
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      unlistenEmbed?.();
     };
   }, [fetchPermissions]);
 

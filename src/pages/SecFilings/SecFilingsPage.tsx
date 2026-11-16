@@ -32,7 +32,7 @@ import { secFilingService } from '../../services/secFilingService';
 import { BlockBuilder } from './components/BlockBuilder';
 import { DocumentOutline } from './components/DocumentOutline';
 import { BlockInspector } from './components/BlockInspector';
-import { MergeReviewModal } from './components/MergeReviewModal';
+import { DocumentMergeReview } from './components/DocumentMergeReview';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { NewProposalModal } from './components/NewProposalModal';
 import { ContributorInviteModal } from './components/ContributorInviteModal';
@@ -52,7 +52,7 @@ import {
   DropdownMenuTrigger
 } from '../../components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { useFinancialTableTemplates } from '../../hooks/useFinancialTableTemplates';
+import { activeDocumentType, useFinancialTableTemplates } from '../../hooks/useFinancialTableTemplates';
 import { resolveTableTemplates } from '../../data/financialTableTemplates';
 
 export default function SecFilingsPage() {
@@ -117,7 +117,7 @@ export default function SecFilingsPage() {
     updateSpreadsheetCell,
     assignSpreadsheet,
     setWorkingBlocks,
-    isAccessGranted
+    isAccessGranted, canSwitchRole
   } = useSecFiling();
 
   const [activeMatchIdx, setActiveMatchIdx] = useState<number>(0);
@@ -387,7 +387,7 @@ export default function SecFilingsPage() {
   };
 
   const pendingProposalsCount = proposals.filter((p) => p.status === 'pending_review').length;
-  const [showOutline, setShowOutline] = useState(true);
+  const [showOutline, setShowOutline] = useState(new URLSearchParams(window.location.search).get('mode') !== 'editor');
   const [showInspector, setShowInspector] = useState(false);
 
   if (isAccessGranted === false) {
@@ -421,7 +421,7 @@ export default function SecFilingsPage() {
       <header className="sticky top-0 z-40 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800 px-4 md:px-8 py-3 shadow-xs">
         <div className="max-w-[1750px] w-full mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           {/* Title & Document Badge */}
-          <div className="flex items-center gap-3">
+          <div data-chrome className="flex items-center gap-3">
             <Button
               type="button"
               variant="outline"
@@ -459,22 +459,22 @@ export default function SecFilingsPage() {
           </div>
 
           {/* Right Toolbar Actions */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div data-toolbar className="flex items-center gap-2 flex-wrap">
             {/* Invite Contributor / Share Link Button */}
             {activeRole === 'LEAD_CONTROLLER' && (
               <Button
                 type="button"
                 size="sm"
                 onClick={() => setIsInviteModalOpen(true)}
-                className="h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-medium gap-1.5 shadow-xs"
+                data-tb="review" className="h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-medium gap-1.5 shadow-xs"
               >
                 <Share2 className="w-3.5 h-3.5" />
                 <span>Invite Contributor</span>
               </Button>
             )}
 
-            {/* Undo / Redo Controls */}
-            <div className="flex items-center bg-slate-100 dark:bg-zinc-800 p-0.5 rounded-xl border border-slate-200 dark:border-zinc-700">
+            {/* Undo / Redo Controls */}<span hidden data-tb="div1" /><span hidden data-tb="div2" />
+            <div data-tb="edit" className="flex items-center bg-slate-100 dark:bg-zinc-800 p-0.5 rounded-xl border border-slate-200 dark:border-zinc-700">
               <button
                 type="button"
                 onClick={handleUndo}
@@ -496,7 +496,7 @@ export default function SecFilingsPage() {
             </div>
 
             {/* Persona Role Switcher */}
-            <div className="flex items-center bg-slate-100 dark:bg-zinc-800 p-0.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs">
+            <div data-tb="edit" className={`${canSwitchRole ? 'flex' : 'hidden'} items-center bg-slate-100 dark:bg-zinc-800 p-0.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs`}>
               <button
                 type="button"
                 onClick={() => {
@@ -530,7 +530,7 @@ export default function SecFilingsPage() {
             {/* Branch / Proposal Selector Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 font-medium">
+                <Button variant="outline" size="sm" data-tb="edit" className="h-8 text-xs gap-1.5 font-medium">
                   <GitBranch className="w-3.5 h-3.5 text-blue-600" />
                   <span className="max-w-[140px] truncate">
                     {activeProposal ? activeProposal.title : 'Main Version'}
@@ -591,7 +591,7 @@ export default function SecFilingsPage() {
 
             {/* Proposal Submit or Merge Control */}
             {activeProposal ? (
-              <div className="flex items-center gap-1.5">
+              <div data-tb="review" className="flex items-center gap-1.5">
                 {activeProposal.status === 'merged' ? (
                   <>
                     <Badge className="bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-300 text-xs py-1 px-2.5 gap-1 shadow-2xs">
@@ -635,7 +635,7 @@ export default function SecFilingsPage() {
                   <Button
                     variant="default"
                     size="sm"
-                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 relative shadow-xs"
+                    data-tb="review" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 relative shadow-xs"
                   >
                     <GitMerge className="w-3.5 h-3.5" />
                     <span>Merge Control</span>
@@ -708,7 +708,7 @@ export default function SecFilingsPage() {
               variant="outline"
               size="sm"
               onClick={() => setIsHistoryModalOpen(true)}
-              className="h-8 text-xs gap-1.5"
+              data-tb="review" className="h-8 text-xs gap-1.5"
               title="View Version Timeline & Restore"
             >
               <History className="w-3.5 h-3.5 text-slate-500" />
@@ -721,7 +721,7 @@ export default function SecFilingsPage() {
               variant="outline"
               size="sm"
               onClick={() => setIsMediaBucketOpen(true)}
-              className="h-8 text-xs gap-1.5 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900 font-medium"
+              data-tb="content" className="h-8 text-xs gap-1.5 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900 font-medium"
               title="Company Media & Image Bucket (Manage logos & pictures)"
             >
               <FolderArchive className="w-3.5 h-3.5" />
@@ -729,8 +729,8 @@ export default function SecFilingsPage() {
             </Button>
 
             {/* Attached Spreadsheet / Dynamic Variable Maker & Switcher */}
-            {attachedSpreadsheet ? (
-              <div className="flex items-center">
+            {activeDocumentType() === 'script' ? null : attachedSpreadsheet ? (
+              <div data-tb="content" className="flex items-center">
                 <Button
                   type="button"
                   variant="outline"
@@ -801,7 +801,7 @@ export default function SecFilingsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsSpreadsheetPickerOpen(true)}
-                className="h-8 text-xs gap-1.5 text-slate-600 dark:text-slate-300 border-dashed border-slate-300 dark:border-zinc-700 hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer"
+                data-tb="content" className="h-8 text-xs gap-1.5 text-slate-600 dark:text-slate-300 border-dashed border-slate-300 dark:border-zinc-700 hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer"
                 title="Link a spreadsheet workbook from the central Hub"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-slate-400" />
@@ -815,7 +815,7 @@ export default function SecFilingsPage() {
               variant="outline"
               size="sm"
               onClick={() => setIsImportModalOpen(true)}
-              className="h-8 text-xs gap-1.5 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800 font-medium cursor-pointer shadow-2xs"
+              data-tb="content" className="h-8 text-xs gap-1.5 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800 font-medium cursor-pointer shadow-2xs"
               title="Insert or import an existing document (.docx, .xlsx, .md, .html, .txt) without starting over"
             >
               <Upload className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
@@ -828,7 +828,7 @@ export default function SecFilingsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 text-xs gap-1.5 bg-white dark:bg-zinc-900 border-slate-300 dark:border-zinc-700 font-semibold"
+                  data-tb="content" className="h-8 text-xs gap-1.5 bg-white dark:bg-zinc-900 border-slate-300 dark:border-zinc-700 font-semibold"
                 >
                   <FileDown className="w-3.5 h-3.5 text-blue-600" />
                   <span>Export</span>
@@ -957,7 +957,7 @@ export default function SecFilingsPage() {
       )}
 
       {/* Secondary Search & Sidebar Toggle Subbar */}
-      <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm border-b border-slate-200 dark:border-zinc-800 px-4 md:px-8 py-2 sticky top-[57px] z-30 shadow-xs">
+      <div data-chrome className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm border-b border-slate-200 dark:border-zinc-800 px-4 md:px-8 py-2 sticky top-[57px] z-30 shadow-xs">
         <div className="max-w-[1750px] w-full mx-auto flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 flex-1 max-w-lg">
             {/* Outline Toggle Button */}
@@ -1160,14 +1160,14 @@ export default function SecFilingsPage() {
             diffs={activeDiffs}
             viewMode={viewMode}
             onToggleViewMode={setViewMode}
-            attachedSpreadsheet={attachedSpreadsheet}
+            attachedSpreadsheet={activeDocumentType() === 'script' ? null : attachedSpreadsheet}
             onOpenSpreadsheet={(cellRef, tabName) => {
               setSpreadsheetModalMode('manage');
               setTargetSpreadsheetCell(cellRef);
               setTargetSpreadsheetTab(tabName);
               setIsSpreadsheetOpen(true);
             }}
-            onOpenCellPicker={handleOpenCellPicker}
+            onOpenCellPicker={activeDocumentType() === 'script' ? undefined : handleOpenCellPicker}
             searchQuery={searchQuery}
             activeMatchBlockId={activeMatchBlockId}
             matchingBlockIds={matchingBlockIds}
@@ -1260,7 +1260,7 @@ export default function SecFilingsPage() {
       )}
 
       {isMergeModalOpen && reviewProposal && (
-        <MergeReviewModal
+        <DocumentMergeReview
           open={isMergeModalOpen}
           onOpenChange={setIsMergeModalOpen}
           proposal={reviewProposal}

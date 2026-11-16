@@ -22,6 +22,17 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `Collaborator` (export interface) L1
 - `ContributorPermissions` (export type) L12
 
+## src/types/documentType.ts (42 lines) - The kinds of document the editor handles.
+- `DocumentType` (export type) L6 - The kinds of document the editor handles.
+- `DEFAULT_DOCUMENT_TYPE` (export const) L8
+- `DOCUMENT_TYPES` (export const) L10
+- `SCRIPT_TEMPLATE_ID` (export const) L16 - The template id and form type of the Social Media Script document (see data/socialMediaScriptTemplate.ts).
+- `SCRIPT_FORM_TYPE` (export const) L17
+- `SCRIPT_FONT_FAMILY` (export const) L20 - The font of a script page (the Social Media portal's script document is set in Arial).
+- `documentTypeOf` (export function) L23 - What kind of document this is, from what the document or its list entry says about itself.
+- `DocumentTypeConfig` (export interface) L31 - What each kind of document does and offers (mirrors the backend's services/sec_filings/document_types.py).
+- `DOCUMENT_TYPE_CONFIG` (export const) L38
+
 ## src/types/mediaBucket.ts (11 lines) - media bucket (types)
 - `MediaBucketItem` (export interface) L1
 
@@ -29,10 +40,24 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `Notification` (export interface) L1
 - `UnreadNotificationCount` (export interface) L13
 
+## src/types/scriptReview.ts (76 lines) - Mirrors models/sec_filings/script_review_model.py and the state returned by the script-review routes.
+- `ScriptStatus` (export type) L4
+- `ScriptCapacity` (export type) L5
+- `ScriptCollaboratorRole` (export type) L6
+- `ScriptRole` (export type) L7
+- `ScriptVote` (export type) L8
+- `ScriptAccess` (export interface) L10
+- `ScriptCollaborator` (export interface) L22
+- `ScriptReviewState` (export interface) L32
+- `ScriptInvitee` (export interface) L48
+- `ScriptHistoryEvent` (export interface) L54
+- `EmbedOutbound` (export type) L63 - Messages between this embed and the Social Media portal page that hosts it (see lib/embedBridge.ts).
+- `EmbedInbound` (export type) L71
+
 ## src/types/search.ts (8 lines) - search (types)
 - `SearchResult` (export type) L1
 
-## src/types/secFiling.ts (438 lines) - sec filing (types)
+## src/types/secFiling.ts (442 lines) - sec filing (types)
 - `SecBlockType` (export type) L3
 - `SecHeadingLevel` (export type) L13
 - `SecBlockSpacing` (export type) L15
@@ -41,38 +66,38 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `SecTableRow` (export interface) L59
 - `SecTablePeriodHeader` (export interface) L80 - Centered multi-line comparative reporting-period label above one value column.
 - `SecFinancialTableBlock` (export interface) L85
-- `SecCalloutBlock` (export interface) L104
-- `ESignProvider` (export type) L118
-- `ESignDeliveryMethod` (export type) L119
-- `SecSignatureOfficer` (export interface) L121
-- `SecSignatureBlock` (export interface) L141
-- `SecDividerBlock` (export interface) L154
-- `SecMetadataBlock` (export interface) L167
-- `SecImageBlock` (export interface) L188
-- `SecBlock` (export type) L205
-- `SpreadsheetTab` (export interface) L215
-- `AttachedSpreadsheet` (export interface) L226
-- `AttachedSpreadsheetColumnRecord` (export interface) L244 - Column descriptor stored with a document's spreadsheet in the backend.
-- `AttachedSpreadsheetRecord` (export interface) L252 - Row of `sec_attached_spreadsheets` as returned by the backend.
-- `AttachedSpreadsheetResponse` (export interface) L268 - GET /api/sec-filings/documents/{id}/spreadsheet; `spreadsheet` is null when nothing is linked.
-- `AttachedSpreadsheetPayload` (export interface) L274 - PUT /api/sec-filings/documents/{id}/spreadsheet body.
-- `SecFilingDocument` (export interface) L286
-- `SpreadsheetCellDiff` (export interface) L310
-- `SecChangeProposal` (export interface) L327
-- `SecVersionSnapshot` (export interface) L362
-- `SecChangeCategory` (export type) L375
-- `SecChangeTag` (export interface) L384
-- `SecTableCellDiff` (export interface) L390
-- `SecBlockDiff` (export interface) L401
-- `SecDocumentSummary` (export interface) L419
+- `SecCalloutBlock` (export interface) L108
+- `ESignProvider` (export type) L122
+- `ESignDeliveryMethod` (export type) L123
+- `SecSignatureOfficer` (export interface) L125
+- `SecSignatureBlock` (export interface) L145
+- `SecDividerBlock` (export interface) L158
+- `SecMetadataBlock` (export interface) L171
+- `SecImageBlock` (export interface) L192
+- `SecBlock` (export type) L209
+- `SpreadsheetTab` (export interface) L219
+- `AttachedSpreadsheet` (export interface) L230
+- `AttachedSpreadsheetColumnRecord` (export interface) L248 - Column descriptor stored with a document's spreadsheet in the backend.
+- `AttachedSpreadsheetRecord` (export interface) L256 - Row of `sec_attached_spreadsheets` as returned by the backend.
+- `AttachedSpreadsheetResponse` (export interface) L272 - GET /api/sec-filings/documents/{id}/spreadsheet; `spreadsheet` is null when nothing is linked.
+- `AttachedSpreadsheetPayload` (export interface) L278 - PUT /api/sec-filings/documents/{id}/spreadsheet body.
+- `SecFilingDocument` (export interface) L290
+- `SpreadsheetCellDiff` (export interface) L314
+- `SecChangeProposal` (export interface) L331
+- `SecVersionSnapshot` (export interface) L366
+- `SecChangeCategory` (export type) L379
+- `SecChangeTag` (export interface) L388
+- `SecTableCellDiff` (export interface) L394
+- `SecBlockDiff` (export interface) L405
+- `SecDocumentSummary` (export interface) L423
 
-## src/types/secFilingTemplate.ts (57 lines) - A template as returned by `GET /api/sec-filings/table-templates`.
-- `SecFinancialTableTemplateBlock` (export type) L8 - The structure a template copies into a `financial_table` block.
-- `SecFinancialTableTemplate` (export interface) L15 - A template as returned by `GET /api/sec-filings/table-templates`.
-- `SecFinancialTableTemplateList` (export interface) L33
-- `SecFinancialTableTemplateCreate` (export interface) L38
-- `SecFinancialTableTemplateUpdate` (export type) L49
-- `SecFinancialTableTemplateDeleteResult` (export interface) L53
+## src/types/secFilingTemplate.ts (61 lines) - A template as returned by `GET /api/sec-filings/table-templates`.
+- `SecFinancialTableTemplateBlock` (export type) L9 - The structure a template copies into a `financial_table` block.
+- `SecFinancialTableTemplate` (export interface) L16 - A template as returned by `GET /api/sec-filings/table-templates`.
+- `SecFinancialTableTemplateList` (export interface) L36
+- `SecFinancialTableTemplateCreate` (export interface) L41
+- `SecFinancialTableTemplateUpdate` (export type) L53
+- `SecFinancialTableTemplateDeleteResult` (export interface) L57
 
 ## src/types/secWorkflow.ts (46 lines) - Mirrors the backend models in `models/sec_filing_model.py`; keep the two in step.
 - `SecWorkflowAssignee` (export interface) L4 - A platform user (`userId` set) or an external person known only by name.
