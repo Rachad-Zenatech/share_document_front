@@ -100,7 +100,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/pages/SecFilings/components/AttachedSpreadsheetModal.tsx (4061 lines) - attached spreadsheet modal (pages  sec filings components)
 - src/pages/SecFilings/components/BlockBuilder.tsx (937 lines) - block builder (pages  sec filings components)
 - src/pages/SecFilings/components/BlockInspector.tsx (736 lines) - block inspector (pages  sec filings components)
-- src/pages/SecFilings/components/BlockItem.tsx (3740 lines) - block item (pages  sec filings components)
+- src/pages/SecFilings/components/BlockItem.tsx (3739 lines) - block item (pages  sec filings components)
 - src/pages/SecFilings/components/ContributorInviteModal.tsx (898 lines) - contributor invite modal (pages  sec filings components)
 - src/pages/SecFilings/components/DocumentMergeReview.tsx (14 lines) - The merge review that fits the open document: the script's own for a script, the filing's for everything else.
 - src/pages/SecFilings/components/DocumentOutline.tsx (339 lines) - document outline (pages  sec filings components)
@@ -164,6 +164,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/types/spreadsheet.ts (63 lines) - Status of a row or column slot when comparing a re-uploaded workbook against the current one.
 - src/utils/compressAttachment.ts (78 lines) - Safely compresses image attachments before upload.
 - src/utils/documentVariables.ts (2473 lines) - document variables (utils)
+- src/utils/scriptTableBanding.ts (23 lines) - The fill of every second row in a script's beats table (see data/socialMediaScriptTemplate.ts).
 - src/utils/secFilingExport.ts (987 lines) - sec filing export (utils)
 - src/utils/secFilingImporter.ts (1019 lines) - PDF imports run on the server for a while; called as pages are converted.
 - src/utils/secFilingPagination.ts (141 lines) - sec filing pagination (utils)

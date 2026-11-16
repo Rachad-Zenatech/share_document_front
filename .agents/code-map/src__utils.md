@@ -96,6 +96,9 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `insertOrReplaceCellInFormula` (export function) L2399 - Handles clicking a cell while formula editing is active.
 - `extractCellReferencesFromFormula` (export function) L2440 - Extracts and maps all cell references in a formula to visual color styles for grid highlights.
 
+## src/utils/scriptTableBanding.ts (23 lines) - The fill of every second row in a script's beats table (see data/socialMediaScriptTemplate.ts).
+- `reband` (export function) L11 - Keeps a banded table banded.
+
 ## src/utils/secFilingExport.ts (987 lines) - sec filing export (utils)
 - `sanitizeTableCells` (export const) L23
     - `c` (fn) L26

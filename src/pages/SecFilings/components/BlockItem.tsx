@@ -64,6 +64,7 @@ import type {
   AttachedSpreadsheet
 } from '../../../types/secFiling';
 import { interpolateVariables, hasDocumentVariables } from '../../../utils/documentVariables';
+import { reband } from '../../../utils/scriptTableBanding';
 import { DocumentVariableRenderer } from './DocumentVariableRenderer';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -1979,7 +1980,7 @@ const FinancialTableBlockEditor: React.FC<{
     const nextRows = [...block.rows];
     const [moved] = nextRows.splice(fromIndex, 1);
     nextRows.splice(toIndex, 0, moved);
-    onUpdate({ rows: nextRows });
+    onUpdate({ rows: reband(nextRows) });
   };
   const handleCellChange = (rowIndex: number, colIndex: number, value: string) => {
     const nextRows = [...block.rows];
@@ -2014,7 +2015,7 @@ const FinancialTableBlockEditor: React.FC<{
     const nextRows = [...block.rows];
     const safeIdx = Math.max(0, Math.min(targetIdx, nextRows.length));
     nextRows.splice(safeIdx, 0, newRow);
-    onUpdate({ rows: nextRows });
+    onUpdate({ rows: reband(nextRows) });
   };
 
   const moveRow = (rowIndex: number, direction: 'up' | 'down') => {
@@ -2024,7 +2025,7 @@ const FinancialTableBlockEditor: React.FC<{
     const nextRows = [...block.rows];
     const [moved] = nextRows.splice(rowIndex, 1);
     nextRows.splice(targetIdx, 0, moved);
-    onUpdate({ rows: nextRows });
+    onUpdate({ rows: reband(nextRows) });
   };
 
   const duplicateRow = (rowIndex: number) => {
@@ -2036,13 +2037,11 @@ const FinancialTableBlockEditor: React.FC<{
     };
     const nextRows = [...block.rows];
     nextRows.splice(rowIndex + 1, 0, duplicated);
-    onUpdate({ rows: nextRows });
+    onUpdate({ rows: reband(nextRows) });
   };
 
-  const deleteRow = (rowIndex: number) => {
-    const nextRows = block.rows.filter((_, i) => i !== rowIndex);
-    onUpdate({ rows: nextRows });
-  };
+  const deleteRow = (rowIndex: number) =>
+    onUpdate({ rows: reband(block.rows.filter((_, i) => i !== rowIndex)) });
 
   const addColumn = () => {
     addColumnAt(block.headers.length, `Col ${block.headers.length + 1}`, 'right');

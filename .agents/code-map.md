@@ -28,4 +28,4 @@ to find the right file.
 | .agents/code-map/src__services.md | 13 | 6 KB |
 | .agents/code-map/src__services__secFiling.md | 9 | 9 KB |
 | .agents/code-map/src__types.md | 12 | 6 KB |
-| .agents/code-map/src__utils.md | 8 | 15 KB |
+| .agents/code-map/src__utils.md | 9 | 15 KB |
