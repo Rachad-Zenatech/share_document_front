@@ -7,7 +7,7 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 ## src/services/api.ts (6 lines) - api (services)
 - `getAnnualReport` (export function) L3
 
-## src/services/apiClient.ts (330 lines) - api client (services)
+## src/services/apiClient.ts (333 lines) - api client (services)
 - `ActiveApiAction` (export interface) L3
 - `subscribeToApiActions` (export function) L15
 - `notifyActionListeners` (function) L23
@@ -16,7 +16,7 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `BASE_URL` (export const) L117
 - `getAuthHeaders` (const) L119
 - `monitoredFetch` (function) L133
-- `apiClient` (export const) L232
+- `apiClient` (export const) L235
 
 ## src/services/eSignatureService.ts (294 lines) - e signature service (services)
 - `MobileSigningRequestParams` (export interface) L13

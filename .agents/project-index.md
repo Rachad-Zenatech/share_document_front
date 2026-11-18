@@ -129,7 +129,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/pages/SecFilings/embed/ScriptReviewBar.tsx (132 lines) - script review bar (pages  sec filings embed)
 - src/pages/SecFilings/embed/useEmbedBridge.ts (59 lines) - use embed bridge (pages  sec filings embed)
 - src/services/api.ts (6 lines) - api (services)
-- src/services/apiClient.ts (330 lines) - api client (services)
+- src/services/apiClient.ts (333 lines) - api client (services)
 - src/services/eSignatureService.ts (294 lines) - e signature service (services)
 - src/services/errorReporting.ts (75 lines) - error reporting (services)
 - src/services/guestInvite.ts (34 lines) - Guest invite tokens for external contributors who open a proposal link without an account.
