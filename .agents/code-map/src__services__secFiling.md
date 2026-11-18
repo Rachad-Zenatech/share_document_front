@@ -4,41 +4,41 @@
 
 Each symbol shows its start line (`L<n>`); read from there to the next symbol's line, not the whole file.
 
-## src/services/secFiling/secFilingCore.ts (970 lines) - sec filing core (services sec filing)
+## src/services/secFiling/secFilingCore.ts (969 lines) - sec filing core (services sec filing)
 - `getMainDocument` (export function) L33
-- `saveMainDocument` (export function) L101
-- `getDocumentsList` (export function) L126
-- `getDocumentPreview` (export function) L282
-- `saveDocumentsList` (export function) L321
-- `getAllDocuments` (export function) L331
-- `setActiveDocumentId` (export function) L335
-- `getDocumentContent` (export function) L341
-- `getActiveDocumentId` (export function) L393
-- `openDocument` (export function) L397
-- `createDocumentFromTemplate` (export function) L495
-- `duplicateDocument` (export function) L559
-- `renameDocument` (export function) L607
-- `deleteDocument` (export function) L641
-- `currentMainDocId` (function) L657
-- `getAllVersionHistory` (function) L669
-- `getVersionHistory` (export function) L688 - Snapshots of the open document (older untagged snapshots show for every document).
-- `saveVersionHistory` (export function) L693
-- `restoreVersion` (export function) L706
-- `applyElectronicSignature` (export function) L746
-- `resetToDefault` (export function) L818
-- `DocumentAuthUser` (export interface) L835
-- `canUserAccessDocument` (export function) L850 - Checks whether a user is authorized to view/access a document.
-    - `userEmail` (fn) L858
-    - `docOwner` (fn) L865
-- `isDocumentOwner` (export function) L896
-    - `userEmail` (fn) L901
-- `addDocumentInvitee` (export function) L910
-    - `cleanEmail` (fn) L915
+- `saveMainDocument` (export function) L100
+- `getDocumentsList` (export function) L125
+- `getDocumentPreview` (export function) L281
+- `saveDocumentsList` (export function) L320
+- `getAllDocuments` (export function) L330
+- `setActiveDocumentId` (export function) L334
+- `getDocumentContent` (export function) L340
+- `getActiveDocumentId` (export function) L392
+- `openDocument` (export function) L396
+- `createDocumentFromTemplate` (export function) L494
+- `duplicateDocument` (export function) L558
+- `renameDocument` (export function) L606
+- `deleteDocument` (export function) L640
+- `currentMainDocId` (function) L656
+- `getAllVersionHistory` (function) L668
+- `getVersionHistory` (export function) L687 - Snapshots of the open document (older untagged snapshots show for every document).
+- `saveVersionHistory` (export function) L692
+- `restoreVersion` (export function) L705
+- `applyElectronicSignature` (export function) L745
+- `resetToDefault` (export function) L817
+- `DocumentAuthUser` (export interface) L834
+- `canUserAccessDocument` (export function) L849 - Checks whether a user is authorized to view/access a document.
+    - `userEmail` (fn) L857
+    - `docOwner` (fn) L864
+- `isDocumentOwner` (export function) L895
+    - `userEmail` (fn) L900
+- `addDocumentInvitee` (export function) L909
+    - `cleanEmail` (fn) L914
 
-## src/services/secFiling/secFilingDiff.ts (498 lines) - sec filing diff (services sec filing)
-- `compactFinancialTableBlock` (export function) L10
-- `computeFinancialTableCellDiffs` (export function) L65
-- `calculateDiffs` (export function) L207
+## src/services/secFiling/secFilingDiff.ts (485 lines) - sec filing diff (services sec filing)
+- `compactFinancialTableBlock` (export function) L11
+- `computeFinancialTableCellDiffs` (export function) L61
+- `calculateDiffs` (export function) L192
 
 ## src/services/secFiling/secFilingGuest.ts (59 lines) - Server calls for a guest contributor session (see services/guestInvite.ts).
 - `GuestSession` (export interface) L13
@@ -48,25 +48,26 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `getGuestProposalId` (export function) L51
 - `saveGuestProposal` (export function) L55
 
-## src/services/secFiling/secFilingProposals.ts (575 lines) - sec filing proposals (services sec filing)
-- `getProposalInviteUrl` (export function) L34
+## src/services/secFiling/secFilingProposals.ts (572 lines) - sec filing proposals (services sec filing)
+- `getProposalInviteUrl` (export function) L35
 - `ensureGuestInviteToken` (export function) L67 - Give a proposal from before guest links (guessable "inv-..." token) a guest token, so  its link works without a login.
-- `currentDocumentId` (function) L79 - The document proposals are read and written for: the one open in the editor.
-- `getAllProposals` (function) L92 - Every loaded proposal, across documents.
-- `getProposals` (export function) L122 - Proposals of the open document.
+- `currentDocumentId` (function) L78 - The document proposals are read and written for: the one open in the editor.
+- `proposalDocumentType` (function) L90 - Every loaded proposal, across documents.
+- `getAllProposals` (function) L94
+- `getProposals` (export function) L123 - Proposals of the open document.
 - `saveProposals` (export function) L127
-- `createProposal` (export function) L159
-- `createContributorInvite` (export function) L196
-- `getOrCreateContributorProposal` (export function) L262
-- `forkProposalFromMerged` (export function) L321
-- `updateProposal` (export function) L382
-- `submitProposalForReview` (export function) L395
-- `mergeSelectiveChanges` (export function) L423
-- `mergeProposalIntoMain` (export function) L550
-- `rejectProposal` (export function) L565
+- `createProposal` (export function) L155
+- `createContributorInvite` (export function) L191
+- `getOrCreateContributorProposal` (export function) L257
+- `forkProposalFromMerged` (export function) L317
+- `updateProposal` (export function) L379
+- `submitProposalForReview` (export function) L392
+- `mergeSelectiveChanges` (export function) L420
+- `mergeProposalIntoMain` (export function) L547
+- `rejectProposal` (export function) L562
 
-## src/services/secFiling/secFilingSanitizer.ts (16 lines) - sec filing sanitizer (services sec filing)
-- `sanitizeAndCompactBlocks` (export function) L8 - Sanitizes and compacts block data, ensuring financial tables are compact  and stripped of redundant whitespace/cells before saving to sto...
+## src/services/secFiling/secFilingSanitizer.ts (18 lines) - sec filing sanitizer (services sec filing)
+- `sanitizeAndCompactBlocks` (export function) L9 - Sanitizes and compacts block data, ensuring financial tables are compact  and stripped of redundant whitespace/cells before saving to sto...
 
 ## src/services/secFiling/secFilingSpreadsheet.ts (669 lines) - sec filing spreadsheet (services sec filing)
 - `trackSpreadsheetWrite` (function) L39

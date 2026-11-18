@@ -42,68 +42,76 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `useClearReadNotifications` (export function) L254
 - `useClearAllNotifications` (export function) L266
 
+## src/hooks/useScriptColumnResize.ts (81 lines) - use script column resize (hooks)
+- `scriptColumnWidths` (export function) L4
+- `resizedScriptColumns` (export function) L15
+- `useScriptColumnResize` (export function) L30
+
 ## src/hooks/useScriptReview.ts (77 lines) - use script review (hooks)
 - `useScriptReview` (export function) L23 - A script document's review: its state, what the signed-in person may do (`state.access`), and the moves.
 
-## src/hooks/useSecFiling.ts (1616 lines) - use sec filing (hooks)
-- `UserFilingRole` (export type) L30
-- `moveRunToSection` (function) L37 - Moves the run of blocks starting at `start` that are still in `fromSection` into  `toSection`, stopping at the first block from another s...
+## src/hooks/useScriptTableLayout.ts (22 lines) - use script table layout (hooks)
+- `useScriptTableLayout` (export function) L6
+
+## src/hooks/useSecFiling.ts (1611 lines) - use sec filing (hooks)
+- `UserFilingRole` (export type) L33
+- `moveRunToSection` (function) L39 - Moves the run of blocks starting at `start` that are still in `fromSection` into  `toSection`, stopping at the first block from another s...
 - `repairLegacySectionHeadings` (function) L54 - Gives each legacy placeholder heading that is still inside another section its own  section, carrying the blocks after it along.
-- `useSecFiling` (export function) L73
-    - `queryClient` (fn) L75
-    - `isAccessGranted` (fn) L104 - Document security verification: Owner, Invited Contributor, or Super Admin
-    - `activeProposal` (fn) L112 - --------------------------------------------------------------------------
-    - `workingBlocks` (fn) L116
-    - `documentSections` (fn) L123
-    - `sectionCounts` (fn) L135
-    - `effectiveSpreadsheet` (fn) L145
-    - `matchingBlocks` (fn) L153
-    - `matchingBlockIds` (fn) L161
-    - `filteredBlocks` (fn) L166
-    - `refreshAll` (fn) L176 - --------------------------------------------------------------------------
-    - `toggleBlockSelection` (fn) L182
-    - `selectAllBlocks` (fn) L199
-    - `clearBlockSelection` (fn) L206
-    - `calculateDiffForProposal` (fn) L211
-    - `handleForkProposal` (fn) L235
-    - `applyWorkingBlocks` (fn) L268
-    - `setWorkingBlocks` (fn) L307
-    - `handleUndo` (fn) L336
-    - `handleRedo` (fn) L354
-    - `addBlock` (fn) L372
-    - `updateBlock` (fn) L586
-    - `latestBlocksRef` (fn) L666 - rather than this callback's closure.
-    - `latestSectionFilterRef` (fn) L668
-    - `startSectionAtBlock` (fn) L671
-    - `moveBlock` (fn) L697
-    - `moveMultipleBlocks` (fn) L713
-    - `duplicateMultipleBlocks` (fn) L749
-    - `deleteMultipleBlocks` (fn) L777
-    - `moveMultipleBlocksToSection` (fn) L794
-    - `updateMultipleBlocksSpacing` (fn) L810
-    - `moveSection` (fn) L826
-    - `reorderSection` (fn) L863
-    - `createSection` (fn) L898
-    - `duplicateBlock` (fn) L956
-    - `deleteBlock` (fn) L978
-    - `handleCreateProposal` (fn) L995
-    - `handleCreateContributorInvite` (fn) L1012
-    - `ensureActiveProposalId` (fn) L1037 - Resolves the change proposal that the current session is editing, creating the    contributor draft on demand when the session came in th...
-    - `handleSubmitForReview` (fn) L1061
-    - `handleMergeProposal` (fn) L1101
-    - `handleSelectiveMerge` (fn) L1120
-    - `handleRejectProposal` (fn) L1144
-    - `handleRestoreVersion` (fn) L1154
-    - `handleResetToDefault` (fn) L1170
-    - `handleUpdateAttachedSpreadsheet` (fn) L1178
-    - `handleUpdateSpreadsheetCell` (fn) L1224
-    - `handleAssignSpreadsheet` (fn) L1314
-    - `activeDiffs` (fn) L1327 - --------------------------------------------------------------------------
-    - `handleStorage` (fn) L1443
-    - `handleRemoteUpdate` (fn) L1484
-    - `handleConflict` (fn) L1485
-    - `handleSyncError` (fn) L1493
-    - `handleKeyDown` (fn) L1517
+- `useSecFiling` (export function) L72
+    - `queryClient` (fn) L74
+    - `isAccessGranted` (fn) L99 - Document security verification: Owner, Invited Contributor, or Super Admin
+    - `activeProposal` (fn) L106 - --------------------------------------------------------------------------
+    - `workingBlocks` (fn) L109
+    - `documentSections` (fn) L115
+    - `sectionCounts` (fn) L127
+    - `effectiveSpreadsheet` (fn) L137
+    - `matchingBlocks` (fn) L145
+    - `matchingBlockIds` (fn) L153
+    - `filteredBlocks` (fn) L158
+    - `refreshAll` (fn) L168 - --------------------------------------------------------------------------
+    - `toggleBlockSelection` (fn) L174
+    - `selectAllBlocks` (fn) L191
+    - `clearBlockSelection` (fn) L198
+    - `calculateDiffForProposal` (fn) L203
+    - `handleForkProposal` (fn) L227
+    - `applyWorkingBlocks` (fn) L260
+    - `setWorkingBlocks` (fn) L299
+    - `handleUndo` (fn) L329
+    - `handleRedo` (fn) L347
+    - `addBlock` (fn) L365
+    - `updateBlock` (fn) L581
+    - `latestBlocksRef` (fn) L661 - rather than this callback's closure.
+    - `latestSectionFilterRef` (fn) L663
+    - `startSectionAtBlock` (fn) L666
+    - `moveBlock` (fn) L692
+    - `moveMultipleBlocks` (fn) L708
+    - `duplicateMultipleBlocks` (fn) L744
+    - `deleteMultipleBlocks` (fn) L772
+    - `moveMultipleBlocksToSection` (fn) L789
+    - `updateMultipleBlocksSpacing` (fn) L805
+    - `moveSection` (fn) L821
+    - `reorderSection` (fn) L858
+    - `createSection` (fn) L893
+    - `duplicateBlock` (fn) L951
+    - `deleteBlock` (fn) L973
+    - `handleCreateProposal` (fn) L990
+    - `handleCreateContributorInvite` (fn) L1007
+    - `ensureActiveProposalId` (fn) L1032 - Resolves the change proposal that the current session is editing, creating the    contributor draft on demand when the session came in th...
+    - `handleSubmitForReview` (fn) L1056
+    - `handleMergeProposal` (fn) L1096
+    - `handleSelectiveMerge` (fn) L1115
+    - `handleRejectProposal` (fn) L1139
+    - `handleRestoreVersion` (fn) L1149
+    - `handleResetToDefault` (fn) L1165
+    - `handleUpdateAttachedSpreadsheet` (fn) L1173
+    - `handleUpdateSpreadsheetCell` (fn) L1219
+    - `handleAssignSpreadsheet` (fn) L1309
+    - `activeDiffs` (fn) L1322 - --------------------------------------------------------------------------
+    - `handleStorage` (fn) L1438
+    - `handleRemoteUpdate` (fn) L1479
+    - `handleConflict` (fn) L1480
+    - `handleSyncError` (fn) L1488
+    - `handleKeyDown` (fn) L1512
 
 ## src/hooks/useSecWorkflows.ts (88 lines) - Active platform users that can be put on a workflow step.
 - `useAssignableUsers` (export function) L22 - Active platform users that can be put on a workflow step.

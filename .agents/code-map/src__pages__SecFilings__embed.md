@@ -4,10 +4,15 @@
 
 Each symbol shows its start line (`L<n>`); read from there to the next symbol's line, not the whole file.
 
-## src/pages/SecFilings/embed/ScriptEmbedPage.tsx (72 lines) - The full document editor (blocks, proposals, comments and the merge review), shown without the portal's app shell.
-- `ActiveDocument` (function) L23 - Opens the document (its content, not just its id: the editor shows the "main document", which would otherwise be whichever  one this brow...
-- `EmbedFrame` (function) L35
-- `ScriptEmbedPage` (export function) L59 - embed/script/:documentId - a Social Media Script document without the app shell, for the Social Media portal to open in  a dialog.
+## src/pages/SecFilings/embed/EmbedNotesContext.tsx (17 lines) - embed notes context (pages  sec filings embed)
+- `EmbedNotesContextValue` (export interface) L4
+- `EmbedNotesContext` (export const) L10
+- `useEmbedNotes` (export const) L16
+
+## src/pages/SecFilings/embed/ScriptEmbedPage.tsx (174 lines) - The full document editor (blocks, proposals, comments and the merge review), shown without the portal's app shell.
+- `ActiveDocument` (function) L26 - Opens the document (its content, not just its id: the editor shows the "main document", which would otherwise be whichever  one this brow...
+- `EmbedFrame` (function) L38
+- `ScriptEmbedPage` (export function) L161 - embed/script/:documentId - a Social Media Script document without the app shell, for the Social Media portal to open in  a dialog.
 
 ## src/pages/SecFilings/embed/ScriptInviteDialog.tsx (98 lines) - script invite dialog (pages  sec filings embed)
 - `Props` (interface) L16
@@ -22,5 +27,15 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `CreatorActions` (function) L82
 - `ScriptReviewBar` (export function) L99
 
-## src/pages/SecFilings/embed/useEmbedBridge.ts (59 lines) - use embed bridge (pages  sec filings embed)
+## src/pages/SecFilings/embed/embedNotes.ts (207 lines) - embed notes (pages  sec filings embed)
+- `textNodesUnder` (function) L3
+- `readDomSelection` (export function) L18
+- `clearEmbedHighlights` (export function) L48
+- `applyTextHighlight` (function) L67
+- `FieldMatch` (type) L93
+- `renderFieldMirror` (function) L95
+- `applyEmbedHighlights` (export function) L159
+- `scrollToEmbedNote` (export function) L203
+
+## src/pages/SecFilings/embed/useEmbedBridge.ts (65 lines) - use embed bridge (pages  sec filings embed)
 - `useEmbedBridge` (export function) L10 - Tells the Social Media portal page that hosts this embed what is happening (ready, status changes, a merge, a post  request) and obeys it...

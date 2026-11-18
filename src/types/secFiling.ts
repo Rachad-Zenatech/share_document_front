@@ -343,6 +343,8 @@ export interface SecChangeProposal {
   baseVersion: string;
   baseVersionNumber: number;
   blocks: SecBlock[];
+  /** Original branch content, so later additions to Main are never treated as deletions. */
+  baseSnapshotBlocks?: SecBlock[];
   attachedSpreadsheet?: AttachedSpreadsheet | null;
   spreadsheetDiffs?: SpreadsheetCellDiff[];
   changeSummary: {

@@ -76,3 +76,14 @@
   padding-top: 0.75rem;
   padding-bottom: 1.5rem;
 }
+
+/* Read-only / Reviewers' marks mode: hide editing toolbar, keep document selectable for highlights & comments. */
+[data-readonly-embed] header {
+  display: none !important;
+}
+
+[data-readonly-embed] [contenteditable],
+[data-readonly-embed] input,
+[data-readonly-embed] textarea {
+  caret-color: transparent;
+}

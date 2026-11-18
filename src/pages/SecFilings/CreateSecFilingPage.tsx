@@ -1,3 +1,4 @@
+import { documentTypeOf } from '../../types/documentType';
 import { paginateBlocks } from '../../utils/secFilingPagination';
 import { useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -32,7 +33,9 @@ import {
   Loader2
 } from 'lucide-react';
 import { useDocumentSelection } from '../../hooks/useDocumentSelection';
+import { ActiveFilingBanner } from './components/ActiveFilingBanner';
 import { DocumentSelectionBar } from './components/DocumentSelectionBar';
+import { DocumentTypeTabs, type DocumentTypeTab } from './components/DocumentTypeTabs';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
@@ -248,6 +251,7 @@ export default function CreateSecFilingPage() {
   const [ownershipFilter, setOwnershipFilter] = useState<'anyone' | 'me' | 'not_me'>('anyone');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState<'last_modified' | 'title' | 'last_opened'>('last_modified');
+  const [docTypeTab, setDocTypeTab] = useState<DocumentTypeTab>('all');
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
   const [templateCategory, setTemplateCategory] = useState<TemplateCategory>('all');
 
@@ -299,7 +303,7 @@ export default function CreateSecFilingPage() {
   };
 
   // Filtered & Sorted Documents
-  const filteredDocuments = useMemo(() => {
+  const scopedDocuments = useMemo(() => {
     let list = [...documents];
 
     // Strict security gate: only documents user is authorized to access (Super Admin, Owner, or Invited Contributor)
@@ -321,6 +325,24 @@ export default function CreateSecFilingPage() {
       list = list.filter((d) => !isDocumentOwner(d, user));
     }
 
+    return list;
+  }, [documents, user, searchQuery, ownershipFilter]);
+
+  const docTypeCounts = useMemo<Record<DocumentTypeTab, number>>(() => {
+    let secCount = 0;
+    let scriptCount = 0;
+    for (const d of scopedDocuments) {
+      if (documentTypeOf(d) === 'script') scriptCount += 1;
+      else secCount += 1;
+    }
+    return { all: scopedDocuments.length, 'sec-filing': secCount, script: scriptCount };
+  }, [scopedDocuments]);
+
+  const filteredDocuments = useMemo(() => {
+    const list = docTypeTab === 'all'
+      ? [...scopedDocuments]
+      : scopedDocuments.filter((d) => documentTypeOf(d) === docTypeTab);
+
     if (sortBy === 'title') {
       list.sort((a, b) => a.title.localeCompare(b.title));
     } else {
@@ -328,10 +350,11 @@ export default function CreateSecFilingPage() {
     }
 
     return list;
-  }, [documents, user, searchQuery, ownershipFilter, sortBy]);
+  }, [scopedDocuments, docTypeTab, sortBy]);
 
   const visibleIds = useMemo(() => filteredDocuments.map((d) => d.id), [filteredDocuments]);
   const selection = useDocumentSelection(visibleIds);
+  const activeDoc = secFilingService.getMainDocument();
 
   // Handlers
   const handleOpenDoc = (id: string) => {
@@ -896,41 +919,7 @@ export default function CreateSecFilingPage() {
       {/* 3. "RECENT DOCUMENTS" SECTION                                 */}
       {/* ------------------------------------------------------------- */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-8 py-6">
-        {/* Active Filing Quick-Resume Banner */}
-        {(() => {
-          const activeDoc = secFilingService.getMainDocument();
-          if (!activeDoc) return null;
-          return (
-            <div className="mb-6 p-3.5 sm:p-4 rounded-md border border-blue-500/30 bg-blue-50/60 dark:bg-blue-950/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-md bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-900 flex items-center justify-center p-1 shrink-0 shadow-2xs">
-                  <img src={ZENATECH_LOGO_DATA_URL} alt="ZenaTech" className="w-full h-full object-contain" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs sm:text-sm font-semibold text-blue-950 dark:text-blue-100 truncate">
-                      {activeDoc.title}
-                    </span>
-                    <Badge className="bg-blue-600 text-white text-[9px] px-1.5 py-0 shrink-0">
-                      Active in Editor
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                    {activeDoc.formType} &bull; {activeDoc.period || 'Current'} &bull; {activeDoc.version || 'v1.0'} &bull; Last modified {formatDateLabel(activeDoc.updatedAt)}
-                  </p>
-                </div>
-              </div>
-              <Button
-                size="sm"
-                onClick={() => handleOpenDoc(activeDoc.id)}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-xs gap-1.5 shrink-0 self-end sm:self-auto"
-              >
-                <span>Resume in Editor</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          );
-        })()}
+        <ActiveFilingBanner activeDoc={activeDoc} formatDateLabel={formatDateLabel} onOpen={handleOpenDoc} />
 
         {/* Header & Controls Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
@@ -1045,6 +1034,8 @@ export default function CreateSecFilingPage() {
           </div>
         </div>
 
+        <DocumentTypeTabs value={docTypeTab} onChange={setDocTypeTab} counts={docTypeCounts} />
+
         <DocumentSelectionBar
           total={filteredDocuments.length}
           count={selection.count}
@@ -1116,7 +1107,7 @@ export default function CreateSecFilingPage() {
                       {/* Linked Spreadsheet Pill */}
                       {(() => {
                         const assignedSheet = getAssignedSpreadsheet(doc.id);
-                        if (!assignedSheet) return null;
+                        if (!assignedSheet || documentTypeOf(doc) === 'script') return null;
                         return (
                           <div className="mt-1.5 flex items-center">
                             <button
@@ -1147,10 +1138,10 @@ export default function CreateSecFilingPage() {
                       <DropdownMenuItem onClick={() => handleOpenDoc(doc.id)}>
                         <FileText className="w-3.5 h-3.5 mr-2" /> Open in editor
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setSelectorDoc(doc)}>
+                      {documentTypeOf(doc) !== 'script' && (<DropdownMenuItem onClick={() => setSelectorDoc(doc)}>
                         <FileSpreadsheet className="w-3.5 h-3.5 mr-2 text-emerald-600" />
                         {getAssignedSpreadsheet(doc.id) ? 'Change Linked Workbook...' : 'Link Spreadsheet Workbook...'}
-                      </DropdownMenuItem>
+                      </DropdownMenuItem>)}
                       <DropdownMenuItem onClick={() => handleOpenRename(doc)}>
                         <Pencil className="w-3.5 h-3.5 mr-2" /> Rename
                       </DropdownMenuItem>
@@ -1215,7 +1206,7 @@ export default function CreateSecFilingPage() {
                         <span className="truncate max-w-md">{doc.title}</span>
                         {(() => {
                           const assignedSheet = getAssignedSpreadsheet(doc.id);
-                          if (!assignedSheet) return null;
+                          if (!assignedSheet || documentTypeOf(doc) === 'script') return null;
                           return (
                             <button
                               type="button"
@@ -1251,10 +1242,10 @@ export default function CreateSecFilingPage() {
                             <DropdownMenuItem onClick={() => handleOpenDoc(doc.id)}>
                               <FileText className="w-3.5 h-3.5 mr-2" /> Open in editor
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setSelectorDoc(doc)}>
+                            {documentTypeOf(doc) !== 'script' && (<DropdownMenuItem onClick={() => setSelectorDoc(doc)}>
                               <FileSpreadsheet className="w-3.5 h-3.5 mr-2 text-emerald-600" />
                               {getAssignedSpreadsheet(doc.id) ? 'Change Linked Workbook...' : 'Link Spreadsheet Workbook...'}
-                            </DropdownMenuItem>
+                            </DropdownMenuItem>)}
                             <DropdownMenuItem onClick={() => handleOpenRename(doc)}>
                               <Pencil className="w-3.5 h-3.5 mr-2" /> Rename
                             </DropdownMenuItem>
@@ -1285,7 +1276,9 @@ export default function CreateSecFilingPage() {
         {filteredDocuments.length === 0 && (
           <div className="py-16 text-center">
             <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">No documents found</p>
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              {docTypeTab === 'script' ? 'No scripts found' : docTypeTab === 'sec-filing' ? 'No SEC filings found' : 'No documents found'}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
               {searchQuery ? `No files matching "${searchQuery}"` : 'Create your first document using the templates above.'}
             </p>
@@ -1746,7 +1739,6 @@ export default function CreateSecFilingPage() {
               </Label>
             </div>
           </div>
-
           <DialogFooter className="flex justify-between border-t pt-3 gap-2">
             <Button
               variant="outline"
@@ -1781,7 +1773,6 @@ export default function CreateSecFilingPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Spreadsheet Selector Modal */}
       {selectorDoc && (
         <SpreadsheetSelectorModal

@@ -1,3 +1,5 @@
+import { documentTypeOf } from '../../types/documentType';
+import { proposalBaseBlocks } from '../../utils/blockComparison';
 import type {
   SecChangeProposal,
   SecFilingDocument,
@@ -20,7 +22,7 @@ import {
 } from './secFilingStorage';
 import { sanitizeAndCompactBlocks } from './secFilingSanitizer';
 import { flushRemote, isDocStoreServerBacked } from './secFilingStore';
-import { addDocumentInvitee, getActiveDocumentId } from './secFilingCore';
+import { addDocumentInvitee, getActiveDocumentId, getDocumentsList } from './secFilingCore';
 import { calculateDiffs } from './secFilingDiff';
 import {
   getMainDocument,
@@ -30,7 +32,6 @@ import {
 } from './secFilingCore';
 import { saveSpreadsheet } from './secFilingSpreadsheet';
 import { createGuestInviteToken, isGuestInviteToken } from '../guestInvite';
-
 export function getProposalInviteUrl(proposal: SecChangeProposal): string {
   const baseUrl =
     typeof window !== 'undefined' && window.location.origin
@@ -59,7 +60,6 @@ export function getProposalInviteUrl(proposal: SecChangeProposal): string {
   }
   return `${baseUrl}?${queryParams.toString()}${guestToken ? `#invite=${guestToken}` : ''}`;
 }
-
 /**
  * Give a proposal from before guest links (guessable "inv-..." token) a guest token, so
  * its link works without a login. Saving it registers the token on the server.
@@ -74,7 +74,6 @@ export function ensureGuestInviteToken(proposal: SecChangeProposal): SecChangePr
   void flushRemote();
   return stored;
 }
-
 /** The document proposals are read and written for: the one open in the editor. */
 function currentDocumentId(): string {
     const pendingMain = getPendingMainDoc();
@@ -87,8 +86,11 @@ function currentDocumentId(): string {
     }
     return getActiveDocumentId();
 }
-
 /** Every loaded proposal, across documents. */
+function proposalDocumentType(proposal: Pick<SecChangeProposal, 'documentId'>) {
+  const document = proposal.documentId ? getDocumentsList().find((doc) => doc.id === proposal.documentId) : getMainDocument();
+  return documentTypeOf(document);
+}
 function getAllProposals(): SecChangeProposal[] {
     const pending = getPendingProposals();
     if (pending) {
@@ -101,7 +103,7 @@ function getAllProposals(): SecChangeProposal[] {
         if (Array.isArray(parsed) && (parsed.length > 0 || isDocStoreServerBacked())) {
           return parsed.map((p: SecChangeProposal) => ({
             ...p,
-            blocks: sanitizeAndCompactBlocks(p.blocks || [])
+            blocks: sanitizeAndCompactBlocks(p.blocks || [], proposalDocumentType(p))
           }));
         }
       } catch (e) {
@@ -113,7 +115,6 @@ function getAllProposals(): SecChangeProposal[] {
     safeSetItem(STORAGE_KEYS.PROPOSALS, JSON.stringify(INITIAL_PROPOSALS));
     return JSON.parse(JSON.stringify(INITIAL_PROPOSALS));
 }
-
 /**
  * Proposals of the open document. They used to be one list shared by every document,
  * so a branch made on one filing showed up on all of them; older proposals without a
@@ -123,15 +124,13 @@ export function getProposals(): SecChangeProposal[] {
     const docId = currentDocumentId();
     return getAllProposals().filter((p) => !p.documentId || p.documentId === docId);
 }
-
 export function saveProposals(proposals: SecChangeProposal[], immediate = false): boolean {
     const docId = currentDocumentId();
     const sanitized = proposals.map((p) => ({
       ...p,
       documentId: p.documentId || docId,
-      blocks: sanitizeAndCompactBlocks(p.blocks || [])
+      blocks: sanitizeAndCompactBlocks(p.blocks || [], proposalDocumentType(p))
     }));
-
     const ordered = sanitized.sort((a, b) => {
       if (a.status === 'pending_review' && b.status !== 'pending_review') return -1;
       if (b.status === 'pending_review' && a.status !== 'pending_review') return 1;
@@ -139,13 +138,11 @@ export function saveProposals(proposals: SecChangeProposal[], immediate = false)
     });
     // The 4-proposal cap only existed to fit browser storage; the server keeps them all.
     const kept = isDocStoreServerBacked() ? ordered : ordered.slice(0, 4);
-
     // Keep other documents' proposals untouched.
     const keptIds = new Set(kept.map((p) => p.id));
     const others = getAllProposals().filter(
       (p) => p.documentId && p.documentId !== docId && !keptIds.has(p.id)
     );
-
     setPendingProposals([...kept, ...others]);
     if (immediate) {
       return flushPendingSaves();
@@ -155,7 +152,6 @@ export function saveProposals(proposals: SecChangeProposal[], immediate = false)
     setSaveProposalsTimer(setTimeout(flushPendingSaves, 350));
     return true;
 }
-
 export function createProposal(
     title: string,
     author: { id: string; name: string; email: string; role: string },
@@ -174,6 +170,7 @@ export function createProposal(
       baseVersion: baseDoc.version,
       baseVersionNumber: baseDoc.versionNumber,
       blocks: JSON.parse(JSON.stringify(baseDoc.blocks)),
+      ...(documentTypeOf(baseDoc) === 'script' ? { baseSnapshotBlocks: JSON.parse(JSON.stringify(baseDoc.blocks)) } : {}),
       attachedSpreadsheet: baseDoc.attachedSpreadsheet
         ? JSON.parse(JSON.stringify(baseDoc.attachedSpreadsheet))
         : null,
@@ -186,13 +183,11 @@ export function createProposal(
         description: description || 'New proposed branch created'
       }
     };
-
     proposals.unshift(newProposal);
     saveProposals(proposals);
     broadcastSync("PROPOSAL_CREATED", { proposalId: newProposal.id, title: newProposal.title });
     return newProposal;
 }
-
 export function createContributorInvite(params: {
     title: string;
     contributorName: string;
@@ -206,7 +201,6 @@ export function createContributorInvite(params: {
     const proposals = getProposals();
     const propId = `prop-contrib-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 5)}`;
     const token = createGuestInviteToken();
-
     const author = {
       id: `usr-contrib-${Date.now().toString(36)}`,
       name: params.contributorName,
@@ -227,6 +221,7 @@ export function createContributorInvite(params: {
       baseVersion: params.baseDoc.version,
       baseVersionNumber: params.baseDoc.versionNumber,
       blocks: JSON.parse(JSON.stringify(params.baseDoc.blocks)),
+      ...(documentTypeOf(params.baseDoc) === 'script' ? { baseSnapshotBlocks: JSON.parse(JSON.stringify(params.baseDoc.blocks)) } : {}),
       attachedSpreadsheet: params.baseDoc.attachedSpreadsheet
         ? JSON.parse(JSON.stringify(params.baseDoc.attachedSpreadsheet))
         : null,
@@ -293,6 +288,7 @@ export function getOrCreateContributorProposal(params: {
       baseVersion: mainDoc.version,
       baseVersionNumber: mainDoc.versionNumber,
       blocks: JSON.parse(JSON.stringify(mainDoc.blocks)),
+      ...(documentTypeOf(mainDoc) === 'script' ? { baseSnapshotBlocks: JSON.parse(JSON.stringify(mainDoc.blocks)) } : {}),
       attachedSpreadsheet: mainDoc.attachedSpreadsheet
         ? JSON.parse(JSON.stringify(mainDoc.attachedSpreadsheet))
         : null,
@@ -343,7 +339,7 @@ export function forkProposalFromMerged(
     }
 
     const blocksToUse = customBlocks ? JSON.parse(JSON.stringify(customBlocks)) : JSON.parse(JSON.stringify(currentMain.blocks));
-    const diffs = calculateDiffs(currentMain.blocks, blocksToUse);
+    const diffs = calculateDiffs(currentMain.blocks, blocksToUse, undefined, documentTypeOf(currentMain));
 
     const sheetToUse = source.attachedSpreadsheet
       ? JSON.parse(JSON.stringify(source.attachedSpreadsheet))
@@ -361,6 +357,7 @@ export function forkProposalFromMerged(
       baseVersion: currentMain.version,
       baseVersionNumber: currentMain.versionNumber,
       blocks: blocksToUse,
+      ...(documentTypeOf(currentMain) === 'script' ? { baseSnapshotBlocks: JSON.parse(JSON.stringify(currentMain.blocks)) } : {}),
       attachedSpreadsheet: sheetToUse,
       assignedSection: source.assignedSection,
       inviteToken: createGuestInviteToken(),
@@ -433,7 +430,7 @@ export function mergeSelectiveChanges(
     }
 
     const currentMain = getMainDocument();
-    const diffs = calculateDiffs(currentMain.blocks, proposal.blocks);
+    const diffs = calculateDiffs(currentMain.blocks, proposal.blocks, documentTypeOf(currentMain) === 'script' ? proposalBaseBlocks(proposal, getVersionHistory()) : undefined, documentTypeOf(currentMain));
     const acceptedSet = new Set(acceptedBlockIds);
 
     let mergedBlocks: SecBlock[] = JSON.parse(JSON.stringify(currentMain.blocks));
@@ -557,7 +554,7 @@ export function mergeProposalIntoMain(
     if (!proposal) {
       throw new Error('Proposal not found');
     }
-    const allDiffs = calculateDiffs(getMainDocument().blocks, proposal.blocks);
+    const allDiffs = calculateDiffs(getMainDocument().blocks, proposal.blocks, documentTypeOf(getMainDocument()) === 'script' ? proposalBaseBlocks(proposal, getVersionHistory()) : undefined, documentTypeOf(getMainDocument()));
     const allChangedIds = allDiffs.filter((d) => d.status !== 'unchanged').map((d) => d.blockId);
     return mergeSelectiveChanges(proposalId, allChangedIds, reviewerName, reviewNotes);
 }

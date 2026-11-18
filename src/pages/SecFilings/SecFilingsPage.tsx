@@ -1118,8 +1118,8 @@ export default function SecFilingsPage() {
               sections={documentSections}
               activeSection={sectionFilter}
               onSelectSection={handleSelectSection}
-              totalBlocks={workingBlocks.length}
-              sectionCounts={sectionCounts}
+              totalBlocks={workingBlocks.length} selectedBlockId={selectedBlockId} onSelectBlock={setSelectedBlockId}
+              sectionCounts={sectionCounts} blocks={activeDocumentType() === 'script' ? workingBlocks : undefined}
               onMoveSection={moveSection}
               onReorderSection={reorderSection}
               onCreateSection={createSection}

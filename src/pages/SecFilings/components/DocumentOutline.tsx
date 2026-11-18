@@ -1,3 +1,5 @@
+import { OutlineBlockItems } from './OutlineBlockItems';
+import { activeDocumentType } from '../../../hooks/useFinancialTableTemplates';
 import React, { useMemo } from 'react';
 import {
   ListFilter,
@@ -29,6 +31,8 @@ interface DocumentOutlineProps {
   onSelectSection: (section: string) => void;
   totalBlocks: number;
   blocks?: SecBlock[];
+  selectedBlockId?: string | null;
+  onSelectBlock?: (id: string) => void;
   sectionCounts?: Record<string, number>;
   onMoveSection?: (sectionName: string, direction: 'up' | 'down') => void;
   onReorderSection?: (sectionName: string, targetIndex: number) => void;
@@ -41,14 +45,16 @@ const DocumentOutlineComponent: React.FC<DocumentOutlineProps> = ({
   activeSection,
   onSelectSection,
   totalBlocks,
-  blocks = [],
+  blocks, selectedBlockId, onSelectBlock,
   sectionCounts,
   onMoveSection,
   onReorderSection,
   onCreateSection,
   className = ''
 }) => {
+  const isScript = activeDocumentType() === 'script';
   const getSectionIcon = (section: string) => {
+    if (isScript) return Layers;
     if (
       section.includes('Statements of') ||
       section.includes('Position') ||
@@ -136,44 +142,44 @@ const DocumentOutlineComponent: React.FC<DocumentOutlineProps> = ({
   };
 
   const effectiveSectionCounts = useMemo(() => {
-    if (sectionCounts) return sectionCounts;
+    if (sectionCounts && (!isScript || !blocks)) return sectionCounts;
     const map: Record<string, number> = {};
-    blocks.forEach((b) => {
+    blocks?.forEach((b) => {
       if (b.section) {
         map[b.section] = (map[b.section] || 0) + 1;
       }
     });
     return map;
-  }, [sectionCounts, blocks]);
+  }, [sectionCounts, blocks, isScript]);
 
   return (
     <div
       className={`w-full h-full flex flex-col bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs overflow-hidden ${className}`}
     >
       {/* 1. Header (Fixed top of sidebar) */}
-      <div className="flex items-center justify-between p-3 pb-2.5 border-b border-slate-100 dark:border-zinc-800 shrink-0 bg-white/95 dark:bg-zinc-900/95">
+      <div className="flex flex-wrap items-center justify-between gap-2 p-3 pb-2.5 border-b border-slate-100 dark:border-zinc-800 shrink-0 bg-white/95 dark:bg-zinc-900/95">
         <div className="space-y-0.5">
           <div className="flex items-center gap-2">
             <ListFilter className="w-4 h-4 text-blue-600" />
             <h3 className="font-semibold text-xs text-slate-800 dark:text-zinc-200 uppercase tracking-wider">
-              Document Sections
+              {isScript ? 'Script Scenes' : 'Document Sections'}
             </h3>
           </div>
-          <p className="text-[10px] text-slate-400">Reorder whole sections or jump to section</p>
+          <p className="text-[10px] text-slate-400">{isScript ? 'Reorder scenes or jump to a scene' : 'Reorder whole sections or jump to section'}</p>
         </div>
         <div className="flex items-center gap-1.5">
           <Badge variant="secondary" className="text-[10px] bg-slate-100 dark:bg-zinc-800 font-mono">
-            {totalBlocks} blocks
+            {totalBlocks} {isScript ? 'items' : 'blocks'}
           </Badge>
           {onCreateSection && (
             <button
               type="button"
               onClick={() => onCreateSection()}
               className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/80 text-blue-600 dark:text-blue-400 text-[10px] font-medium transition-colors cursor-pointer border border-blue-200 dark:border-blue-800/60 shadow-2xs"
-              title="Add a new section to document"
+              title={isScript ? 'Add a new scene to the script' : 'Add a new section to document'}
             >
               <Plus className="w-3 h-3" />
-              <span>New</span>
+              <span>{isScript ? 'New scene' : 'New'}</span>
             </button>
           )}
         </div>
@@ -192,7 +198,7 @@ const DocumentOutlineComponent: React.FC<DocumentOutlineProps> = ({
         >
           <div className="flex items-center gap-2 truncate">
             <Layers className="w-3.5 h-3.5 shrink-0 text-slate-500" />
-            <span className="truncate">View Entire Filing (All)</span>
+            <span className="truncate">{isScript ? 'View Entire Script (All)' : 'View Entire Filing (All)'}</span>
           </div>
           {activeSection === 'ALL' && <ChevronRight className="w-3.5 h-3.5 shrink-0 text-blue-600" />}
         </button>
@@ -219,7 +225,7 @@ const DocumentOutlineComponent: React.FC<DocumentOutlineProps> = ({
           }
 
           return (
-            <div
+            <React.Fragment key={sec}><div
               key={sec}
               onDragOver={(e) => handleDragOver(e, sec)}
               onDragLeave={handleDragLeave}
@@ -244,7 +250,7 @@ const DocumentOutlineComponent: React.FC<DocumentOutlineProps> = ({
                       onDragStart={(e) => handleDragStart(e, sec)}
                       onDragEnd={handleDragEnd}
                       onClick={(e) => e.stopPropagation()}
-                      title="Drag up or down to move whole section, or click for actions"
+                      title={isScript ? 'Drag to reorder a scene, or click for scene actions' : 'Drag up or down to move whole section, or click for actions'}
                       className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-zinc-800 transition-colors cursor-grab active:cursor-grabbing group-hover:text-slate-600 dark:group-hover:text-zinc-200"
                     >
                       <Menu className="w-3.5 h-3.5" />
@@ -253,8 +259,8 @@ const DocumentOutlineComponent: React.FC<DocumentOutlineProps> = ({
 
                   <DropdownMenuContent align="start" className="w-56 p-1 text-xs z-50">
                     <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                      <span>Section Actions</span>
-                      <span className="font-mono text-slate-400">({count} blocks)</span>
+                      <span>{isScript ? 'Scene Actions' : 'Section Actions'}</span>
+                      <span className="font-mono text-slate-400">({count} {isScript ? 'items' : 'blocks'})</span>
                     </div>
 
                     <DropdownMenuSeparator />
@@ -267,7 +273,7 @@ const DocumentOutlineComponent: React.FC<DocumentOutlineProps> = ({
                           className="gap-2 cursor-pointer py-1.5"
                         >
                           <ArrowUp className="w-3.5 h-3.5 text-blue-600" />
-                          <span>Move Section Up (1 Step)</span>
+                          <span>{isScript ? 'Move Scene Up' : 'Move Section Up (1 Step)'}</span>
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={isLast}
@@ -275,7 +281,7 @@ const DocumentOutlineComponent: React.FC<DocumentOutlineProps> = ({
                           className="gap-2 cursor-pointer py-1.5"
                         >
                           <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
-                          <span>Move Section Down (1 Step)</span>
+                          <span>{isScript ? 'Move Scene Down' : 'Move Section Down (1 Step)'}</span>
                         </DropdownMenuItem>
                       </>
                     )}
@@ -310,7 +316,7 @@ const DocumentOutlineComponent: React.FC<DocumentOutlineProps> = ({
                 type="button"
                 onClick={() => onSelectSection(sec)}
                 className="flex items-center gap-2 truncate flex-1 text-left py-1 cursor-pointer min-w-0"
-                title={`Jump to section: ${sec} (${count} blocks)`}
+                title={`Jump to ${isScript ? 'scene' : 'section'}: ${sec} (${count} ${isScript ? 'items' : 'blocks'})`}
               >
                 <Icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
                 <span className="truncate flex-1">{sec}</span>
@@ -322,14 +328,14 @@ const DocumentOutlineComponent: React.FC<DocumentOutlineProps> = ({
               </button>
 
               {isSelected && <ChevronRight className="w-3.5 h-3.5 shrink-0 ml-auto text-blue-600 pr-0.5" />}
-            </div>
+            </div>{isScript && <OutlineBlockItems blocks={blocks || []} section={sec} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onSelectSection={onSelectSection} />}</React.Fragment>
           );
         })}
       </div>
 
       {/* 4. Subtle Bottom Summary Bar (Guarantees bottom is anchored and visible) */}
       <div className="px-3 py-1.5 bg-slate-50/80 dark:bg-zinc-800/50 border-t border-slate-100 dark:border-zinc-800 shrink-0 flex items-center justify-between text-[10px] text-slate-400">
-        <span>{sections.length} total sections</span>
+        <span>{sections.length} {isScript ? (sections.length === 1 ? 'scene' : 'scenes') : 'total sections'}</span>
         <span className="font-mono">drag handle to reorder</span>
       </div>
     </div>

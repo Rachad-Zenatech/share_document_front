@@ -1,3 +1,6 @@
+import { activeDocumentType } from '../../../hooks/useFinancialTableTemplates';
+import { SCRIPT_TABLE_TEMPLATES } from '../../../data/scriptTableTemplates';
+import { resolveTableTemplates } from '../../../data/financialTableTemplates';
 import React, { useState } from 'react';
 import {
   Plus,
@@ -15,7 +18,6 @@ import type { SecBlock, SecBlockType } from '../../../types/secFiling';
 import { FINANCIAL_TABLE_TEMPLATES } from '../../../data/financialTableTemplates';
 import type { FinancialTableTemplate } from '../../../data/financialTableTemplates';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
-
 interface InlineAddBlockProps {
   index?: number;
   onAddBlock?: (index: number, type: SecBlockType, customBlock?: Partial<SecBlock>) => void;
@@ -25,7 +27,6 @@ interface InlineAddBlockProps {
   /** Statement templates, from the API. Falls back to the bundled set. */
   tableTemplates?: FinancialTableTemplate[];
 }
-
 const BLOCK_OPTIONS: {
   type: SecBlockType;
   label: string;
@@ -90,6 +91,14 @@ const BLOCK_OPTIONS: {
       color: 'text-sky-500 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40'
     }
   ];
+const SCRIPT_OPTIONS: Partial<Record<SecBlockType, { label: string; desc: string }>> = {
+  heading: { label: 'Scene Heading / New Scene', desc: 'Start a new scene or script section' },
+  paragraph: { label: 'Script Paragraph', desc: 'Add narration, dialogue, or scene description' },
+  image: { label: 'Reference Image', desc: 'Add a storyboard frame or visual reference' },
+  financial_table: { label: 'Script Table', desc: 'Time, visual / footage, voiceover, and on-screen text' },
+  callout: { label: 'Production Note', desc: 'Highlight filming directions or review notes' },
+  divider: { label: 'Scene Break', desc: 'Separate scenes with a visual divider' },
+};
 
 const InlineAddBlockComponent: React.FC<InlineAddBlockProps> = ({
   index,
@@ -97,8 +106,13 @@ const InlineAddBlockComponent: React.FC<InlineAddBlockProps> = ({
   onAdd,
   className = '',
   isAlwaysVisible = false,
-  tableTemplates = FINANCIAL_TABLE_TEMPLATES
+  tableTemplates
 }) => {
+  const isScript = activeDocumentType() === 'script';
+  const options = isScript ? BLOCK_OPTIONS.filter((item) => SCRIPT_OPTIONS[item.type]).map((item) => ({ ...item, ...SCRIPT_OPTIONS[item.type] })) : BLOCK_OPTIONS;
+  const supplied = tableTemplates ?? FINANCIAL_TABLE_TEMPLATES;
+  const scriptTemplates = supplied.filter((template) => !FINANCIAL_TABLE_TEMPLATES.some((filing) => filing.id === template.id));
+  const templates = isScript ? (scriptTemplates.length ? scriptTemplates : resolveTableTemplates(SCRIPT_TABLE_TEMPLATES)) : supplied;
   const [open, setOpen] = useState(false);
   const [templatesExpanded, setTemplatesExpanded] = useState(false);
 
@@ -123,10 +137,10 @@ const InlineAddBlockComponent: React.FC<InlineAddBlockProps> = ({
   const menuHeader = (
     <div className="px-2 py-1.5 border-b border-slate-100 dark:border-zinc-800 mb-1">
       <p className="text-xs font-semibold text-slate-800 dark:text-zinc-200">
-        Insert SEC Filing Block
+        {isScript ? 'Insert Script Content' : 'Insert SEC Filing Block'}
       </p>
       <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-        Select a block type to add to the document
+        {isScript ? 'Choose content to add to your script' : 'Select a block type to add to the document'}
       </p>
     </div>
   );
@@ -134,7 +148,7 @@ const InlineAddBlockComponent: React.FC<InlineAddBlockProps> = ({
   // Shared block-type list, used by the "Add First Block" and the inline seam menus.
   const blockOptionList = (
     <div className="grid grid-cols-1 gap-1 max-h-80 overflow-y-auto pr-1">
-      {BLOCK_OPTIONS.map((item) => {
+      {options.map((item) => {
         const Icon = item.icon;
 
         // Financial statement tables expand on click into the statement templates so a
@@ -161,8 +175,8 @@ const InlineAddBlockComponent: React.FC<InlineAddBlockProps> = ({
                   </div>
                   <div className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1">
                     {templatesExpanded
-                      ? 'Pick a statement template below'
-                      : 'Click to build from a statement template'}
+                      ? (isScript ? 'Pick a script table template below' : 'Pick a statement template below')
+                      : (isScript ? 'Choose a script table layout' : 'Click to build from a statement template')}
                   </div>
                 </div>
                 <ChevronRight
@@ -177,7 +191,7 @@ const InlineAddBlockComponent: React.FC<InlineAddBlockProps> = ({
                   <div className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-zinc-500">
                     Build table from template
                   </div>
-                  {tableTemplates.map((tpl) => {
+                  {templates.map((tpl) => {
                     const TplIcon = tpl.icon;
                     return (
                       <button
@@ -255,7 +269,7 @@ const InlineAddBlockComponent: React.FC<InlineAddBlockProps> = ({
               className="relative z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 text-xs font-semibold text-slate-700 dark:text-zinc-200 shadow-sm hover:border-blue-500 hover:text-blue-600 transition-all cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Add First Block</span>
+              <span>{isScript ? 'Add First Script Content' : 'Add First Block'}</span>
             </button>
           </PopoverTrigger>
           <PopoverContent
@@ -294,7 +308,7 @@ const InlineAddBlockComponent: React.FC<InlineAddBlockProps> = ({
               className="relative z-10 flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white dark:bg-zinc-900 border border-blue-300 dark:border-blue-700 text-[10px] font-semibold text-blue-600 dark:text-blue-400 shadow-sm hover:scale-105 active:scale-95 transition-transform cursor-pointer"
             >
               <Plus className="w-3 h-3" />
-              <span>Add Block</span>
+              <span>{isScript ? 'Add Script Content' : 'Add Block'}</span>
             </button>
           </PopoverTrigger>
 

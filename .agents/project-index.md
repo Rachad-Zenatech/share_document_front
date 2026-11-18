@@ -72,11 +72,13 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/hooks/useHeartbeat.ts (45 lines) - Track user activity
 - src/hooks/useInviteDirectory.ts (32 lines) - Directory unavailable (offline or no permission).
 - src/hooks/useNotifications.ts (277 lines) - use notifications (hooks)
+- src/hooks/useScriptColumnResize.ts (81 lines) - use script column resize (hooks)
 - src/hooks/useScriptReview.ts (77 lines) - use script review (hooks)
-- src/hooks/useSecFiling.ts (1616 lines) - use sec filing (hooks)
+- src/hooks/useScriptTableLayout.ts (22 lines) - use script table layout (hooks)
+- src/hooks/useSecFiling.ts (1611 lines) - use sec filing (hooks)
 - src/hooks/useSecWorkflows.ts (88 lines) - Active platform users that can be put on a workflow step.
 - src/lib/AuthContext.tsx (221 lines) - auth context (lib)
-- src/lib/embedBridge.ts (65 lines) - The hosting portal signs this person in by putting a short-lived token in the URL's #token=; it is kept for this tab and the URL cleaned.
+- src/lib/embedBridge.ts (77 lines) - The hosting portal signs this person in by putting a short-lived token in the URL's #token=; it is kept for this tab and the URL cleaned.
 - src/lib/userDepartment.ts (170 lines) - user department (lib)
 - src/lib/utils.ts (7 lines) - utils (lib)
 - src/main.tsx (53 lines) - Create a client
@@ -91,43 +93,50 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/pages/Dashboard/Dashboard.tsx (297 lines) - dashboard (pages  dashboard)
 - src/pages/Logs/AuditLog.tsx (482 lines) - audit log (pages  logs)
 - src/pages/Logs/SystemLogsPage.tsx (1065 lines) - system logs page (pages  logs)
-- src/pages/SecFilings/CreateSecFilingPage.tsx (1803 lines) - create sec filing page (pages  sec filings)
+- src/pages/SecFilings/CreateSecFilingPage.tsx (1794 lines) - create sec filing page (pages  sec filings)
 - src/pages/SecFilings/MobileSignerPage.tsx (335 lines) - mobile signer page (pages  sec filings)
-- src/pages/SecFilings/SecFilingContributorPage.tsx (763 lines) - sec filing contributor page (pages  sec filings)
+- src/pages/SecFilings/SecFilingContributorPage.tsx (761 lines) - sec filing contributor page (pages  sec filings)
 - src/pages/SecFilings/SecFilingsPage.tsx (1338 lines) - sec filings page (pages  sec filings)
 - src/pages/SecFilings/SpreadsheetHubPage.tsx (964 lines) - spreadsheet hub page (pages  sec filings)
 - src/pages/SecFilings/WorkflowAssignmentsPage.tsx (686 lines) - workflow assignments page (pages  sec filings)
+- src/pages/SecFilings/components/ActiveFilingBanner.tsx (48 lines) - Quick-resume banner for the document currently active in the editor.
 - src/pages/SecFilings/components/AttachedSpreadsheetModal.tsx (4061 lines) - attached spreadsheet modal (pages  sec filings components)
-- src/pages/SecFilings/components/BlockBuilder.tsx (937 lines) - block builder (pages  sec filings components)
+- src/pages/SecFilings/components/BlockBuilder.tsx (931 lines) - block builder (pages  sec filings components)
 - src/pages/SecFilings/components/BlockInspector.tsx (736 lines) - block inspector (pages  sec filings components)
-- src/pages/SecFilings/components/BlockItem.tsx (3739 lines) - block item (pages  sec filings components)
+- src/pages/SecFilings/components/BlockItem.tsx (3657 lines) - block item (pages  sec filings components)
 - src/pages/SecFilings/components/ContributorInviteModal.tsx (898 lines) - contributor invite modal (pages  sec filings components)
 - src/pages/SecFilings/components/DocumentMergeReview.tsx (14 lines) - The merge review that fits the open document: the script's own for a script, the filing's for everything else.
-- src/pages/SecFilings/components/DocumentOutline.tsx (339 lines) - document outline (pages  sec filings components)
+- src/pages/SecFilings/components/DocumentOutline.tsx (345 lines) - document outline (pages  sec filings components)
 - src/pages/SecFilings/components/DocumentRunningHeader.tsx (51 lines) - Whether the open document is a script (dialogs and labels then speak of scripts, not SEC filings).
 - src/pages/SecFilings/components/DocumentSelectionBar.tsx (92 lines) - document selection bar (pages  sec filings components)
+- src/pages/SecFilings/components/DocumentTypeTabs.tsx (42 lines) - Tabs separating SEC filings and scripts in the Document Hub's recent documents section.
 - src/pages/SecFilings/components/DocumentVariableRenderer.tsx (162 lines) - document variable renderer (pages  sec filings components)
 - src/pages/SecFilings/components/EmbeddedSpreadsheetDiffViewer.tsx (925 lines) - embedded spreadsheet diff viewer (pages  sec filings components)
 - src/pages/SecFilings/components/ImportDocumentModal.tsx (623 lines) - import document modal (pages  sec filings components)
-- src/pages/SecFilings/components/InlineAddBlock.tsx (315 lines) - Statement templates, from the API.
+- src/pages/SecFilings/components/InlineAddBlock.tsx (329 lines) - inline add block (pages  sec filings components)
 - src/pages/SecFilings/components/MediaBucketModal.tsx (579 lines) - media bucket modal (pages  sec filings components)
 - src/pages/SecFilings/components/MergeReviewModal.tsx (2484 lines) - merge review modal (pages  sec filings components)
 - src/pages/SecFilings/components/MobileSigningModal.tsx (916 lines) - mobile signing modal (pages  sec filings components)
 - src/pages/SecFilings/components/NewProposalModal.tsx (103 lines) - new proposal modal (pages  sec filings components)
+- src/pages/SecFilings/components/OutlineBlockItems.tsx (51 lines) - outline block items (pages  sec filings components)
 - src/pages/SecFilings/components/ScriptChangeCard.tsx (101 lines) - What a block of a script is called to the person reviewing it.
 - src/pages/SecFilings/components/ScriptMergeParts.tsx (110 lines) - Who changed the script, against which version, and the one close button.
 - src/pages/SecFilings/components/ScriptMergeReviewModal.tsx (109 lines) - script merge review modal (pages  sec filings components)
+- src/pages/SecFilings/components/ScriptSubmitProposalModal.tsx (73 lines) - script submit proposal modal (pages  sec filings components)
+- src/pages/SecFilings/components/ScriptTableCell.tsx (126 lines) - script table cell (pages  sec filings components)
 - src/pages/SecFilings/components/SpreadsheetReuploadPreviewModal.tsx (699 lines) - spreadsheet reupload preview modal (pages  sec filings components)
 - src/pages/SecFilings/components/SpreadsheetSelectorModal.tsx (502 lines) - spreadsheet selector modal (pages  sec filings components)
-- src/pages/SecFilings/components/SubmitProposalModal.tsx (390 lines) - submit proposal modal (pages  sec filings components)
+- src/pages/SecFilings/components/SubmitProposalModal.tsx (395 lines) - submit proposal modal (pages  sec filings components)
 - src/pages/SecFilings/components/TableTemplateModal.tsx (665 lines) - table template modal (pages  sec filings components)
 - src/pages/SecFilings/components/TemplateCategoryTabs.tsx (27 lines) - The template gallery's tabs.
 - src/pages/SecFilings/components/VersionHistoryModal.tsx (115 lines) - version history modal (pages  sec filings components)
 - src/pages/SecFilings/components/WorkflowAssigneePicker.tsx (202 lines) - Display text stored as the step's `assignedTo` (used by export, cards and the invite modal).
-- src/pages/SecFilings/embed/ScriptEmbedPage.tsx (72 lines) - The full document editor (blocks, proposals, comments and the merge review), shown without the portal's app shell.
+- src/pages/SecFilings/embed/EmbedNotesContext.tsx (17 lines) - embed notes context (pages  sec filings embed)
+- src/pages/SecFilings/embed/ScriptEmbedPage.tsx (174 lines) - The full document editor (blocks, proposals, comments and the merge review), shown without the portal's app shell.
 - src/pages/SecFilings/embed/ScriptInviteDialog.tsx (98 lines) - script invite dialog (pages  sec filings embed)
 - src/pages/SecFilings/embed/ScriptReviewBar.tsx (132 lines) - script review bar (pages  sec filings embed)
-- src/pages/SecFilings/embed/useEmbedBridge.ts (59 lines) - use embed bridge (pages  sec filings embed)
+- src/pages/SecFilings/embed/embedNotes.ts (207 lines) - embed notes (pages  sec filings embed)
+- src/pages/SecFilings/embed/useEmbedBridge.ts (65 lines) - use embed bridge (pages  sec filings embed)
 - src/services/api.ts (6 lines) - api (services)
 - src/services/apiClient.ts (330 lines) - api client (services)
 - src/services/eSignatureService.ts (294 lines) - e signature service (services)
@@ -137,11 +146,11 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/services/mediaBucketService.ts (124 lines) - media bucket service (services)
 - src/services/queryKeys.ts (33 lines) - Centralized React Query keys for consistent invalidation and caching.
 - src/services/scriptReviewService.ts (35 lines) - script review service (services)
-- src/services/secFiling/secFilingCore.ts (970 lines) - sec filing core (services sec filing)
-- src/services/secFiling/secFilingDiff.ts (498 lines) - sec filing diff (services sec filing)
+- src/services/secFiling/secFilingCore.ts (969 lines) - sec filing core (services sec filing)
+- src/services/secFiling/secFilingDiff.ts (485 lines) - sec filing diff (services sec filing)
 - src/services/secFiling/secFilingGuest.ts (59 lines) - Server calls for a guest contributor session (see services/guestInvite.ts).
-- src/services/secFiling/secFilingProposals.ts (575 lines) - sec filing proposals (services sec filing)
-- src/services/secFiling/secFilingSanitizer.ts (16 lines) - sec filing sanitizer (services sec filing)
+- src/services/secFiling/secFilingProposals.ts (572 lines) - sec filing proposals (services sec filing)
+- src/services/secFiling/secFilingSanitizer.ts (18 lines) - sec filing sanitizer (services sec filing)
 - src/services/secFiling/secFilingSpreadsheet.ts (669 lines) - sec filing spreadsheet (services sec filing)
 - src/services/secFiling/secFilingStorage.ts (480 lines) - Documents, proposals and version history go through `docStore`, which is backed by the
 - src/services/secFiling/secFilingStore.ts (482 lines) - Server-backed store for filing documents, proposals and version history.
@@ -156,15 +165,18 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/types/documentType.ts (42 lines) - The kinds of document the editor handles.
 - src/types/mediaBucket.ts (11 lines) - media bucket (types)
 - src/types/notifications.ts (16 lines) - notifications (types)
-- src/types/scriptReview.ts (76 lines) - Mirrors models/sec_filings/script_review_model.py and the state returned by the script-review routes.
+- src/types/scriptReview.ts (91 lines) - Mirrors models/sec_filings/script_review_model.py and the state returned by the script-review routes.
 - src/types/search.ts (8 lines) - search (types)
-- src/types/secFiling.ts (442 lines) - sec filing (types)
+- src/types/secFiling.ts (444 lines) - sec filing (types)
 - src/types/secFilingTemplate.ts (61 lines) - A template as returned by `GET /api/sec-filings/table-templates`.
 - src/types/secWorkflow.ts (46 lines) - Mirrors the backend models in `models/sec_filing_model.py`; keep the two in step.
 - src/types/spreadsheet.ts (63 lines) - Status of a row or column slot when comparing a re-uploaded workbook against the current one.
+- src/utils/blockComparison.ts (74 lines) - Script tables must not inherit financial-statement indentation or header repair.
 - src/utils/compressAttachment.ts (78 lines) - Safely compresses image attachments before upload.
 - src/utils/documentVariables.ts (2473 lines) - document variables (utils)
+- src/utils/scriptBlockDefaults.ts (15 lines) - Script insertions start with script content rather than filing examples.
 - src/utils/scriptTableBanding.ts (23 lines) - The fill of every second row in a script's beats table (see data/socialMediaScriptTemplate.ts).
+- src/utils/scriptTableLayout.ts (39 lines) - Space for a full header, its menu, and at least one readable word in each cell.
 - src/utils/secFilingExport.ts (987 lines) - sec filing export (utils)
 - src/utils/secFilingImporter.ts (1019 lines) - PDF imports run on the server for a while; called as pages are converted.
 - src/utils/secFilingPagination.ts (141 lines) - sec filing pagination (utils)

@@ -1,3 +1,4 @@
+import { useScriptTableLayout } from '../../../hooks/useScriptTableLayout';
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import {
   ChevronUp,
@@ -40,6 +41,9 @@ import {
 import { MediaBucketModal } from './MediaBucketModal';
 import { TableTemplateModal, findMatchingTemplate, sanitizeTableBlock } from './TableTemplateModal';
 import { MobileSigningModal } from './MobileSigningModal';
+import { ScriptTableCell } from './ScriptTableCell';
+import { scriptColumnWidths, useScriptColumnResize } from '../../../hooks/useScriptColumnResize';
+import { activeDocumentType } from '../../../hooks/useFinancialTableTemplates';
 import { useUpdateFinancialTableTemplate } from '../../../hooks/useFinancialTableTemplates';
 import { toast } from 'sonner';
 import { mediaBucketService } from '../../../services/mediaBucketService';
@@ -75,9 +79,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from '../../../components/ui/dropdown-menu';
-
 const NUMERIC_OR_FINANCIAL_RE = /^[$\d,.\s()–—\-+]+$/;
-
 const isComparativeDateHeaderCell = (text: string, rowIndex: number, _colIndex?: number): boolean => {
   const trimmed = (text || '').trim();
   if (!trimmed) return false;
@@ -105,7 +107,6 @@ const isComparativeDateHeaderCell = (text: string, rowIndex: number, _colIndex?:
   }
   return false;
 };
-
 export const isMajorStatementHeaderCell = (text: string): boolean => {
   if (!text) return false;
   const normalized = text
@@ -115,14 +116,11 @@ export const isMajorStatementHeaderCell = (text: string): boolean => {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/[:.,]+$/, '');
-
   if (!normalized) return false;
-
   return /^(Assets|Liabilities(\s*(and|&)\s*((shareholder|stockholder)['s]*|total)?\s*(equity|deficit))?|(shareholder|stockholder)['s]*\s*(equity|deficit)):?$/i.test(
     normalized
   );
 };
-
 interface BlockItemProps {
   block: SecBlock;
   index: number;
@@ -152,7 +150,6 @@ interface BlockItemProps {
   isActiveSearchMatch?: boolean;
   isSearchMatch?: boolean;
 }
-
 const BlockItemComponent: React.FC<BlockItemProps> = ({
   block,
   index,
@@ -179,10 +176,10 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
   isActiveSearchMatch = false,
   isSearchMatch = false
 }) => {
+  const allowSpreadsheet = activeDocumentType() !== 'script';
   const isWordMode = viewMode === 'word';
   const effectiveSpacing = block.spacing || globalSpacing;
-  const safeSpreadsheet = attachedSpreadsheet || undefined;
-  
+  const safeSpreadsheet = allowSpreadsheet ? attachedSpreadsheet || undefined : undefined;
   // Default natural distance from the above block if not explicitly set
   const defaultSpacingTop =
     block.type === 'heading'
@@ -206,16 +203,12 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
       : effectiveSpacing === 'loose'
       ? 12
       : 4; // Default paragraph distance from above block
-
   const currentSpacingTop =
     typeof block.spacingTop === 'number' ? block.spacingTop : defaultSpacingTop;
-
   const [spacingInputText, setSpacingInputText] = useState<string>(String(currentSpacingTop));
-
   useEffect(() => {
     setSpacingInputText(String(currentSpacingTop));
   }, [currentSpacingTop]);
-
   const isTextType = block.type === 'heading' || block.type === 'paragraph';
   const currentAlign = (block as any).alignment || 'left';
   const isBold = (block as any).bold !== false && ((block as any).bold === true || block.type === 'heading');
@@ -620,7 +613,7 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
             <div className="h-3.5 w-px bg-slate-200 dark:bg-zinc-700 mx-0.5" />
 
             {/* Link Cell from Attached Spreadsheet */}
-            <button
+            {allowSpreadsheet && (<button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
@@ -643,8 +636,7 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
             >
               <Table2 className="w-3 h-3 text-emerald-600" />
               <span>Link Cell</span>
-            </button>
-
+            </button>)}
             <div className="h-3.5 w-px bg-slate-200 dark:bg-zinc-700 mx-0.5" />
 
             {/* Direct Alignment Buttons (Left, Center, Right, Justify) */}
@@ -1054,8 +1046,8 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
                 block={block as SecHeadingBlock}
                 onUpdate={(u) => onUpdate(u)}
                 attachedSpreadsheet={safeSpreadsheet}
-                onOpenSpreadsheet={onOpenSpreadsheet}
-                onOpenCellPicker={onOpenCellPicker}
+                onOpenSpreadsheet={allowSpreadsheet ? onOpenSpreadsheet : undefined}
+                onOpenCellPicker={allowSpreadsheet ? onOpenCellPicker : undefined}
                 searchQuery={searchQuery}
               />
             )}
@@ -1065,8 +1057,8 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
                 block={block as SecParagraphBlock}
                 onUpdate={(u) => onUpdate(u)}
                 attachedSpreadsheet={safeSpreadsheet}
-                onOpenSpreadsheet={onOpenSpreadsheet}
-                onOpenCellPicker={onOpenCellPicker}
+                onOpenSpreadsheet={allowSpreadsheet ? onOpenSpreadsheet : undefined}
+                onOpenCellPicker={allowSpreadsheet ? onOpenCellPicker : undefined}
                 searchQuery={searchQuery}
               />
             )}
@@ -1079,8 +1071,8 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
                 tableTemplates={tableTemplates}
                 tableCellDiffs={tableCellDiffs}
                 attachedSpreadsheet={safeSpreadsheet}
-                onOpenSpreadsheet={onOpenSpreadsheet}
-                onOpenCellPicker={onOpenCellPicker}
+                onOpenSpreadsheet={allowSpreadsheet ? onOpenSpreadsheet : undefined}
+                onOpenCellPicker={allowSpreadsheet ? onOpenCellPicker : undefined}
                 searchQuery={searchQuery}
               />
             )}
@@ -1090,8 +1082,8 @@ const BlockItemComponent: React.FC<BlockItemProps> = ({
                 block={block as SecCalloutBlock}
                 onUpdate={(u) => onUpdate(u)}
                 attachedSpreadsheet={safeSpreadsheet}
-                onOpenSpreadsheet={onOpenSpreadsheet}
-                onOpenCellPicker={onOpenCellPicker}
+                onOpenSpreadsheet={allowSpreadsheet ? onOpenSpreadsheet : undefined}
+                onOpenCellPicker={allowSpreadsheet ? onOpenCellPicker : undefined}
                 searchQuery={searchQuery}
               />
             )}
@@ -1160,6 +1152,7 @@ const HeadingBlockEditor: React.FC<{
   onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
   searchQuery?: string;
 }> = ({ block, onUpdate, attachedSpreadsheet, onOpenSpreadsheet, onOpenCellPicker, searchQuery }) => {
+  const allowSpreadsheet = activeDocumentType() !== 'script';
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [localText, setLocalText] = useState(block.text);
   const [isFocused, setIsFocused] = useState(false);
@@ -1262,13 +1255,13 @@ const HeadingBlockEditor: React.FC<{
                 }
               }, 10);
             }}
-            onContextMenu={(e) => {
+            onContextMenu={(e) => { if (!allowSpreadsheet) return;
               e.preventDefault();
               setContextMenu({ x: e.clientX, y: e.clientY });
             }}
             style={{
               color: block.color || '#0E2841',
-              fontFamily: block.fontFamily || 'Calibri, "Segoe UI", Arial, sans-serif',
+              fontFamily: block.fontFamily || (allowSpreadsheet ? 'Calibri, "Segoe UI", Arial, sans-serif' : 'Arial, sans-serif'),
               fontSize: `${effectiveFontSize}px`,
               textAlign: block.alignment || 'left',
               textDecoration: block.underline ? 'underline' : 'none',
@@ -1297,14 +1290,14 @@ const HeadingBlockEditor: React.FC<{
               setIsFocused(false);
               handleBlur();
             }}
-            onContextMenu={(e) => {
+            onContextMenu={(e) => { if (!allowSpreadsheet) return;
               e.preventDefault();
               setContextMenu({ x: e.clientX, y: e.clientY });
             }}
             placeholder="Section Title..."
             style={{
               color: block.color || '#0E2841',
-              fontFamily: block.fontFamily || 'Calibri, "Segoe UI", Arial, sans-serif',
+              fontFamily: block.fontFamily || (allowSpreadsheet ? 'Calibri, "Segoe UI", Arial, sans-serif' : 'Arial, sans-serif'),
               fontSize: `${effectiveFontSize}px`,
               textAlign: block.alignment || 'left',
               textDecoration: block.underline ? 'underline' : 'none',
@@ -1315,9 +1308,8 @@ const HeadingBlockEditor: React.FC<{
             className="w-full bg-transparent border-none focus:outline-none focus:bg-blue-50/20 dark:focus:bg-blue-950/20 rounded px-1 py-0 transition-colors resize-none overflow-hidden m-0 p-0"
           />
         )}
-
         {/* Right-click Floating Context Menu */}
-        {contextMenu && (
+        {allowSpreadsheet && contextMenu && (
           <div
             className="fixed z-[9999] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 px-1 min-w-[210px] text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
             style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -1365,6 +1357,7 @@ const ParagraphBlockEditor: React.FC<{
   onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
   searchQuery?: string;
 }> = ({ block, onUpdate, attachedSpreadsheet, onOpenSpreadsheet, onOpenCellPicker, searchQuery }) => {
+  const allowSpreadsheet = activeDocumentType() !== 'script';
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [localText, setLocalText] = useState(block.text);
   const [isFocused, setIsFocused] = useState(false);
@@ -1465,13 +1458,13 @@ const ParagraphBlockEditor: React.FC<{
                 }
               }, 10);
             }}
-            onContextMenu={(e) => {
+            onContextMenu={(e) => { if (!allowSpreadsheet) return;
               e.preventDefault();
               setContextMenu({ x: e.clientX, y: e.clientY });
             }}
             style={{
               color: block.color || (block.bold ? '#0E2841' : '#111827'),
-              fontFamily: block.fontFamily || 'Calibri, "Segoe UI", Arial, sans-serif',
+              fontFamily: block.fontFamily || (allowSpreadsheet ? 'Calibri, "Segoe UI", Arial, sans-serif' : 'Arial, sans-serif'),
               fontSize: `${effectiveFontSize}px`,
               textAlign: block.alignment || 'left',
               textDecoration: block.underline ? 'underline' : 'none',
@@ -1500,14 +1493,14 @@ const ParagraphBlockEditor: React.FC<{
               setIsFocused(false);
               handleBlur();
             }}
-            onContextMenu={(e) => {
+            onContextMenu={(e) => { if (!allowSpreadsheet) return;
               e.preventDefault();
               setContextMenu({ x: e.clientX, y: e.clientY });
             }}
-            placeholder="Enter document paragraph text... (Right-click or use toolbar to link spreadsheet cell)"
+            placeholder={allowSpreadsheet ? 'Enter document paragraph text... (Right-click or use toolbar to link spreadsheet cell)' : 'Enter script text...'}
             style={{
               color: block.color || (block.bold ? '#0E2841' : '#111827'),
-              fontFamily: block.fontFamily || 'Calibri, "Segoe UI", Arial, sans-serif',
+              fontFamily: block.fontFamily || (allowSpreadsheet ? 'Calibri, "Segoe UI", Arial, sans-serif' : 'Arial, sans-serif'),
               fontSize: `${effectiveFontSize}px`,
               textAlign: block.alignment || 'left',
               textDecoration: block.underline ? 'underline' : 'none',
@@ -1518,9 +1511,8 @@ const ParagraphBlockEditor: React.FC<{
             className="w-full bg-transparent border-none focus:outline-none focus:bg-blue-50/15 dark:focus:bg-blue-950/20 rounded px-1 py-0 transition-colors resize-none overflow-hidden m-0 p-0"
           />
         )}
-
         {/* Floating Quick Action Button on Hover */}
-        <div className="absolute top-0 right-1 opacity-0 group-hover/p:opacity-100 transition-opacity">
+        {allowSpreadsheet && <div className="absolute top-0 right-1 opacity-0 group-hover/p:opacity-100 transition-opacity">
           <button
             type="button"
             onClick={handleInsertSpreadsheetCell}
@@ -1530,10 +1522,9 @@ const ParagraphBlockEditor: React.FC<{
             <Table2 className="w-3 h-3 text-emerald-600" />
             <span>Link Cell</span>
           </button>
-        </div>
-
+        </div>}
         {/* Right-click Floating Context Menu */}
-        {contextMenu && (
+        {allowSpreadsheet && contextMenu && (
           <div
             className="fixed z-[9999] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 px-1 min-w-[210px] text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
             style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -1692,7 +1683,9 @@ const TableCellInput: React.FC<{
       )
     )
   );
-
+  if (activeDocumentType() === 'script') {
+    return <ScriptTableCell initialValue={initialValue} onCommit={onCommit} onFocus={onFocus} placeholder={placeholder} title={title} style={style} className={className} searchQuery={searchQuery} />;
+  }
   return (
     <div className="relative w-full group/cell">
       <input
@@ -1834,13 +1827,17 @@ const FinancialTableBlockEditor: React.FC<{
   onOpenCellPicker,
   searchQuery
 }) => {
+  const isScript = activeDocumentType() === 'script';
+  const allowSpreadsheet = !isScript;
+  const resizeColumn = useScriptColumnResize(block, onUpdate);
+  const { setContainer, widths: scriptPixelWidths, minimums: scriptMinimums, minWidth: scriptMinWidth } = useScriptTableLayout(block, isScript);
+  const scriptWidths = scriptColumnWidths(block.columnWidths, block.headers.length);
   const updateTemplateMutation = useUpdateFinancialTableTemplate();
   const [draggedRowIdx, setDraggedRowIdx] = useState<number | null>(null);
   const [activeCell, setActiveCell] = useState<{ rowIdx: number; colIdx: number } | null>(null);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState<boolean>(false);
   const [templateModalMode, setTemplateModalMode] = useState<'create' | 'update'>('create');
   const [templateModalInitialId, setTemplateModalInitialId] = useState<string | undefined>(undefined);
-
   const cellDiffMap = useMemo(() => {
     const map = new Map<string, SecTableCellDiff>();
     if (tableCellDiffs && tableCellDiffs.length > 0) {
@@ -1850,23 +1847,19 @@ const FinancialTableBlockEditor: React.FC<{
     }
     return map;
   }, [tableCellDiffs]);
-
   const matchedTemplate = useMemo(() => {
     return findMatchingTemplate(tableTemplates, undefined, block.title);
   }, [tableTemplates, block.title]);
-
   const openCreateTemplateModal = () => {
     setTemplateModalMode('create');
     setTemplateModalInitialId(undefined);
     setIsTemplateModalOpen(true);
   };
-
   const openUpdateTemplateModal = (templateId?: string) => {
     setTemplateModalMode('update');
     setTemplateModalInitialId(templateId || matchedTemplate?.id);
     setIsTemplateModalOpen(true);
   };
-
   const handleDirectQuickUpdate = async (tpl: FinancialTableTemplate) => {
     try {
       const sanitized = sanitizeTableBlock(block);
@@ -1892,18 +1885,16 @@ const FinancialTableBlockEditor: React.FC<{
   // Column of the cell the user last clicked into, so the toolbar can align "that
   // one column" without making them hunt through the column header menu.
   const [activeColIdx, setActiveColIdx] = useState<number | null>(null);
-
   const sanitizedBlockIdRef = useRef<string | null>(null);
   useEffect(() => {
+    if (isScript) return;
     // Only sanitize once per table block identity, not continuously during typing
     if (sanitizedBlockIdRef.current === block.id) return;
     sanitizedBlockIdRef.current = block.id;
-
     let needsUpdate = false;
     // Template header fills are part of the saved layout. Do not normalise the
     // standard financial-statement blues away when a database template is read.
     const nextHeaderShading = block.headerShading;
-
     const nextRows = block.rows.map((r, rIdx) => {
       const isCategory = r.type === 'category_header' || r.type === 'section_title';
       const isDateHeaderRow = !isCategory && (r.type === 'header' || r.cells.some((c, cIdx) => isComparativeDateHeaderCell(c, rIdx, cIdx)));
@@ -1926,24 +1917,20 @@ const FinancialTableBlockEditor: React.FC<{
       }
       return r;
     });
-
     const hasSplitParens = nextRows.some(r => r.cells.some(c => c.trim() === ')' || (c.trim().startsWith('(') && !c.trim().endsWith(')'))));
     const hasGhostCols = block.headers.length > 5 && block.headers.some(h => /^Col\s*\d+$/i.test(h.trim()) || h.trim() === '');
-
     if (hasSplitParens || hasGhostCols) {
       const compacted = compactFinancialTableBlock({ ...block, rows: nextRows, headerShading: nextHeaderShading } as any) as SecFinancialTableBlock;
       onUpdate(compacted);
       return;
     }
-
     if (needsUpdate) {
       onUpdate({
         headerShading: nextHeaderShading,
         rows: nextRows
       });
     }
-  }, [block.id]);
-
+  }, [block.id, isScript]);
   /**
    * Rebuilds this table from one of the standard statement layouts. Row ids are
    * regenerated so a template applied to several tables does not collide, and the
@@ -1952,7 +1939,6 @@ const FinancialTableBlockEditor: React.FC<{
   const applyTableTemplate = React.useCallback((templateId: string) => {
     const template = tableTemplates.find((t) => t.id === templateId);
     if (!template) return;
-
     const tpl = template.block;
     const stamp = Date.now();
     onUpdate({
@@ -1974,7 +1960,6 @@ const FinancialTableBlockEditor: React.FC<{
       footnotes: tpl.footnotes ? [...tpl.footnotes] : undefined
     });
   }, [tableTemplates, block.title, block.headers, block.columnAlignments, onUpdate]);
-
   const reorderRow = (fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex || toIndex < 0 || toIndex >= block.rows.length) return;
     const nextRows = [...block.rows];
@@ -1991,17 +1976,14 @@ const FinancialTableBlockEditor: React.FC<{
     nextRows[rowIndex] = targetRow;
     onUpdate({ rows: nextRows });
   };
-
   const handleHeaderChange = (colIndex: number, value: string) => {
     const nextHeaders = [...block.headers];
     nextHeaders[colIndex] = value;
     onUpdate({ headers: nextHeaders });
   };
-
   const addRow = (type: SecTableRow['type'] = 'data') => {
     addRowAt(block.rows.length, type);
   };
-
   const addRowAt = (targetIdx: number, type: SecTableRow['type'] = 'data') => {
     const newRow: SecTableRow = {
       id: `r-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -2017,7 +1999,6 @@ const FinancialTableBlockEditor: React.FC<{
     nextRows.splice(safeIdx, 0, newRow);
     onUpdate({ rows: reband(nextRows) });
   };
-
   const moveRow = (rowIndex: number, direction: 'up' | 'down') => {
     if (direction === 'up' && rowIndex === 0) return;
     if (direction === 'down' && rowIndex === block.rows.length - 1) return;
@@ -2027,7 +2008,6 @@ const FinancialTableBlockEditor: React.FC<{
     nextRows.splice(targetIdx, 0, moved);
     onUpdate({ rows: reband(nextRows) });
   };
-
   const duplicateRow = (rowIndex: number) => {
     const source = block.rows[rowIndex];
     const duplicated: SecTableRow = {
@@ -2039,14 +2019,11 @@ const FinancialTableBlockEditor: React.FC<{
     nextRows.splice(rowIndex + 1, 0, duplicated);
     onUpdate({ rows: reband(nextRows) });
   };
-
   const deleteRow = (rowIndex: number) =>
     onUpdate({ rows: reband(block.rows.filter((_, i) => i !== rowIndex)) });
-
   const addColumn = () => {
     addColumnAt(block.headers.length, `Col ${block.headers.length + 1}`, 'right');
   };
-
   const addColumnAt = (
     targetIdx: number,
     headerName = 'New Period ($)',
@@ -2055,72 +2032,70 @@ const FinancialTableBlockEditor: React.FC<{
     const nextHeaders = [...block.headers];
     const nextAligns = [...block.columnAlignments];
     const safeIdx = Math.max(0, Math.min(targetIdx, nextHeaders.length));
-
     nextHeaders.splice(safeIdx, 0, headerName);
     nextAligns.splice(safeIdx, 0, align);
-
     const nextRows = block.rows.map((r) => {
       const nextCells = [...r.cells];
       nextCells.splice(safeIdx, 0, '');
       return { ...r, cells: nextCells };
     });
-
+    const nextWidths = [...scriptWidths];
+    nextWidths.splice(safeIdx, 0, 100 / (block.headers.length + 1));
     onUpdate({
       headers: nextHeaders,
+      ...(isScript ? { columnWidths: scriptColumnWidths(nextWidths.map((width) => `${width}%`), nextWidths.length).map((width) => `${width}%`) } : {}),
       columnAlignments: nextAligns,
       rows: nextRows
     });
   };
-
   const moveColumn = (colIndex: number, direction: 'left' | 'right') => {
     if (direction === 'left' && colIndex === 0) return;
     if (direction === 'right' && colIndex === block.headers.length - 1) return;
     const targetIdx = direction === 'left' ? colIndex - 1 : colIndex + 1;
-
     const nextHeaders = [...block.headers];
     const [movedHeader] = nextHeaders.splice(colIndex, 1);
     nextHeaders.splice(targetIdx, 0, movedHeader);
-
     const nextAligns = [...block.columnAlignments];
     const [movedAlign] = nextAligns.splice(colIndex, 1);
     nextAligns.splice(targetIdx, 0, movedAlign);
-
     const nextRows = block.rows.map((r) => {
       const nextCells = [...r.cells];
       const [movedCell] = nextCells.splice(colIndex, 1);
       nextCells.splice(targetIdx, 0, movedCell);
       return { ...r, cells: nextCells };
     });
-
+    const nextWidths = [...scriptWidths];
+    const [movedWidth] = nextWidths.splice(colIndex, 1);
+    nextWidths.splice(targetIdx, 0, movedWidth);
     onUpdate({
       headers: nextHeaders,
+      ...(isScript ? { columnWidths: scriptColumnWidths(nextWidths.map((width) => `${width}%`), nextWidths.length).map((width) => `${width}%`) } : {}),
       columnAlignments: nextAligns,
       rows: nextRows
     });
   };
-
   const duplicateColumn = (colIndex: number) => {
     const nextHeaders = [...block.headers];
     const nextAligns = [...block.columnAlignments];
     const currentHeader = block.headers[colIndex];
     const currentAlign = block.columnAlignments[colIndex] || 'right';
-
     nextHeaders.splice(colIndex + 1, 0, `${currentHeader} (Copy)`);
     nextAligns.splice(colIndex + 1, 0, currentAlign);
-
     const nextRows = block.rows.map((r) => {
       const nextCells = [...r.cells];
       nextCells.splice(colIndex + 1, 0, r.cells[colIndex] || '');
       return { ...r, cells: nextCells };
     });
-
+    const nextWidths = [...scriptWidths];
+    nextWidths[colIndex] /= 2;
+    nextWidths.splice(colIndex + 1, 0, nextWidths[colIndex]);
     onUpdate({
       headers: nextHeaders,
+      ...(isScript ? { columnWidths: scriptColumnWidths(nextWidths.map((width) => `${width}%`), nextWidths.length).map((width) => `${width}%`) } : {}),
       columnAlignments: nextAligns,
       rows: nextRows
     });
   };
-
   const deleteColumn = (colIndex: number) => {
     if (block.headers.length <= 1) {
       return;
@@ -2131,19 +2106,19 @@ const FinancialTableBlockEditor: React.FC<{
       ...r,
       cells: r.cells.filter((_, i) => i !== colIndex)
     }));
+    const nextWidths = scriptWidths.filter((_, index) => index !== colIndex);
     onUpdate({
       headers: nextHeaders,
+      ...(isScript ? { columnWidths: scriptColumnWidths(nextWidths.map((width) => `${width}%`), nextWidths.length).map((width) => `${width}%`) } : {}),
       columnAlignments: nextAligns,
       rows: nextRows
     });
   };
-
   const setColumnAlignment = (colIndex: number, align: 'left' | 'center' | 'right') => {
     const nextAligns = [...block.columnAlignments];
     nextAligns[colIndex] = align;
     onUpdate({ columnAlignments: nextAligns });
   };
-
   const toggleRowIndent = (rowIndex: number) => {
     const nextRows = [...block.rows];
     const r = { ...nextRows[rowIndex] };
@@ -2154,7 +2129,6 @@ const FinancialTableBlockEditor: React.FC<{
     nextRows[rowIndex] = r;
     onUpdate({ rows: nextRows });
   };
-
   /** Sets or clears a row's background fill. `undefined` means no fill (white). */
   const setRowShading = (rowIndex: number, shading?: string) => {
     const nextRows = [...block.rows];
@@ -2167,7 +2141,6 @@ const FinancialTableBlockEditor: React.FC<{
     nextRows[rowIndex] = r;
     onUpdate({ rows: nextRows });
   };
-
   /** Sets or clears a single cell's alignment override (e.g. Row 5, Col 2 centered). `undefined` resets to row/column default. */
   const setCellAlignment = (rowIndex: number, colIndex: number, align?: 'left' | 'center' | 'right') => {
     const nextRows = [...block.rows];
@@ -2189,7 +2162,6 @@ const FinancialTableBlockEditor: React.FC<{
     nextRows[rowIndex] = r;
     onUpdate({ rows: nextRows });
   };
-
   /** Sets or clears a per-row alignment override. `undefined` falls back to the column. */
   const setRowAlignment = (rowIndex: number, align: SecTableRow['align']) => {
     const nextRows = [...block.rows];
@@ -2202,7 +2174,6 @@ const FinancialTableBlockEditor: React.FC<{
     nextRows[rowIndex] = r;
     onUpdate({ rows: nextRows });
   };
-
   const setRowType = (rowIndex: number, type: SecTableRow['type']) => {
     const nextRows = [...block.rows];
     const r = { ...nextRows[rowIndex] };
@@ -2225,7 +2196,6 @@ const FinancialTableBlockEditor: React.FC<{
     nextRows[rowIndex] = r;
     onUpdate({ rows: nextRows });
   };
-
   // Memoize row-level classification to avoid running 1,200 regexes per render
   const rowMetadata = useMemo(() => {
     return block.rows.map((row, rowIdx) => {
@@ -2236,7 +2206,6 @@ const FinancialTableBlockEditor: React.FC<{
       const isHeaderLikeRow = !isSection && (row.type === 'header' || isDateHeaderRow || isMajorHeaderRow);
       const isTotal = row.type === 'total' || row.doubleUnderline;
       const isSubtotal = row.type === 'subtotal';
-
       const cellMeta = row.cells.map((cellValue, colIdx) => {
         const isDateHeader = !isSection && isComparativeDateHeaderCell(cellValue, rowIdx, colIdx);
         const isMajorHeader = !isSection && (isMajorStatementHeaderCell(cellValue) || (isMajorHeaderRow && colIdx === 0));
@@ -2262,7 +2231,6 @@ const FinancialTableBlockEditor: React.FC<{
             : 'pl-1.5';
         return { isDateHeader, isMajorHeader, isFirst, align, indentPadding };
       });
-
       return {
         isDateHeaderRow,
         isMajorHeaderRow,
@@ -2274,7 +2242,6 @@ const FinancialTableBlockEditor: React.FC<{
       };
     });
   }, [block.rows, block.columnAlignments]);
-
   return (
     <div
       className="my-3 space-y-1 font-sans"
@@ -2290,7 +2257,6 @@ const FinancialTableBlockEditor: React.FC<{
         <span className="text-[11px] font-bold text-[#0E2841] tracking-wide">
           {block.title || 'Financial Schedule'}
         </span>
-
         <div className="flex items-center gap-1">
           {/* Build this table from one of the standard statement layouts. Explicitly
               labelled as a replace, since it overwrites the current grid. Undo (Ctrl+Z)
@@ -2317,7 +2283,6 @@ const FinancialTableBlockEditor: React.FC<{
                   Click to apply layout. Undo with Ctrl+Z.
                 </p>
               </div>
-
               <div className="max-h-[300px] overflow-y-auto space-y-0.5 pr-0.5">
                 {tableTemplates.map((tpl) => {
                   const TplIcon = tpl.icon;
@@ -2355,7 +2320,6 @@ const FinancialTableBlockEditor: React.FC<{
                           </div>
                         </div>
                       </div>
-
                       {/* Action buttons: Save/Overwrite button beside current/template + Edit metadata button */}
                       <div className="flex items-center gap-1 shrink-0">
                         <button
@@ -2411,7 +2375,6 @@ const FinancialTableBlockEditor: React.FC<{
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
-
           {/* Cell Alignment for the single focused cell (e.g. Row 5, Col 2) */}
           <div
             className="flex items-center gap-0.5 rounded border border-slate-200 dark:border-zinc-700 px-1 py-0.5 bg-slate-50/70 dark:bg-zinc-800/40"
@@ -2439,7 +2402,6 @@ const FinancialTableBlockEditor: React.FC<{
                   : null;
               const isCustomActive = customCellAlign === value;
               const isInheritedActive = !customCellAlign && effectiveAlign === value;
-
               return (
                 <button
                   key={value}
@@ -2482,9 +2444,8 @@ const FinancialTableBlockEditor: React.FC<{
               </button>
             )}
           </div>
-
           {/* Link Spreadsheet Cell to active focused cell */}
-          <button
+          {allowSpreadsheet && (<button
             type="button"
             disabled={activeCell === null}
             onClick={() => {
@@ -2514,8 +2475,7 @@ const FinancialTableBlockEditor: React.FC<{
           >
             <Table2 className="w-3.5 h-3.5 text-emerald-600" />
             <span>{activeCell !== null ? `Link R${activeCell.rowIdx + 1}C${activeCell.colIdx + 1}` : 'Link Cell'}</span>
-          </button>
-
+          </button>)}
           {/* Column alignment for the column the user is in. */}
           <div
             className="flex items-center gap-0.5 rounded border border-slate-200 dark:border-zinc-700 px-1 py-0.5"
@@ -2555,7 +2515,6 @@ const FinancialTableBlockEditor: React.FC<{
               );
             })}
           </div>
-
           <Button
             type="button"
             variant="ghost"
@@ -2566,7 +2525,6 @@ const FinancialTableBlockEditor: React.FC<{
             <Plus className="w-3 h-3" />
             <span>Add Row</span>
           </Button>
-
           <Button
             type="button"
             variant="ghost"
@@ -2577,10 +2535,8 @@ const FinancialTableBlockEditor: React.FC<{
             <Plus className="w-3 h-3" />
             <span>Add Column</span>
           </Button>
-
         </div>
       </div>
-
       {/* Draft Diff Notification Banner if any cell was modified in proposal vs main */}
       {tableCellDiffs && tableCellDiffs.length > 0 && (
         <div className="flex items-center justify-between px-2.5 py-1.5 my-1.5 rounded-lg bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs shadow-xs">
@@ -2595,10 +2551,10 @@ const FinancialTableBlockEditor: React.FC<{
           </span>
         </div>
       )}
-
       {/* Financial Statement Table Grid */}
-      <div className="overflow-x-auto w-full my-1">
-        <table className="w-full text-[13px] border-collapse">
+      <div ref={setContainer} className="overflow-x-auto w-full my-1">
+        <table className="w-full text-[13px] border-collapse" style={isScript ? { tableLayout: 'fixed', minWidth: scriptMinWidth } : undefined}>
+          {isScript && <colgroup><col style={{ width: 36 }} />{scriptPixelWidths.map((width, index) => <col key={index} data-script-column data-min-width={scriptMinimums[index]} style={{ width }} />)}</colgroup>}
           <thead>
             <tr
               style={{ backgroundColor: block.headerShading || undefined, '--hdr-fg': block.headerTextColor } as React.CSSProperties}
@@ -2608,21 +2564,22 @@ const FinancialTableBlockEditor: React.FC<{
               <th className="w-9 min-w-[36px] max-w-[36px] p-1 text-center font-normal text-[10px] text-slate-400">
                 #
               </th>
-
               {block.headers.map((header, colIdx) => {
                 const align = block.columnAlignments[colIdx] || 'left';
                 const isFirst = colIdx === 0;
                 const headerDiff = cellDiffMap.get(`-1_${colIdx}`);
                 const isHeaderChanged = !!headerDiff;
-
                 return (
                   <th
                     key={colIdx}
+                    data-script-column={isScript || undefined}
                     className={`p-1 font-bold text-[color:var(--hdr-fg,#0E2841)] ${align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"} group/col relative ${
-                      isFirst ? 'min-w-[220px] w-2/5' : 'min-w-[70px]'
+                      isScript ? 'min-w-0' : isFirst ? 'min-w-[220px] w-2/5' : 'min-w-[70px]'
                     }`}
                   >
+                    {isScript && <span role="separator" aria-orientation="vertical" aria-label={`Resize ${header || `column ${colIdx + 1}`}`} title="Drag to resize column" onPointerDown={(event) => resizeColumn(event, colIdx)} className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize touch-none hover:bg-blue-400/60" />}
                     <div className="flex items-center gap-1 justify-between">
+                      {isScript ? <ScriptTableCell initialValue={header} onCommit={(value) => handleHeaderChange(colIdx, value)} onFocus={() => setActiveColIdx(colIdx)} placeholder={`Col ${colIdx + 1}`} title={headerDiff ? `Modified Header (Main value: "${headerDiff.oldValue || '(empty)'}")` : header} style={{ textAlign: align, color: 'inherit', fontWeight: 'bold' }} className="bg-transparent px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500" /> : (
                       <input
                         type="text"
                         value={header}
@@ -2635,7 +2592,7 @@ const FinancialTableBlockEditor: React.FC<{
                           isHeaderChanged ? 'ring-2 ring-amber-400 bg-amber-50/80 dark:bg-amber-950/50' : ''
                         }`}
                       />
-
+                      )}
                       {/* Column Sandwich Menu Button */}
                       <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
@@ -2653,7 +2610,6 @@ const FinancialTableBlockEditor: React.FC<{
                           <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                             Column {colIdx + 1}
                           </div>
-
                           {/* Alignment first: it is the control people come here for. */}
                           {([
                             { value: 'left' as const, label: 'Align Left', Icon: AlignLeft },
@@ -2672,9 +2628,7 @@ const FinancialTableBlockEditor: React.FC<{
                               {align === value && <Check className="w-3 h-3 ml-auto text-blue-600" />}
                             </DropdownMenuItem>
                           ))}
-
                           <DropdownMenuSeparator />
-
                           {/* Add Column Left */}
                           <DropdownMenuItem
                             onClick={() => addColumnAt(colIdx, 'New Column', align)}
@@ -2686,7 +2640,6 @@ const FinancialTableBlockEditor: React.FC<{
                             </div>
                             <span>Add Column Left</span>
                           </DropdownMenuItem>
-
                           {/* Add Column Right */}
                           <DropdownMenuItem
                             onClick={() => addColumnAt(colIdx + 1, 'New Column', align)}
@@ -2698,9 +2651,7 @@ const FinancialTableBlockEditor: React.FC<{
                             </div>
                             <span>Add Column Right</span>
                           </DropdownMenuItem>
-
                           <DropdownMenuSeparator />
-
                           {/* Move Column Left */}
                           <DropdownMenuItem
                             disabled={colIdx === 0}
@@ -2710,7 +2661,6 @@ const FinancialTableBlockEditor: React.FC<{
                             <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
                             <span>Move Column Left</span>
                           </DropdownMenuItem>
-
                           {/* Move Column Right */}
                           <DropdownMenuItem
                             disabled={colIdx === block.headers.length - 1}
@@ -2720,9 +2670,7 @@ const FinancialTableBlockEditor: React.FC<{
                             <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
                             <span>Move Column Right</span>
                           </DropdownMenuItem>
-
                           <DropdownMenuSeparator />
-
                           {/* Duplicate Column */}
                           <DropdownMenuItem
                             onClick={() => duplicateColumn(colIdx)}
@@ -2731,9 +2679,7 @@ const FinancialTableBlockEditor: React.FC<{
                             <Copy className="w-3.5 h-3.5 text-slate-500" />
                             <span>Duplicate Column</span>
                           </DropdownMenuItem>
-
                           <DropdownMenuSeparator />
-
                           {/* Delete Column */}
                           <DropdownMenuItem
                             disabled={block.headers.length <= 1}
@@ -2778,10 +2724,8 @@ const FinancialTableBlockEditor: React.FC<{
               } else if (isSection) {
                 rowClass = 'bg-[#DAE9F7] font-bold text-[#0E2841]';
               }
-
               const isBeingDragged = draggedRowIdx === rowIdx;
               const isOver = dragOverRowIdx === rowIdx && !isBeingDragged;
-
               return (
                 <tr
                   key={row.id || rowIdx}
@@ -2830,7 +2774,6 @@ const FinancialTableBlockEditor: React.FC<{
                       >
                         <GripVertical className="w-3 h-3" />
                       </div>
-
                       {/* Instant Actions Menu Button: Pure clickable button (NO draggable) for 0ms opening */}
                       <DropdownMenu
                         modal={false}
@@ -2853,7 +2796,6 @@ const FinancialTableBlockEditor: React.FC<{
                         <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                           Row {rowIdx + 1} Actions
                         </div>
-
                         {/* Row Colour. White is stored as an explicit #FFFFFF rather than by
                             clearing the field, because the storage-read normaliser re-applies
                             the category default to any category row left with no fill. */}
@@ -2919,9 +2861,7 @@ const FinancialTableBlockEditor: React.FC<{
                             </label>
                           </div>
                         )}
-
                         <DropdownMenuSeparator />
-
                         {/* Add Row Above */}
                         <DropdownMenuItem
                           onClick={() => { setOpenRowMenuIdx(null); addRowAt(rowIdx, 'data'); }}
@@ -2933,7 +2873,6 @@ const FinancialTableBlockEditor: React.FC<{
                           </div>
                           <span>Add Row Above</span>
                         </DropdownMenuItem>
-
                         {/* Add Row Below */}
                         <DropdownMenuItem
                           onClick={() => { setOpenRowMenuIdx(null); addRowAt(rowIdx + 1, 'data'); }}
@@ -2945,9 +2884,7 @@ const FinancialTableBlockEditor: React.FC<{
                           </div>
                           <span>Add Row Below</span>
                         </DropdownMenuItem>
-
                         <DropdownMenuSeparator />
-
                         {/* Move Row Up */}
                         <DropdownMenuItem
                           disabled={rowIdx === 0}
@@ -2957,7 +2894,6 @@ const FinancialTableBlockEditor: React.FC<{
                           <ArrowUp className="w-3.5 h-3.5 text-slate-500" />
                           <span>Move Row Up</span>
                         </DropdownMenuItem>
-
                         {/* Move Row Down */}
                         <DropdownMenuItem
                           disabled={rowIdx === block.rows.length - 1}
@@ -2967,9 +2903,7 @@ const FinancialTableBlockEditor: React.FC<{
                           <ArrowDown className="w-3.5 h-3.5 text-slate-500" />
                           <span>Move Row Down</span>
                         </DropdownMenuItem>
-
                         <DropdownMenuSeparator />
-
                         {/* Duplicate Row */}
                         <DropdownMenuItem
                           onClick={() => { setOpenRowMenuIdx(null); duplicateRow(rowIdx); }}
@@ -2978,7 +2912,6 @@ const FinancialTableBlockEditor: React.FC<{
                           <Copy className="w-3.5 h-3.5 text-slate-500" />
                           <span>Duplicate Row</span>
                         </DropdownMenuItem>
-
                         {/* Indent Line Item */}
                         <DropdownMenuItem
                           onClick={() => { setOpenRowMenuIdx(null); toggleRowIndent(rowIdx); }}
@@ -2987,9 +2920,7 @@ const FinancialTableBlockEditor: React.FC<{
                           <CornerDownRight className="w-3.5 h-3.5 text-slate-500" />
                           <span>Indent Line Item ({row.indent ? `Indent ${row.indent}` : 'No Indent'})</span>
                         </DropdownMenuItem>
-
                         <DropdownMenuSeparator />
-
                         {/* Row Alignment: overrides the column alignment for this row only,
                             so a period caption row can be centered over right-aligned figures. */}
                         <div className="px-2 py-0.5 text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
@@ -3024,9 +2955,7 @@ const FinancialTableBlockEditor: React.FC<{
                           <Undo2 className="w-3.5 h-3.5 text-slate-500" />
                           <span>Use column alignment</span>
                         </DropdownMenuItem>
-
                         <DropdownMenuSeparator />
-
                         {/* Row Format Type */}
                         <div className="px-2 py-0.5 text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
                           Row Style
@@ -3049,9 +2978,7 @@ const FinancialTableBlockEditor: React.FC<{
                             <span>{styleOpt.label}</span>
                           </DropdownMenuItem>
                         ))}
-
                         <DropdownMenuSeparator />
-
                         {/* Delete Row */}
                         <DropdownMenuItem
                           onClick={() => { setOpenRowMenuIdx(null); deleteRow(rowIdx); }}
@@ -3064,7 +2991,6 @@ const FinancialTableBlockEditor: React.FC<{
                     </DropdownMenu>
                     </div>
                   </td>
-
                   {row.cells.map((cellValue, colIdx) => {
                     const cMeta = meta.cellMeta[colIdx] || {
                       isFirst: colIdx === 0,
@@ -3072,7 +2998,6 @@ const FinancialTableBlockEditor: React.FC<{
                       indentPadding: 'pl-1.5'
                     };
                     const { isFirst, align, indentPadding } = cMeta;
-
                     const cellDiff = cellDiffMap.get(`${rowIdx}_${colIdx}`);
                     const isCellChanged = !!cellDiff;
                     const cellTitle = cellDiff?.status === 'cell_modified'
@@ -3080,7 +3005,6 @@ const FinancialTableBlockEditor: React.FC<{
                       : isRowAdded
                       ? 'New row added in proposal'
                       : undefined;
-
                     let cellBorderStyle = '';
                     if (isTotal) {
                       cellBorderStyle =
@@ -3088,12 +3012,11 @@ const FinancialTableBlockEditor: React.FC<{
                     } else if (isSubtotal) {
                       cellBorderStyle = 'border-t border-slate-500 border-b border-slate-500';
                     }
-
                     return (
                       <td
                         key={colIdx}
-                        className={`py-0.5 pr-1.5 ${indentPadding} ${cellBorderStyle} ${align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"} ${
-                          isFirst ? 'min-w-[220px]' : 'min-w-[55px]'
+                        className={`py-0.5 pr-1.5 ${isScript ? 'pl-1.5' : indentPadding} ${cellBorderStyle} ${align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"} ${
+                          isScript ? 'min-w-0 align-top' : isFirst ? 'min-w-[220px]' : 'min-w-[55px]'
                         }`}
                       >
                         <TableCellInput
@@ -3130,7 +3053,6 @@ const FinancialTableBlockEditor: React.FC<{
           </tbody>
         </table>
       </div>
-
       {/* Footnotes */}
       {block.footnotes && block.footnotes.length > 0 && (
         <div className="text-[11px] italic text-slate-600 pt-1">
@@ -3139,7 +3061,6 @@ const FinancialTableBlockEditor: React.FC<{
           ))}
         </div>
       )}
-
       {/* Modal for saving / updating table templates */}
       <TableTemplateModal
         open={isTemplateModalOpen}
@@ -3151,7 +3072,6 @@ const FinancialTableBlockEditor: React.FC<{
     </div>
   );
 };
-
 /* ------------------------------------------------------------------------- */
 /* 4. CALLOUT / AUDITOR NOTICE BLOCK EDITOR                                  */
 /* ------------------------------------------------------------------------- */
@@ -3163,6 +3083,7 @@ const CalloutBlockEditor: React.FC<{
   onOpenCellPicker?: (onPick: (cellRef: string, displayVal: string) => void, blockTitle?: string) => void;
   searchQuery?: string;
 }> = ({ block, onUpdate, attachedSpreadsheet, onOpenSpreadsheet, onOpenCellPicker, searchQuery }) => {
+  const allowSpreadsheet = activeDocumentType() !== 'script';
   const isUnaudited = block.variant === 'unaudited' || block.variant === 'warning';
   const borderColor = isUnaudited ? 'border-l-amber-500' : 'border-l-blue-600';
   const iconColor = isUnaudited ? 'text-amber-600' : 'text-blue-600';
@@ -3220,9 +3141,8 @@ const CalloutBlockEditor: React.FC<{
             className="font-bold text-xs text-slate-900 dark:text-zinc-100 bg-transparent border-none focus:outline-none w-full"
           />
         </div>
-
         {/* Link Cell Action button */}
-        <button
+        {allowSpreadsheet && (<button
           type="button"
           onClick={handleInsertSpreadsheetCell}
           title="Right-click in content or click here to link a cell from attached spreadsheet"
@@ -3230,9 +3150,8 @@ const CalloutBlockEditor: React.FC<{
         >
           <Table2 className="w-3 h-3 text-emerald-600" />
           <span>Link Cell</span>
-        </button>
+        </button>)}
       </div>
-
       <div className="relative">
         {(hasVariables || (searchQuery && searchQuery.trim())) && !isContentFocused ? (
           <div
@@ -3242,7 +3161,7 @@ const CalloutBlockEditor: React.FC<{
                 textareaRef.current?.focus();
               }, 20);
             }}
-            onContextMenu={(e) => {
+            onContextMenu={(e) => { if (!allowSpreadsheet) return;
               e.preventDefault();
               setContextMenu({ x: e.clientX, y: e.clientY });
             }}
@@ -3263,7 +3182,7 @@ const CalloutBlockEditor: React.FC<{
             onChange={(e) => onUpdate({ content: e.target.value })}
             onFocus={() => setIsContentFocused(true)}
             onBlur={() => setIsContentFocused(false)}
-            onContextMenu={(e) => {
+            onContextMenu={(e) => { if (!allowSpreadsheet) return;
               e.preventDefault();
               setContextMenu({ x: e.clientX, y: e.clientY });
             }}
@@ -3272,9 +3191,8 @@ const CalloutBlockEditor: React.FC<{
             className="w-full text-xs bg-transparent border-none focus:outline-none resize-none italic text-slate-800 dark:text-zinc-300 leading-relaxed"
           />
         )}
-
         {/* Right-click Floating Context Menu */}
-        {contextMenu && (
+        {allowSpreadsheet && contextMenu && (
           <div
             className="fixed z-[9999] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 px-1 min-w-[210px] text-xs font-sans animate-in fade-in zoom-in-95 duration-100"
             style={{ left: contextMenu.x, top: contextMenu.y }}

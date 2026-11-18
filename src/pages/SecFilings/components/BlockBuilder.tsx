@@ -1,3 +1,5 @@
+import './scriptDocumentLayout.css';
+import { activeDocumentType } from '../../../hooks/useFinancialTableTemplates';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { SecBlock, SecBlockType, SecBlockDiff, SecBlockSpacing, AttachedSpreadsheet } from '../../../types/secFiling';
 import { BlockItem } from './BlockItem';
@@ -31,7 +33,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '../../../components/ui/dropdown-menu';
-
 interface BlockBuilderProps {
   blocks: SecBlock[];
   filteredBlocks: SecBlock[];
@@ -67,7 +68,6 @@ interface BlockBuilderProps {
   matchingBlockIds?: string[];
   onClearSearch?: () => void;
 }
-
 export const BlockBuilder: React.FC<BlockBuilderProps> = ({
   blocks,
   filteredBlocks,
@@ -91,7 +91,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
   onUpdateMultipleBlocksSpacing,
   documentSections = [],
   diffs = [],
-  viewMode = 'word',
+  viewMode: requestedViewMode = 'word',
   onToggleViewMode,
   attachedSpreadsheet,
   onOpenSpreadsheet,
@@ -101,6 +101,8 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
   matchingBlockIds = [],
   onClearSearch
 }) => {
+  const isScript = activeDocumentType() === 'script';
+  const viewMode = isScript ? 'word' : requestedViewMode;
   const diffMap = useMemo(() => new Map<string, SecBlockDiff>(diffs.map((d) => [d.blockId, d])), [diffs]);
   const blockIndexMap = useMemo(() => new Map<string, number>(blocks.map((b, i) => [b.id, i])), [blocks]);  // Headings that are not the first block of their section don't appear in Document Sections;
   // they get a "Start new section here" action.
@@ -133,14 +135,12 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
   const [isMultiPageLayout, setIsMultiPageLayout] = useState<boolean>(true);
   const [globalSpacing, setGlobalSpacing] = useState<SecBlockSpacing>('normal');
   const [docWidth, setDocWidth] = useState<'standard' | 'wide' | 'full'>('standard');
-
   const sheetWidthClass =
     docWidth === 'full'
       ? 'w-full max-w-none'
       : docWidth === 'wide'
       ? 'w-full max-w-[1380px]'
       : 'w-full max-w-[920px] xl:max-w-[960px]';
-
   // Keyboard shortcut listener for multi-block movement (Alt+Up / Alt+Down / Ctrl+Shift+Up / Ctrl+Shift+Down / Escape)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -148,17 +148,14 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
         onClearSelection?.();
         return;
       }
-
       const isMoveUp =
         (e.altKey && e.key === 'ArrowUp') ||
         (e.ctrlKey && e.shiftKey && e.key === 'ArrowUp') ||
         (e.altKey && e.shiftKey && e.key === 'ArrowUp');
-
       const isMoveDown =
         (e.altKey && e.key === 'ArrowDown') ||
         (e.ctrlKey && e.shiftKey && e.key === 'ArrowDown') ||
         (e.altKey && e.shiftKey && e.key === 'ArrowDown');
-
       if (isMoveUp) {
         e.preventDefault();
         e.stopPropagation();
@@ -177,7 +174,6 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
         }
       }
     };
-
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [selectedBlockIds, selectedBlockId, onMoveMultipleBlocks, onMoveBlock, onClearSelection]);
@@ -212,7 +208,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
     const root = document.documentElement;
     const update = () => {
       const stickyTop = parseFloat(getComputedStyle(toolbar).top) || 0;
-      root.style.setProperty('--doc-toolbar-offset', `${stickyTop + toolbar.offsetHeight + 12}px`);
+      root.style.setProperty('--doc-toolbar-offset', isScript ? '12px' : `${stickyTop + toolbar.offsetHeight + 12}px`);
     };
     update();
     const observer = new ResizeObserver(update);
@@ -221,7 +217,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
       observer.disconnect();
       root.style.removeProperty('--doc-toolbar-offset');
     };
-  }, []);
+  }, [isScript]);
 
   // Paginate blocks dynamically taking global spacing into account
   const pages = useMemo(() => {
@@ -242,7 +238,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
   return (
     <div className="w-full flex flex-col items-center space-y-3">
       {/* Document Canvas Header & Ribbon Strip */}
-      <div ref={toolbarRef} data-chrome className={`${sheetWidthClass} flex items-center justify-between px-4 py-2 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-xl border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-300 shadow-sm sticky top-[108px] z-20 transition-all duration-150`}>
+      <div ref={toolbarRef} data-script-toolbar={isScript || undefined} data-chrome className={`${sheetWidthClass} flex items-center justify-between px-4 py-2 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-xl border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-300 shadow-sm sticky top-[108px] z-20 transition-all duration-150`}>
         <div className="flex items-center gap-3">
           {/* Document / Block Mode Indicator & Page Count */}
           <div className="flex items-center gap-1.5 font-bold text-[#0E2841] dark:text-blue-400">
@@ -251,20 +247,20 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
             ) : (
               <Columns className="w-4 h-4 text-blue-600" />
             )}
-            <span>{viewMode === 'word' ? 'Word Document' : 'Block Canvas'}</span>
+            <span>{isScript ? 'Script Editor' : viewMode === 'word' ? 'Word Document' : 'Block Canvas'}</span>
           </div>
           <span className="text-slate-300 dark:text-zinc-700">|</span>
           <div className="flex items-center gap-1.5 font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded">
             <BookOpen className="w-3 h-3" />
             <span>
-              {pages.length} {pages.length === 1 ? 'Page' : 'Pages'} (Letter 8.5" × 11")
+              {pages.length} {pages.length === 1 ? 'Page' : 'Pages'} {!isScript && '(Letter 8.5" ? 11")'}
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           {/* Canvas Width Mode Dropdown (Standard Letter vs Wide Sheet vs Full Width) */}
-          <DropdownMenu>
+          {!isScript && <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
@@ -319,7 +315,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
                 <span className="text-[10px] text-slate-400 pl-5.5">Exact printable letter proportion</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu>}
 
           {/* Global Spacing Dropdown (Closer / Farther apart) */}
           <DropdownMenu>
@@ -486,7 +482,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
           </div>
 
           {/* View Mode Toggle (Document vs Block Grid) */}
-          <div className="flex items-center bg-slate-100 dark:bg-zinc-800 rounded-lg p-0.5 border border-slate-200 dark:border-zinc-700">
+          {!isScript && <div className="flex items-center bg-slate-100 dark:bg-zinc-800 rounded-lg p-0.5 border border-slate-200 dark:border-zinc-700">
             <button
               type="button"
               onClick={() => onToggleViewMode?.('word')}
@@ -512,7 +508,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
               <Columns className="w-3 h-3" />
               <span>Block Mode</span>
             </button>
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -547,7 +543,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
 
       {/* Document Page Simulation Sheets */}
       <div
-        className="w-full flex flex-col items-center transition-all duration-200"
+        data-script-sheets={isScript || undefined} className="w-full flex flex-col items-center transition-all duration-200"
         style={{
           transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : 'none',
           transformOrigin: 'top center'
@@ -565,7 +561,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
                     No blocks match "{searchQuery}"
                   </h4>
                   <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1.5 leading-relaxed">
-                    No headings, paragraphs, statement line items, or spreadsheet-linked values match this term. Try typing partial words, or search by account names or numbers.
+                    {activeDocumentType() === 'script' ? 'No script text or table cells match this term. Try part of a word or phrase.' : 'No headings, paragraphs, statement line items, or spreadsheet-linked values match this term. Try typing partial words, or search by account names or numbers.'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 pt-2">
@@ -619,7 +615,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
           pages.map((page, pageIdx) => (
             <React.Fragment key={page.pageNumber}>
               <div
-                id={`doc-page-${page.pageNumber}`}
+                data-script-page={isScript || undefined} id={`doc-page-${page.pageNumber}`}
                 onClick={() => onSelectBlock(null)}
                 className={`${sheetWidthClass} scroll-mt-[var(--doc-toolbar-offset,10rem)] ${
                   viewMode === 'word'
@@ -714,7 +710,7 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
         ) : (
           /* Continuous Single Sheet View / Continuous Block Mode */
           <div
-            onClick={() => onSelectBlock(null)}
+            data-script-page={isScript || undefined} onClick={() => onSelectBlock(null)}
             className={`${sheetWidthClass} ${
               viewMode === 'word'
                 ? 'bg-white text-slate-900 shadow-2xl rounded-sm border border-slate-300/80 px-8 sm:px-12 md:px-18 lg:px-22 py-12 md:py-14'
@@ -930,7 +926,5 @@ export const BlockBuilder: React.FC<BlockBuilderProps> = ({
     </div>
   );
 };
-
-
 
 

@@ -40,7 +40,7 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `Notification` (export interface) L1
 - `UnreadNotificationCount` (export interface) L13
 
-## src/types/scriptReview.ts (76 lines) - Mirrors models/sec_filings/script_review_model.py and the state returned by the script-review routes.
+## src/types/scriptReview.ts (91 lines) - Mirrors models/sec_filings/script_review_model.py and the state returned by the script-review routes.
 - `ScriptStatus` (export type) L4
 - `ScriptCapacity` (export type) L5
 - `ScriptCollaboratorRole` (export type) L6
@@ -51,13 +51,14 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `ScriptReviewState` (export interface) L32
 - `ScriptInvitee` (export interface) L48
 - `ScriptHistoryEvent` (export interface) L54
-- `EmbedOutbound` (export type) L63 - Messages between this embed and the Social Media portal page that hosts it (see lib/embedBridge.ts).
-- `EmbedInbound` (export type) L71
+- `EmbedNote` (export interface) L62
+- `EmbedOutbound` (export type) L73 - Messages between this embed and the Social Media portal page that hosts it (see lib/embedBridge.ts).
+- `EmbedInbound` (export type) L83
 
 ## src/types/search.ts (8 lines) - search (types)
 - `SearchResult` (export type) L1
 
-## src/types/secFiling.ts (442 lines) - sec filing (types)
+## src/types/secFiling.ts (444 lines) - sec filing (types)
 - `SecBlockType` (export type) L3
 - `SecHeadingLevel` (export type) L13
 - `SecBlockSpacing` (export type) L15
@@ -84,12 +85,12 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `SecFilingDocument` (export interface) L290
 - `SpreadsheetCellDiff` (export interface) L314
 - `SecChangeProposal` (export interface) L331
-- `SecVersionSnapshot` (export interface) L366
-- `SecChangeCategory` (export type) L379
-- `SecChangeTag` (export interface) L388
-- `SecTableCellDiff` (export interface) L394
-- `SecBlockDiff` (export interface) L405
-- `SecDocumentSummary` (export interface) L423
+- `SecVersionSnapshot` (export interface) L368
+- `SecChangeCategory` (export type) L381
+- `SecChangeTag` (export interface) L390
+- `SecTableCellDiff` (export interface) L396
+- `SecBlockDiff` (export interface) L407
+- `SecDocumentSummary` (export interface) L425
 
 ## src/types/secFilingTemplate.ts (61 lines) - A template as returned by `GET /api/sec-filings/table-templates`.
 - `SecFinancialTableTemplateBlock` (export type) L9 - The structure a template copies into a `financial_table` block.

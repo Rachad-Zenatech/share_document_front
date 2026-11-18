@@ -4,6 +4,15 @@
 
 Each symbol shows its start line (`L<n>`); read from there to the next symbol's line, not the whole file.
 
+## src/utils/blockComparison.ts (74 lines) - Script tables must not inherit financial-statement indentation or header repair.
+- `isScriptTable` (export function) L4 - Script tables must not inherit financial-statement indentation or header repair.
+- `defaultBlockSpacingTop` (export function) L10
+- `stableValue` (function) L19
+- `comparableBlock` (export function) L28 - Compare document meaning, preserving whitespace, line breaks and intentional layout.
+- `blocksEqual` (export function) L57
+- `movedBlockIds` (export function) L62 - Added/deleted neighbors do not make otherwise stationary blocks look moved.
+- `proposalBaseBlocks` (export function) L71 - Prefer the exact branch snapshot; older branches can use their recorded version.
+
 ## src/utils/compressAttachment.ts (78 lines) - Safely compresses image attachments before upload.
 - `compressAttachmentBeforeUpload` (export function) L7 - Safely compresses image attachments before upload.
 - `compressAttachmentsBeforeUpload` (export function) L75
@@ -96,8 +105,16 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `insertOrReplaceCellInFormula` (export function) L2399 - Handles clicking a cell while formula editing is active.
 - `extractCellReferencesFromFormula` (export function) L2440 - Extracts and maps all cell references in a formula to visual color styles for grid highlights.
 
+## src/utils/scriptBlockDefaults.ts (15 lines) - Script insertions start with script content rather than filing examples.
+- `scriptBlockDefaults` (export function) L5 - Script insertions start with script content rather than filing examples.
+
 ## src/utils/scriptTableBanding.ts (23 lines) - The fill of every second row in a script's beats table (see data/socialMediaScriptTemplate.ts).
 - `reband` (export function) L11 - Keeps a banded table banded.
+
+## src/utils/scriptTableLayout.ts (39 lines) - Space for a full header, its menu, and at least one readable word in each cell.
+- `SCRIPT_ROW_HANDLE_WIDTH` (export const) L3
+- `scriptColumnMinimums` (export function) L6 - Space for a full header, its menu, and at least one readable word in each cell.
+- `fitScriptColumns` (export function) L20 - Fit saved proportions without making a narrow column smaller than its readable minimum.
 
 ## src/utils/secFilingExport.ts (987 lines) - sec filing export (utils)
 - `sanitizeTableCells` (export const) L23

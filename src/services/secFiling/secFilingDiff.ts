@@ -1,3 +1,5 @@
+import type { DocumentType } from '../../types/documentType';
+import { INITIAL_SEC_FILING_DOC } from '../../data/initialSecFilingData';
 import type {
   SecBlock,
   SecBlockDiff,
@@ -5,11 +7,9 @@ import type {
   SecChangeCategory,
   SecChangeTag
 } from '../../types/secFiling';
-import { INITIAL_SEC_FILING_DOC } from '../../data/initialSecFilingData';
-
-export function compactFinancialTableBlock(table: SecBlock): SecBlock {
-  if (table.type !== 'financial_table' || !table.rows) return table;
-
+import { blocksEqual, comparableBlock, defaultBlockSpacingTop, movedBlockIds } from '../../utils/blockComparison';
+export function compactFinancialTableBlock(table: SecBlock, documentType: DocumentType = 'sec-filing'): SecBlock {
+  if (table.type !== 'financial_table' || !table.rows || documentType === 'script') return table;
   let inSection = false;
   const rows = table.rows.map((r: any, idx: number) => {
     let indent = r.indent;
@@ -30,7 +30,6 @@ export function compactFinancialTableBlock(table: SecBlock): SecBlock {
         r.type === 'header' ||
         (!firstCell && idx < 4) ||
         /^(assets|liabilities|equity|revenue|operating activities)/i.test(firstCell);
-
       if (isSection) {
         inSection = true;
         indent = 0;
@@ -46,14 +45,12 @@ export function compactFinancialTableBlock(table: SecBlock): SecBlock {
         indent = 0;
       }
     }
-
     return {
       ...r,
       cells: [...(r.cells || [])],
       indent: indent ?? 0,
     };
   });
-
   return {
     ...table,
     headers: [...(table.headers || [])],
@@ -61,7 +58,6 @@ export function compactFinancialTableBlock(table: SecBlock): SecBlock {
     rows,
   } as any;
 }
-
 export function computeFinancialTableCellDiffs(
   orig: SecBlock,
   proposed: SecBlock
@@ -73,18 +69,15 @@ export function computeFinancialTableCellDiffs(
   if (orig.type !== 'financial_table' || proposed.type !== 'financial_table') {
     return { tableCellDiffs: [], changeTags: [], cellCount: 0 };
   }
-
   const tableCellDiffs: SecTableCellDiff[] = [];
   const origRows = orig.rows || [];
   const propRows = proposed.rows || [];
   const origHeaders = orig.headers || [];
   const propHeaders = proposed.headers || [];
-
   const maxR = Math.max(origRows.length, propRows.length);
   for (let r = 0; r < maxR; r++) {
     const origR = origRows[r];
     const propR = propRows[r];
-
     if (!origR && propR) {
       // Entire row added in proposal
       const rowLabel = propR.cells?.[0] || `Row ${r + 1}`;
@@ -114,7 +107,6 @@ export function computeFinancialTableCellDiffs(
     } else if (origR && propR) {
       const maxC = Math.max(origR.cells?.length || 0, propR.cells?.length || 0);
       const rowLabel = (propR.cells?.[0] || origR.cells?.[0] || `Row ${r + 1}`).trim();
-
       for (let c = 0; c < maxC; c++) {
         const rawOld = origR.cells?.[c] ?? '';
         const rawNew = propR.cells?.[c] ?? '';
@@ -134,7 +126,6 @@ export function computeFinancialTableCellDiffs(
       }
     }
   }
-
   // Also check if headers were modified
   const maxH = Math.max(origHeaders.length, propHeaders.length);
   for (let c = 0; c < maxH; c++) {
@@ -152,12 +143,10 @@ export function computeFinancialTableCellDiffs(
       });
     }
   }
-
   const changeTags: SecChangeTag[] = [];
   const modifiedCells = tableCellDiffs.filter((d) => d.status === 'cell_modified');
   const addedRows = tableCellDiffs.filter((d) => d.status === 'row_added');
   const deletedRows = tableCellDiffs.filter((d) => d.status === 'row_deleted');
-
   if (modifiedCells.length > 0) {
     if (modifiedCells.length === 1) {
       const single = modifiedCells[0];
@@ -181,21 +170,18 @@ export function computeFinancialTableCellDiffs(
       });
     }
   }
-
   if (addedRows.length > 0) {
     changeTags.push({
       category: 'structure',
       label: `Table: ${addedRows.length} row(s) added`
     });
   }
-
   if (deletedRows.length > 0) {
     changeTags.push({
       category: 'structure',
       label: `Table: ${deletedRows.length} row(s) deleted`
     });
   }
-
   return {
     tableCellDiffs,
     changeTags,
@@ -203,12 +189,12 @@ export function computeFinancialTableCellDiffs(
   };
 }
 
-
-export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[], originSnapshotBlocks?: SecBlock[]): SecBlockDiff[] {
+export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[], originSnapshotBlocks?: SecBlock[], documentType: DocumentType = 'sec-filing'): SecBlockDiff[] {
     const diffs: SecBlockDiff[] = [];
+    const isScript = documentType === 'script';
+    const movedIds = isScript ? movedBlockIds(baseBlocks, proposedBlocks) : new Set<string>();
     const baseMap = new Map<string, SecBlock>(baseBlocks.map((b) => [b.id, b]));
     const proposedMap = new Map<string, SecBlock>(proposedBlocks.map((b) => [b.id, b]));
-
     for (const pBlock of proposedBlocks) {
       const orig = baseMap.get(pBlock.id);
       if (!orig) {
@@ -221,7 +207,7 @@ export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[
             { category: 'structure', label: `New ${pBlock.type.replace('_', ' ')} block added` }
           ]
         });
-      } else if (orig === pBlock) {
+      } else if (orig === pBlock && !movedIds.has(pBlock.id)) {
         // FAST-PATH: Pointer equality confirms 0 changes in O(1) time
         diffs.push({
           blockId: pBlock.id,
@@ -230,7 +216,9 @@ export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[
           proposedBlock: pBlock
         });
       } else {
-        const isSame = JSON.stringify(orig) === JSON.stringify(pBlock);
+        const originalComparable = isScript ? comparableBlock(orig) : orig;
+        const proposedComparable = isScript ? comparableBlock(pBlock) : pBlock;
+        const isSame = (isScript ? blocksEqual(orig, pBlock) : JSON.stringify(orig) === JSON.stringify(pBlock)) && !movedIds.has(pBlock.id);
         if (isSame) {
           diffs.push({
             blockId: pBlock.id,
@@ -242,10 +230,14 @@ export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[
           const fieldDiffs: { field: string; oldValue: any; newValue: any }[] = [];
           const changeTags: SecChangeTag[] = [];
           const categorySet = new Set<SecChangeCategory>();
-
+          if (movedIds.has(pBlock.id)) {
+            categorySet.add('structure');
+            changeTags.push({ category: 'structure', label: 'Block order changed' });
+            fieldDiffs.push({ field: 'order', oldValue: baseBlocks.indexOf(orig), newValue: proposedBlocks.indexOf(pBlock) });
+          }
           // 1. Spacing changes
-          const origSpacingTop = orig.spacingTop ?? 0;
-          const propSpacingTop = pBlock.spacingTop ?? 0;
+          const origSpacingTop = orig.spacingTop ?? (isScript ? defaultBlockSpacingTop(orig) : 0);
+          const propSpacingTop = pBlock.spacingTop ?? (isScript ? defaultBlockSpacingTop(pBlock) : 0);
           if (origSpacingTop !== propSpacingTop) {
             fieldDiffs.push({ field: 'spacingTop', oldValue: origSpacingTop, newValue: propSpacingTop });
             categorySet.add('spacing');
@@ -256,7 +248,6 @@ export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[
               detail: `Top spacing altered by ${diffPx > 0 ? '+' : ''}${diffPx}px`
             });
           }
-
           const origSpacingBottom = orig.spacingBottom ?? 0;
           const propSpacingBottom = pBlock.spacingBottom ?? 0;
           if (origSpacingBottom !== propSpacingBottom) {
@@ -267,7 +258,6 @@ export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[
               label: `Bottom Spacing: ${origSpacingBottom}px → ${propSpacingBottom}px`
             });
           }
-
           const origSpacingPreset = orig.spacing || 'normal';
           const propSpacingPreset = pBlock.spacing || 'normal';
           if (origSpacingPreset !== propSpacingPreset) {
@@ -278,9 +268,8 @@ export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[
               label: `Spacing Preset: ${origSpacingPreset} → ${propSpacingPreset}`
             });
           }
-
-          const origLineSpacing = (orig as any).lineSpacing;
-          const propLineSpacing = (pBlock as any).lineSpacing;
+          const origLineSpacing = (originalComparable as any).lineSpacing;
+          const propLineSpacing = (proposedComparable as any).lineSpacing;
           if (origLineSpacing !== propLineSpacing && (origLineSpacing || propLineSpacing)) {
             fieldDiffs.push({ field: 'lineSpacing', oldValue: origLineSpacing, newValue: propLineSpacing });
             categorySet.add('spacing');
@@ -289,10 +278,9 @@ export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[
               label: `Line Height: ${origLineSpacing || '1.0'} → ${propLineSpacing || '1.0'}`
             });
           }
-
           // 2. Typography & Font Styling changes
-          const origBold = !!(orig as any).bold;
-          const propBold = !!(pBlock as any).bold;
+          const origBold = !!(originalComparable as any).bold;
+          const propBold = !!(proposedComparable as any).bold;
           if (origBold !== propBold) {
             fieldDiffs.push({ field: 'bold', oldValue: origBold, newValue: propBold });
             categorySet.add('typography');
@@ -301,9 +289,8 @@ export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[
               label: propBold ? 'Font: Bold Added' : 'Font: Bold Removed'
             });
           }
-
-          const origItalic = !!(orig as any).italic;
-          const propItalic = !!(pBlock as any).italic;
+          const origItalic = !!(originalComparable as any).italic;
+          const propItalic = !!(proposedComparable as any).italic;
           if (origItalic !== propItalic) {
             fieldDiffs.push({ field: 'italic', oldValue: origItalic, newValue: propItalic });
             categorySet.add('typography');
@@ -313,8 +300,8 @@ export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[
             });
           }
 
-          const origUnderline = !!(orig as any).underline;
-          const propUnderline = !!(pBlock as any).underline;
+          const origUnderline = !!(originalComparable as any).underline;
+          const propUnderline = !!(proposedComparable as any).underline;
           if (origUnderline !== propUnderline) {
             fieldDiffs.push({ field: 'underline', oldValue: origUnderline, newValue: propUnderline });
             categorySet.add('typography');
@@ -324,8 +311,8 @@ export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[
             });
           }
 
-          const origFontSize = (orig as any).fontSize;
-          const propFontSize = (pBlock as any).fontSize;
+          const origFontSize = (originalComparable as any).fontSize;
+          const propFontSize = (proposedComparable as any).fontSize;
           if (origFontSize !== propFontSize && (origFontSize || propFontSize)) {
             fieldDiffs.push({ field: 'fontSize', oldValue: origFontSize, newValue: propFontSize });
             categorySet.add('typography');
@@ -466,7 +453,7 @@ export function calculateDiffs(baseBlocks: SecBlock[], proposedBlocks: SecBlock[
       if (!proposedMap.has(bBlock.id)) {
         // Check if this block existed in the original base document when the proposal was branched
         // If it was added to Live after the proposal was created, the contributor did NOT delete it!
-        const initialBlocks = originSnapshotBlocks || INITIAL_SEC_FILING_DOC.blocks;
+        const initialBlocks = originSnapshotBlocks || (isScript ? baseBlocks : INITIAL_SEC_FILING_DOC.blocks);
         const existedInInitial = initialBlocks.some((initB) => initB.id === bBlock.id);
 
         if (existedInInitial) {

@@ -1,0 +1,30 @@
+/* One logical script page for creators, collaborators and the embedded editor.
+   Small viewports scroll the page instead of changing its typesetting. */
+[data-script-sheets] {
+  overflow-x: auto;
+  align-items: flex-start;
+}
+[data-script-page] {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: 920px;
+  min-width: 920px;
+  max-width: 920px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 56px 88px;
+}
+
+/* The script ribbon stays in normal flow so it cannot cover a scene heading. */
+[data-script-toolbar] {
+  position: static;
+  top: auto;
+  z-index: auto;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+[data-script-toolbar] > div {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}

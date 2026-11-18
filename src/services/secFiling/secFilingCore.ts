@@ -1,3 +1,4 @@
+import { documentTypeOf } from '../../types/documentType';
 import type {
   SecFilingDocument,
   SecDocumentSummary,
@@ -29,7 +30,6 @@ import {
 import { sanitizeAndCompactBlocks } from './secFilingSanitizer';
 import { getAllSpreadsheets } from './secFilingSpreadsheet';
 import { deleteRemoteDocument, getDocumentPreviewBlocks, isDocStoreServerBacked } from './secFilingStore';
-
 export function getMainDocument(): SecFilingDocument {
     const pending = getPendingMainDoc();
     if (pending) {
@@ -71,7 +71,7 @@ export function getMainDocument(): SecFilingDocument {
               parsed.attachedSpreadsheet = null;
             }
           }
-          parsed.blocks = sanitizeAndCompactBlocks(parsed.blocks);
+          parsed.blocks = sanitizeAndCompactBlocks(parsed.blocks, documentTypeOf(parsed));
           return parsed;
         }
       } catch (e) {
@@ -97,7 +97,6 @@ export function getMainDocument(): SecFilingDocument {
     safeSetItem(STORAGE_KEYS.MAIN_DOC, JSON.stringify(defaultDoc));
     return defaultDoc;
 }
-
 export function saveMainDocument(doc: SecFilingDocument, immediate = false): boolean {
     setPendingMainDoc(doc);
 
@@ -405,7 +404,7 @@ export function openDocument(id: string): SecFilingDocument {
       try {
         const parsed = JSON.parse(customSaved);
         if (parsed && Array.isArray(parsed.blocks)) {
-          parsed.blocks = sanitizeAndCompactBlocks(parsed.blocks);
+          parsed.blocks = sanitizeAndCompactBlocks(parsed.blocks, documentTypeOf(parsed));
           doc = parsed;
         }
       } catch (e) {
@@ -419,7 +418,7 @@ export function openDocument(id: string): SecFilingDocument {
         try {
           const parsed = JSON.parse(savedMain);
           if (parsed && parsed.id === id && Array.isArray(parsed.blocks)) {
-            parsed.blocks = sanitizeAndCompactBlocks(parsed.blocks);
+            parsed.blocks = sanitizeAndCompactBlocks(parsed.blocks, documentTypeOf(parsed));
             doc = parsed;
           }
         } catch {

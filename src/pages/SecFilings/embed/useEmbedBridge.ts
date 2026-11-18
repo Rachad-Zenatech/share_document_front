@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { listenToParent, postToParent } from '../../../lib/embedBridge';
-import type { ScriptHistoryEvent, ScriptReviewState } from '../../../types/scriptReview';
+import type { EmbedNote, ScriptHistoryEvent, ScriptReviewState } from '../../../types/scriptReview';
 
 /**
  * Tells the Social Media portal page that hosts this embed what is happening (ready, status changes, a merge, a post
@@ -12,6 +12,9 @@ export function useEmbedBridge(
   state: ScriptReviewState | undefined,
   history: ScriptHistoryEvent[],
   onRefresh: () => void,
+  onNotes?: (notes: EmbedNote[], activeNoteId: string | null) => void,
+  onGoToNote?: (id: string) => void,
+  onReadOnly?: (readOnly: boolean) => void,
 ) {
   const seenMerges = useRef<number | null>(null);
   const authRequired = useRef(false);
@@ -32,12 +35,15 @@ export function useEmbedBridge(
         }
       }
       if (message.type === 'script-embed:close-request') postToParent({ type: 'script-embed:close', documentId });
+      if (message.type === 'script-embed:notes') onNotes?.(message.notes, message.activeNoteId);
+      if (message.type === 'script-embed:go-to-note') onGoToNote?.(message.id);
+      if (message.type === 'script-embed:set-readonly') onReadOnly?.(message.readOnly);
     });
     return () => {
       window.removeEventListener('script-embed:auth-required', onAuthRequired);
       unlisten();
     };
-  }, [documentId, onRefresh]);
+  }, [documentId, onRefresh, onNotes, onGoToNote, onReadOnly]);
 
   useEffect(() => {
     if (!state) return;

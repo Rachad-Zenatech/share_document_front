@@ -1,3 +1,5 @@
+import { activeDocumentType } from '../../../hooks/useFinancialTableTemplates';
+import { ScriptSubmitProposalModal } from './ScriptSubmitProposalModal';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Send,
@@ -22,7 +24,7 @@ import { SpreadsheetReuploadPreviewModal } from './SpreadsheetReuploadPreviewMod
 const DEFAULT_SUBMISSION_NOTES =
   'Completed draft revisions. All figures reconciled and ready for final controller approval.';
 
-interface SubmitProposalModalProps {
+export interface SubmitProposalModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   proposal: SecChangeProposal | null;
@@ -49,6 +51,7 @@ export const SubmitProposalModal: React.FC<SubmitProposalModalProps> = ({
   blocks = [],
   onUpdateSpreadsheet
 }) => {
+  const isScript = activeDocumentType() === 'script';
   const [submissionNotes, setSubmissionNotes] = useState(DEFAULT_SUBMISSION_NOTES);
 
   // Linked workbook: upload an updated Excel onto the branch, previewing against the branch copy first
@@ -56,7 +59,7 @@ export const SubmitProposalModal: React.FC<SubmitProposalModalProps> = ({
   const [isParsing, setIsParsing] = useState(false);
   const [uploadPreview, setUploadPreview] = useState<{ uploaded: AttachedSpreadsheet; fileName: string } | null>(null);
   const [isComparingToMain, setIsComparingToMain] = useState(false);
-  const currentBranchSheet = branchSpreadsheet || mainSpreadsheet || null;
+  const currentBranchSheet = isScript ? null : branchSpreadsheet || mainSpreadsheet || null;
 
   const workbookVsMain = useMemo(
     () =>
@@ -124,6 +127,8 @@ export const SubmitProposalModal: React.FC<SubmitProposalModalProps> = ({
       setSubmissionNotes(proposal?.submissionNotes || DEFAULT_SUBMISSION_NOTES);
     }
   }, [open, proposal?.id, proposal?.submissionNotes]);
+
+  if (isScript) return <ScriptSubmitProposalModal open={open} onOpenChange={onOpenChange} proposal={proposal} diffs={diffs} onSubmit={onSubmit} />;
 
   const addedDiffs = diffs.filter((d) => d.status === 'added');
   const modifiedDiffs = diffs.filter((d) => d.status === 'modified');

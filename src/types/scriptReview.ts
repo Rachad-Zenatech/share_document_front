@@ -59,6 +59,16 @@ export interface ScriptHistoryEvent {
   detail: Record<string, unknown>;
 }
 
+export interface EmbedNote {
+  id: string;
+  kind: 'highlight' | 'comment';
+  quote: string;
+  start?: number;
+  text?: string;
+  color: string;
+  resolved?: boolean;
+}
+
 /** Messages between this embed and the Social Media portal page that hosts it (see lib/embedBridge.ts). */
 export type EmbedOutbound =
   | { type: 'script-embed:ready'; documentId: string }
@@ -66,10 +76,15 @@ export type EmbedOutbound =
   | { type: 'script-embed:merge-completed'; documentId: string }
   | { type: 'script-embed:post-requested'; documentId: string }
   | { type: 'script-embed:close'; documentId: string }
-  | { type: 'script-embed:auth-required' };
+  | { type: 'script-embed:auth-required' }
+  | { type: 'script-embed:selection'; documentId: string; quote: string; start: number }
+  | { type: 'script-embed:select-note'; documentId: string; id: string };
 
 export type EmbedInbound =
   | { type: 'script-embed:close-request' }
   | { type: 'script-embed:refresh' }
   /** A fresh sign-in (the first one is 15 minutes old by the time it expires): the portal sends the next before then. */
-  | { type: 'script-embed:token'; token: string };
+  | { type: 'script-embed:token'; token: string }
+  | { type: 'script-embed:notes'; notes: EmbedNote[]; activeNoteId: string | null }
+  | { type: 'script-embed:go-to-note'; id: string }
+  | { type: 'script-embed:set-readonly'; readOnly: boolean };

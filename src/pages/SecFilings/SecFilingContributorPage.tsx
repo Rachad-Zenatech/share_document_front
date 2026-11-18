@@ -41,7 +41,7 @@ import {
   DropdownMenuTrigger
 } from '../../components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { useFinancialTableTemplates } from '../../hooks/useFinancialTableTemplates';
+import { activeDocumentType, useFinancialTableTemplates } from '../../hooks/useFinancialTableTemplates';
 import { resolveTableTemplates } from '../../data/financialTableTemplates';
 
 export default function SecFilingContributorPage() {
@@ -378,7 +378,7 @@ export default function SecFilingContributorPage() {
             </div>
 
             {/* Attached Spreadsheet / Dynamic Variable Button */}
-            {attachedSpreadsheet && (
+            {activeDocumentType() !== 'script' && attachedSpreadsheet && (
               <Button
                 type="button"
                 variant="outline"
@@ -589,7 +589,7 @@ export default function SecFilingContributorPage() {
               sections={documentSections}
               activeSection={sectionFilter}
               onSelectSection={setSectionFilter}
-              totalBlocks={workingBlocks.length}
+              totalBlocks={workingBlocks.length} selectedBlockId={selectedBlockId} onSelectBlock={setSelectedBlockId}
               blocks={workingBlocks}
               onMoveSection={moveSection}
               onReorderSection={reorderSection}
@@ -686,7 +686,7 @@ export default function SecFilingContributorPage() {
             diffs={activeDiffs}
             viewMode={viewMode}
             onToggleViewMode={setViewMode}
-            attachedSpreadsheet={attachedSpreadsheet}
+            attachedSpreadsheet={activeDocumentType() === 'script' ? null : attachedSpreadsheet}
             onOpenSpreadsheet={(cellRef, tabName) => {
               setSpreadsheetModalMode('manage');
               setTargetSpreadsheetCell(cellRef);
@@ -724,8 +724,7 @@ export default function SecFilingContributorPage() {
         blocks={workingBlocks}
         onUpdateSpreadsheet={activeProposal ? updateAttachedSpreadsheet : undefined}
       />
-
-      <AttachedSpreadsheetModal
+      {activeDocumentType() !== 'script' && <AttachedSpreadsheetModal
         open={isSpreadsheetOpen}
         onOpenChange={setIsSpreadsheetOpen}
         spreadsheet={attachedSpreadsheet}
@@ -742,8 +741,7 @@ export default function SecFilingContributorPage() {
           const el = document.getElementById(blockId);
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }}
-      />
-
+      />}
       {/* Standalone Application Footer */}
       <footer className="mt-auto py-3 px-6 border-t border-slate-200 bg-white text-[11px] text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
         <div className="flex items-center gap-2">

@@ -1,3 +1,7 @@
+import { documentTypeOf } from '../types/documentType';
+import { blocksEqual, proposalBaseBlocks } from '../utils/blockComparison';
+import { activeDocumentType } from './useFinancialTableTemplates';
+import { scriptBlockDefaults } from '../utils/scriptBlockDefaults';
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
@@ -26,9 +30,7 @@ import {
   syncVariableCacheTags,
   ensureSpreadsheetTabs
 } from '../utils/documentVariables';
-
 export type UserFilingRole = 'LEAD_CONTROLLER' | 'CONTRIBUTOR';
-
 /**
  * Moves the run of blocks starting at `start` that are still in `fromSection` into
  * `toSection`, stopping at the first block from another section. This is how a heading
@@ -42,11 +44,9 @@ function moveRunToSection(blocks: SecBlock[], start: number, fromSection: string
   }
   return next;
 }
-
 // Placeholder text older builds gave a heading inserted into an existing section,
 // while leaving it in that section, so it never reached Document Sections.
 const LEGACY_HEADING_PLACEHOLDER = /^new section heading$/i;
-
 /**
  * Gives each legacy placeholder heading that is still inside another section its own
  * section, carrying the blocks after it along. Returns null when nothing needed fixing.
@@ -69,11 +69,9 @@ function repairLegacySectionHeadings(blocks: SecBlock[]): SecBlock[] | null {
   }
   return changed ? next : null;
 }
-
 export function useSecFiling() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-
   // --------------------------------------------------------------------------
   // 1. ALL STATE & REFS (Strictly ordered at the top)
   // --------------------------------------------------------------------------
@@ -93,33 +91,27 @@ export function useSecFiling() {
     role?: string;
     assignedSection?: string;
   }>({ isContributor: false });
-
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedBlockIds, setSelectedBlockIds] = useState<string[]>([]);
-
   const [undoStack, setUndoStack] = useState<SecBlock[][]>([]);
   const [redoStack, setRedoStack] = useState<SecBlock[][]>([]);
-
   // Document security verification: Owner, Invited Contributor, or Super Admin
   const isAccessGranted = useMemo(() => canUserAccessDocument(mainDoc, user, proposals), [mainDoc, user, proposals]);
   // Only the owner (and a super admin) is the Lead Controller and may switch persona; everyone else is a Contributor.
   const canSwitchRole = !!user && (user.is_super_admin || isDocumentOwner(mainDoc, user));
   const isUndoRedoActionRef = useRef<boolean>(false);
-
   // --------------------------------------------------------------------------
   // 2. CORE MEMOS (Derived working document & structure)
   // --------------------------------------------------------------------------
   const activeProposal = useMemo(() => {
     return proposals.find((p) => p.id === activeProposalId) || null;
   }, [proposals, activeProposalId]);
-
   const workingBlocks = useMemo(() => {
     if (activeProposal) {
       return activeProposal.blocks;
     }
     return mainDoc.blocks;
   }, [activeProposal, mainDoc.blocks]);
-
   const documentSections = useMemo(() => {
     const list: string[] = [];
     const seen = new Set<string>();
@@ -212,8 +204,8 @@ export function useSecFiling() {
     (proposal: SecChangeProposal): SecBlockDiff[] => {
       // Find the base version snapshot if present in history
       const versionHistory = secFilingService.getVersionHistory();
-      const baseSnap = versionHistory.find((v) => v.versionNumber === proposal.baseVersionNumber);
-      const blockDiffs = secFilingService.calculateDiffs(mainDoc.blocks, proposal.blocks, baseSnap?.blocks);
+      const baseBlocks = documentTypeOf(mainDoc) === 'script' ? proposalBaseBlocks(proposal, versionHistory) : versionHistory.find((version) => version.versionNumber === proposal.baseVersionNumber)?.blocks;
+      const blockDiffs = secFilingService.calculateDiffs(mainDoc.blocks, proposal.blocks, baseBlocks, documentTypeOf(mainDoc));
       const effectiveBase =
         mainDoc.attachedSpreadsheet ||
         secFilingService.getAttachedSpreadsheet(mainDoc.id);
@@ -280,7 +272,7 @@ export function useSecFiling() {
           blocks: newBlocks,
           updatedAt: new Date().toISOString()
         };
-        const diffs = secFilingService.calculateDiffs(mainDoc.blocks, newBlocks);
+        const diffs = secFilingService.calculateDiffs(mainDoc.blocks, newBlocks, documentTypeOf(mainDoc) === 'script' ? proposalBaseBlocks(activeProposal, secFilingService.getVersionHistory()) : undefined, documentTypeOf(mainDoc));
         updatedProposal.changeSummary = {
           ...updatedProposal.changeSummary,
           addedCount: diffs.filter((d) => d.status === 'added').length,
@@ -306,6 +298,7 @@ export function useSecFiling() {
 
   const setWorkingBlocks = useCallback(
     (newBlocks: SecBlock[]) => {
+      if (activeDocumentType() === 'script' && workingBlocks.length === newBlocks.length && workingBlocks.every((block, index) => blocksEqual(block, newBlocks[index]))) return;
       if (!isUndoRedoActionRef.current) {
         const hasChanged =
           workingBlocks.length !== newBlocks.length ||
@@ -328,7 +321,7 @@ export function useSecFiling() {
   // Written without an undo entry since it is a data fix, not a user edit.
   // Merged proposals are read-only history (writing to one forks it), so they are left alone.
   useEffect(() => {
-    if (activeProposal?.status === 'merged') return;
+    if (activeProposal?.status === 'merged' || activeDocumentType() === 'script') return;
     const repaired = repairLegacySectionHeadings(workingBlocks);
     if (repaired) applyWorkingBlocks(repaired);
   }, [workingBlocks, applyWorkingBlocks, activeProposal?.status]);
@@ -371,21 +364,22 @@ export function useSecFiling() {
 
   const addBlock = useCallback(
     (index: number, type: SecBlockType, defaultSection?: string, customBlock?: Partial<SecBlock>) => {
+      const isScript = activeDocumentType() === 'script';
       let section = defaultSection && defaultSection !== 'ALL' ? defaultSection : '';
       if (!section && type === 'heading') {
-        let sName = 'New Section';
+        let sName = isScript ? 'New scene' : 'New Section';
         let c = 1;
         const existingSections = new Set(workingBlocks.map((b) => b.section).filter(Boolean));
         while (existingSections.has(sName)) {
           c++;
-          sName = `New Section ${c}`;
+          sName = `${isScript ? 'New scene' : 'New Section'} ${c}`;
         }
         section = sName;
       } else if (!section) {
         // A block added below another belongs to the same section as the block above it
         // (e.g. a paragraph added under a new heading joins that heading's section).
         section =
-          workingBlocks[index - 1]?.section || workingBlocks[index]?.section || 'General Disclosures';
+          workingBlocks[index - 1]?.section || workingBlocks[index]?.section || (isScript ? 'Script' : 'General Disclosures');
       }
 
       const blockId = `block-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -560,6 +554,7 @@ export function useSecFiling() {
           };
       }
 
+      if (isScript) newBlock = { ...newBlock, ...scriptBlockDefaults(type) } as SecBlock;
       let nextBlocks = [...workingBlocks];
       const targetIdx = index >= 0 && index <= nextBlocks.length ? index : nextBlocks.length;
       nextBlocks.splice(targetIdx, 0, newBlock);
@@ -577,7 +572,7 @@ export function useSecFiling() {
       setWorkingBlocks(nextBlocks);
       setSelectedBlockId(newBlock.id);
       toast.success(
-        type === 'heading' ? `Added new section "${section}"` : `Added new ${type.replace('_', ' ')} block`
+        type === 'heading' ? `Added new section "${section}"` : isScript ? 'Added script content' : `Added new ${type.replace('_', ' ')} block`
       );
     },
     [workingBlocks, setWorkingBlocks, user, sectionFilter, setSectionFilter]
@@ -586,7 +581,7 @@ export function useSecFiling() {
   const updateBlock = useCallback(
     (id: string, updates: Partial<SecBlock>) => {
       const currentBlock = workingBlocks.find((b) => b.id === id);
-      if (!currentBlock) return;
+      if (!currentBlock || (activeDocumentType() === 'script' && blocksEqual(currentBlock, { ...currentBlock, ...updates } as SecBlock))) return;
 
       const oldSection = currentBlock.section;
       let newSection: string | undefined;
@@ -1181,7 +1176,7 @@ export function useSecFiling() {
       // query cache here: its effect would write this sheet into Main's registry/backend.
       const nextBlocks = shiftedBlocks && Array.isArray(shiftedBlocks) ? shiftedBlocks : activeProposal.blocks;
       const baseSpreadsheet = mainDoc.attachedSpreadsheet || secFilingService.getAttachedSpreadsheet(mainDoc.id);
-      const diffs = secFilingService.calculateDiffs(mainDoc.blocks, nextBlocks);
+      const diffs = secFilingService.calculateDiffs(mainDoc.blocks, nextBlocks, documentTypeOf(mainDoc) === 'script' ? proposalBaseBlocks(activeProposal, secFilingService.getVersionHistory()) : undefined, documentTypeOf(mainDoc));
       const updatedProposal: SecChangeProposal = {
         ...activeProposal,
         attachedSpreadsheet: sheet,
