@@ -17,6 +17,7 @@ env:
   S3_BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
   CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.DISTRIBUTION_ID || secrets.DISTRIBUTION_NAME }}
   VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || secrets.API_BASE_URL }}
+  VITE_EMBED_PARENT_ORIGINS: ${{ secrets.VITE_EMBED_PARENT_ORIGINS || vars.VITE_EMBED_PARENT_ORIGINS }}
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
  
 jobs:
@@ -39,6 +40,7 @@ jobs:
           S3_BUCKET_NAME="$(echo -n "${S3_BUCKET_NAME:-}" | xargs)"
           CLOUDFRONT_DISTRIBUTION_ID="$(echo -n "${CLOUDFRONT_DISTRIBUTION_ID:-}" | xargs)"
           VITE_API_BASE_URL="$(echo -n "${VITE_API_BASE_URL:-}" | xargs)"
+          VITE_EMBED_PARENT_ORIGINS="$(echo -n "${VITE_EMBED_PARENT_ORIGINS:-}" | xargs)"
 
           # Export sanitized variables to subsequent steps
           echo "AWS_REGION=${AWS_REGION}" >> "$GITHUB_ENV"
@@ -46,6 +48,7 @@ jobs:
           echo "S3_BUCKET_NAME=${S3_BUCKET_NAME}" >> "$GITHUB_ENV"
           echo "CLOUDFRONT_DISTRIBUTION_ID=${CLOUDFRONT_DISTRIBUTION_ID}" >> "$GITHUB_ENV"
           echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" >> "$GITHUB_ENV"
+          echo "VITE_EMBED_PARENT_ORIGINS=${VITE_EMBED_PARENT_ORIGINS}" >> "$GITHUB_ENV"
 
           missing=0
 
@@ -95,6 +98,12 @@ jobs:
             echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}"
           fi
 
+          if [ -z "${VITE_EMBED_PARENT_ORIGINS:-}" ]; then
+            echo "::warning title=Missing Embed Parent Origins::The VITE_EMBED_PARENT_ORIGINS secret or variable is not set."
+          else
+            echo "VITE_EMBED_PARENT_ORIGINS=${VITE_EMBED_PARENT_ORIGINS}"
+          fi
+
           if [ "$missing" -ne 0 ]; then
             echo "::error::Deployment configuration validation failed."
             exit 1
@@ -116,6 +125,7 @@ jobs:
         shell: bash
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_EMBED_PARENT_ORIGINS: ${{ env.VITE_EMBED_PARENT_ORIGINS }}
         run: |
           set -euxo pipefail
           npm run build
