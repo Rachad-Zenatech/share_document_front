@@ -199,11 +199,14 @@ async function monitoredFetch(endpoint: string, options: ApiRequestOptions): Pro
           recentPerformanceReports.delete(key);
         }
       }
-      const fetchMethod = options.method ?? "GET";
+      const fetchMethod = (options.method ?? "GET").toUpperCase();
       const path = endpoint.split("?", 1)[0];
       const fingerprint = `${fetchMethod}:${path}`;
       const lastReportedAt = recentPerformanceReports.get(fingerprint) ?? 0;
+      const authHeaders = getAuthHeaders();
+      const canReport = Boolean(authHeaders.Authorization) && Number.isFinite(durationMs) && statusCode >= 0 && statusCode <= 599;
       if (
+        canReport &&
         performanceReportTimes.length < MAX_PERFORMANCE_REPORTS_PER_MINUTE &&
         now - lastReportedAt >= PERFORMANCE_DEDUPLICATION_MS
       ) {
@@ -215,7 +218,7 @@ async function monitoredFetch(endpoint: string, options: ApiRequestOptions): Pro
           keepalive: true,
           headers: { 
             "Content-Type": "application/json",
-            ...getAuthHeaders()
+            ...authHeaders
           },
           body: JSON.stringify({
             method: fetchMethod,
