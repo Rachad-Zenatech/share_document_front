@@ -75,7 +75,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/hooks/useScriptColumnResize.ts (81 lines) - use script column resize (hooks)
 - src/hooks/useScriptReview.ts (77 lines) - use script review (hooks)
 - src/hooks/useScriptTableLayout.ts (22 lines) - use script table layout (hooks)
-- src/hooks/useSecFiling.ts (1611 lines) - use sec filing (hooks)
+- src/hooks/useSecFiling.ts (1582 lines) - use sec filing (hooks)
 - src/hooks/useSecWorkflows.ts (88 lines) - Active platform users that can be put on a workflow step.
 - src/lib/AuthContext.tsx (221 lines) - auth context (lib)
 - src/lib/embedBridge.ts (77 lines) - The hosting portal signs this person in by putting a short-lived token in the URL's #token=; it is kept for this tab and the URL cleaned.
@@ -153,7 +153,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/services/secFiling/secFilingSanitizer.ts (18 lines) - sec filing sanitizer (services sec filing)
 - src/services/secFiling/secFilingSpreadsheet.ts (669 lines) - sec filing spreadsheet (services sec filing)
 - src/services/secFiling/secFilingStorage.ts (480 lines) - Documents, proposals and version history go through `docStore`, which is backed by the
-- src/services/secFiling/secFilingStore.ts (482 lines) - Server-backed store for filing documents, proposals and version history.
+- src/services/secFiling/secFilingStore.ts (493 lines) - Server-backed store for filing documents, proposals and version history.
 - src/services/secFiling/secFilingSync.ts (321 lines) - Loads filing documents, proposals and version history from the server into the in-memory docStore (secFilingStore.ts) before the SEC page...
 - src/services/secFilingService.ts (190 lines) - Unified SEC Filing Service Facade Consolidates the modular SEC Filing subsystems: - secFilingStorage: LocalStorage quota handling, reclai...
 - src/services/secFilingTemplateService.ts (37 lines) - src/services/secFilingTemplateService.ts
@@ -181,5 +181,6 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/utils/secFilingImporter.ts (1019 lines) - PDF imports run on the server for a while; called as pages are converted.
 - src/utils/secFilingPagination.ts (141 lines) - sec filing pagination (utils)
 - src/utils/secFilingSearch.ts (258 lines) - sec filing search (utils)
+- src/utils/secFilingSections.ts (43 lines) - Placeholder text older builds gave a heading inserted into an existing section,
 - src/utils/spreadsheetReuploadDiff.ts (494 lines) - Minimum similarity for two rows/columns to be considered "the same" line.
 - src/utils/textStandardizer.ts (78 lines) - Common standalone cities, states, provinces, and countries

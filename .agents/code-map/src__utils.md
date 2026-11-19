@@ -166,6 +166,10 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `blockMatchesQuery` (export function) L184 - Tests whether a given SecBlock matches a search query string.
 - `countBlockMatches` (export function) L235 - Counts total occurrences of query terms in a block.
 
+## src/utils/secFilingSections.ts (43 lines) - Placeholder text older builds gave a heading inserted into an existing section,
+- `moveRunToSection` (export function) L8 - Moves the run of blocks starting at `start` that are still in `fromSection` into  `toSection`, stopping at the first block from another s...
+- `repairLegacySectionHeadings` (export function) L25 - Gives each legacy placeholder heading that is still inside another section its own  section, carrying the blocks after it along.
+
 ## src/utils/spreadsheetReuploadDiff.ts (494 lines) - Minimum similarity for two rows/columns to be considered "the same" line.
 - `isSparseFill` (const) L29 - Whether a line with `filled` values out of `length` positions is sparse enough to be a filled-in blank.
 - `Cells` (type) L32

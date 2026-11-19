@@ -132,7 +132,7 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `safeSetItem` (export function) L385
 - `flushPendingSaves` (export function) L409
 
-## src/services/secFiling/secFilingStore.ts (482 lines) - Server-backed store for filing documents, proposals and version history.
+## src/services/secFiling/secFilingStore.ts (493 lines) - Server-backed store for filing documents, proposals and version history.
 - `DOC_STORE_KEYS` (export const) L25
 - `DOC_CONTENT_PREFIX` (export const) L32
 - `SyncStatus` (export type) L44
@@ -141,27 +141,28 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `emit` (function) L84
 - `activeDocId` (function) L90
 - `parse` (function) L98
-- `scheduleDocPush` (function) L109
-- `pushDoc` (function) L117
-- `replaceDocument` (export function) L175 - Put a server copy of a document into memory (after a conflict or a refresh).
-- `scheduleProposalPush` (function) L187
-- `pushGuestProposal` (function) L193
-- `pushProposals` (function) L219
-    - `documentId` (fn) L227
-- `scheduleVersionPush` (function) L250
-- `pushVersions` (function) L255
-    - `documentId` (fn) L262
-- `refreshIdleStatus` (function) L281 - saved' once nothing is pending and the last attempt succeeded; errors stay visible until then.
-- `docStore` (export const) L288
-- `docStoreInternals` (export const) L339
-    - `key` (fn) L405
-- `getDocumentPreviewBlocks` (export function) L431
-- `isDocStoreServerBacked` (export function) L435
-- `hasUnsyncedChanges` (export function) L440 - True while changes are still on their way to the server.
-- `flushRemote` (export function) L445 - Send everything pending now (e.g.
-- `deleteRemoteDocument` (export function) L456
-- `onSyncStatus` (export function) L465
-- `setDocReplacedHandler` (export function) L472 - Lets the storage layer drop its in-memory pending copy when the server copy replaces it.
+- `isReadOnlyEmbedSession` (function) L109
+- `scheduleDocPush` (function) L115
+- `pushDoc` (function) L124
+- `replaceDocument` (export function) L186 - Put a server copy of a document into memory (after a conflict or a refresh).
+- `scheduleProposalPush` (function) L198
+- `pushGuestProposal` (function) L204
+- `pushProposals` (function) L230
+    - `documentId` (fn) L238
+- `scheduleVersionPush` (function) L261
+- `pushVersions` (function) L266
+    - `documentId` (fn) L273
+- `refreshIdleStatus` (function) L292 - saved' once nothing is pending and the last attempt succeeded; errors stay visible until then.
+- `docStore` (export const) L299
+- `docStoreInternals` (export const) L350
+    - `key` (fn) L416
+- `getDocumentPreviewBlocks` (export function) L442
+- `isDocStoreServerBacked` (export function) L446
+- `hasUnsyncedChanges` (export function) L451 - True while changes are still on their way to the server.
+- `flushRemote` (export function) L456 - Send everything pending now (e.g.
+- `deleteRemoteDocument` (export function) L467
+- `onSyncStatus` (export function) L476
+- `setDocReplacedHandler` (export function) L483 - Lets the storage layer drop its in-memory pending copy when the server copy replaces it.
 
 ## src/services/secFiling/secFilingSync.ts (321 lines) - Loads filing documents, proposals and version history from the server into the in-memory docStore (secFilingStore.ts) before the SEC page...
 - `ServerSummary` (type) L22

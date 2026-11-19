@@ -30,45 +30,8 @@ import {
   syncVariableCacheTags,
   ensureSpreadsheetTabs
 } from '../utils/documentVariables';
+import { moveRunToSection, repairLegacySectionHeadings } from '../utils/secFilingSections';
 export type UserFilingRole = 'LEAD_CONTROLLER' | 'CONTRIBUTOR';
-/**
- * Moves the run of blocks starting at `start` that are still in `fromSection` into
- * `toSection`, stopping at the first block from another section. This is how a heading
- * takes over the rest of the section it was placed in.
- */
-function moveRunToSection(blocks: SecBlock[], start: number, fromSection: string, toSection: string): SecBlock[] {
-  const next = [...blocks];
-  const now = new Date().toISOString();
-  for (let i = start; i < next.length && next[i].section === fromSection; i++) {
-    next[i] = { ...next[i], section: toSection, updatedAt: now };
-  }
-  return next;
-}
-// Placeholder text older builds gave a heading inserted into an existing section,
-// while leaving it in that section, so it never reached Document Sections.
-const LEGACY_HEADING_PLACEHOLDER = /^new section heading$/i;
-/**
- * Gives each legacy placeholder heading that is still inside another section its own
- * section, carrying the blocks after it along. Returns null when nothing needed fixing.
- */
-function repairLegacySectionHeadings(blocks: SecBlock[]): SecBlock[] | null {
-  let next = blocks;
-  let changed = false;
-  const seen = new Set<string>();
-  for (let i = 0; i < next.length; i++) {
-    const b = next[i];
-    if (b.type === 'heading' && seen.has(b.section) && LEGACY_HEADING_PLACEHOLDER.test(b.text.trim())) {
-      const existing = new Set(next.map((x) => x.section));
-      let name = 'New Section Heading';
-      let c = 2;
-      while (existing.has(name)) name = `New Section Heading ${c++}`;
-      next = moveRunToSection(next, i, b.section, name);
-      changed = true;
-    }
-    seen.add(next[i].section);
-  }
-  return changed ? next : null;
-}
 export function useSecFiling() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -1476,9 +1439,13 @@ export function useSecFiling() {
   // Documents live on the server (see secFiling/secFilingStore.ts): re-read when someone
   // else's changes arrive, and say so when a save was refused or could not be sent.
   useEffect(() => {
-    const handleRemoteUpdate = () => refreshAll();
+    const handleRemoteUpdate = () => {
+      toast.dismiss('sec-filing-sync-error');
+      refreshAll();
+    };
     const handleConflict = (e: Event) => {
       const detail = (e as CustomEvent<{ title?: string }>).detail;
+      toast.dismiss('sec-filing-sync-error');
       refreshAll();
       toast.warning('Someone else saved this document first', {
         description: `Loaded their latest version of "${detail?.title || 'the document'}". Re-apply your last change if it is missing.`
@@ -1490,9 +1457,13 @@ export function useSecFiling() {
       if (Date.now() - lastErrorToast < 15000) return;
       lastErrorToast = Date.now();
       if (detail?.permanent) {
-        toast.error('Your changes could not be saved to the server', { description: detail?.message });
+        toast.error('Your changes could not be saved to the server', {
+          id: 'sec-filing-sync-error',
+          description: detail?.message
+        });
       } else {
         toast.warning('Not saved to the server yet; retrying', {
+          id: 'sec-filing-sync-error',
           description: 'Keep this tab open until it reconnects.'
         });
       }

@@ -106,7 +106,14 @@ function parse<T>(raw: string | null | undefined): T | null {
 
 // ---------------------------------------------------------------------------- documents
 
+function isReadOnlyEmbedSession(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (new URLSearchParams(window.location.search).get('readonly') === '1') return true;
+  return typeof document !== 'undefined' && Boolean(document.querySelector('[data-readonly-embed]'));
+}
+
 function scheduleDocPush(id: string, json: string) {
+  if (isReadOnlyEmbedSession()) return;
   dirtyDocs.set(id, json);
   const t = docTimers.get(id);
   if (t) clearTimeout(t);
@@ -116,6 +123,10 @@ function scheduleDocPush(id: string, json: string) {
 
 async function pushDoc(id: string): Promise<void> {
   docTimers.delete(id);
+  if (isReadOnlyEmbedSession()) {
+    dirtyDocs.delete(id);
+    return;
+  }
   if (docInFlight.has(id)) return; // re-run when the in-flight save finishes
   const json = dirtyDocs.get(id);
   if (json === undefined) return;

@@ -125,6 +125,7 @@ jobs:
         shell: bash
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_EMBED_PARENT_ORIGINS: ${{ secrets.VITE_EMBED_PARENT_ORIGINS || 'https://d8w82h0t7k8or.cloudfront.net' }}
           VITE_EMBED_PARENT_ORIGINS: ${{ env.VITE_EMBED_PARENT_ORIGINS }}
         run: |
           set -euxo pipefail

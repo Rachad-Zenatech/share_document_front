@@ -53,65 +53,63 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 ## src/hooks/useScriptTableLayout.ts (22 lines) - use script table layout (hooks)
 - `useScriptTableLayout` (export function) L6
 
-## src/hooks/useSecFiling.ts (1611 lines) - use sec filing (hooks)
-- `UserFilingRole` (export type) L33
-- `moveRunToSection` (function) L39 - Moves the run of blocks starting at `start` that are still in `fromSection` into  `toSection`, stopping at the first block from another s...
-- `repairLegacySectionHeadings` (function) L54 - Gives each legacy placeholder heading that is still inside another section its own  section, carrying the blocks after it along.
-- `useSecFiling` (export function) L72
-    - `queryClient` (fn) L74
-    - `isAccessGranted` (fn) L99 - Document security verification: Owner, Invited Contributor, or Super Admin
-    - `activeProposal` (fn) L106 - --------------------------------------------------------------------------
-    - `workingBlocks` (fn) L109
-    - `documentSections` (fn) L115
-    - `sectionCounts` (fn) L127
-    - `effectiveSpreadsheet` (fn) L137
-    - `matchingBlocks` (fn) L145
-    - `matchingBlockIds` (fn) L153
-    - `filteredBlocks` (fn) L158
-    - `refreshAll` (fn) L168 - --------------------------------------------------------------------------
-    - `toggleBlockSelection` (fn) L174
-    - `selectAllBlocks` (fn) L191
-    - `clearBlockSelection` (fn) L198
-    - `calculateDiffForProposal` (fn) L203
-    - `handleForkProposal` (fn) L227
-    - `applyWorkingBlocks` (fn) L260
-    - `setWorkingBlocks` (fn) L299
-    - `handleUndo` (fn) L329
-    - `handleRedo` (fn) L347
-    - `addBlock` (fn) L365
-    - `updateBlock` (fn) L581
-    - `latestBlocksRef` (fn) L661 - rather than this callback's closure.
-    - `latestSectionFilterRef` (fn) L663
-    - `startSectionAtBlock` (fn) L666
-    - `moveBlock` (fn) L692
-    - `moveMultipleBlocks` (fn) L708
-    - `duplicateMultipleBlocks` (fn) L744
-    - `deleteMultipleBlocks` (fn) L772
-    - `moveMultipleBlocksToSection` (fn) L789
-    - `updateMultipleBlocksSpacing` (fn) L805
-    - `moveSection` (fn) L821
-    - `reorderSection` (fn) L858
-    - `createSection` (fn) L893
-    - `duplicateBlock` (fn) L951
-    - `deleteBlock` (fn) L973
-    - `handleCreateProposal` (fn) L990
-    - `handleCreateContributorInvite` (fn) L1007
-    - `ensureActiveProposalId` (fn) L1032 - Resolves the change proposal that the current session is editing, creating the    contributor draft on demand when the session came in th...
-    - `handleSubmitForReview` (fn) L1056
-    - `handleMergeProposal` (fn) L1096
-    - `handleSelectiveMerge` (fn) L1115
-    - `handleRejectProposal` (fn) L1139
-    - `handleRestoreVersion` (fn) L1149
-    - `handleResetToDefault` (fn) L1165
-    - `handleUpdateAttachedSpreadsheet` (fn) L1173
-    - `handleUpdateSpreadsheetCell` (fn) L1219
-    - `handleAssignSpreadsheet` (fn) L1309
-    - `activeDiffs` (fn) L1322 - --------------------------------------------------------------------------
-    - `handleStorage` (fn) L1438
-    - `handleRemoteUpdate` (fn) L1479
-    - `handleConflict` (fn) L1480
-    - `handleSyncError` (fn) L1488
-    - `handleKeyDown` (fn) L1512
+## src/hooks/useSecFiling.ts (1582 lines) - use sec filing (hooks)
+- `UserFilingRole` (export type) L34
+- `useSecFiling` (export function) L35
+    - `queryClient` (fn) L37
+    - `isAccessGranted` (fn) L62 - Document security verification: Owner, Invited Contributor, or Super Admin
+    - `activeProposal` (fn) L69 - --------------------------------------------------------------------------
+    - `workingBlocks` (fn) L72
+    - `documentSections` (fn) L78
+    - `sectionCounts` (fn) L90
+    - `effectiveSpreadsheet` (fn) L100
+    - `matchingBlocks` (fn) L108
+    - `matchingBlockIds` (fn) L116
+    - `filteredBlocks` (fn) L121
+    - `refreshAll` (fn) L131 - --------------------------------------------------------------------------
+    - `toggleBlockSelection` (fn) L137
+    - `selectAllBlocks` (fn) L154
+    - `clearBlockSelection` (fn) L161
+    - `calculateDiffForProposal` (fn) L166
+    - `handleForkProposal` (fn) L190
+    - `applyWorkingBlocks` (fn) L223
+    - `setWorkingBlocks` (fn) L262
+    - `handleUndo` (fn) L292
+    - `handleRedo` (fn) L310
+    - `addBlock` (fn) L328
+    - `updateBlock` (fn) L544
+    - `latestBlocksRef` (fn) L624 - rather than this callback's closure.
+    - `latestSectionFilterRef` (fn) L626
+    - `startSectionAtBlock` (fn) L629
+    - `moveBlock` (fn) L655
+    - `moveMultipleBlocks` (fn) L671
+    - `duplicateMultipleBlocks` (fn) L707
+    - `deleteMultipleBlocks` (fn) L735
+    - `moveMultipleBlocksToSection` (fn) L752
+    - `updateMultipleBlocksSpacing` (fn) L768
+    - `moveSection` (fn) L784
+    - `reorderSection` (fn) L821
+    - `createSection` (fn) L856
+    - `duplicateBlock` (fn) L914
+    - `deleteBlock` (fn) L936
+    - `handleCreateProposal` (fn) L953
+    - `handleCreateContributorInvite` (fn) L970
+    - `ensureActiveProposalId` (fn) L995 - Resolves the change proposal that the current session is editing, creating the    contributor draft on demand when the session came in th...
+    - `handleSubmitForReview` (fn) L1019
+    - `handleMergeProposal` (fn) L1059
+    - `handleSelectiveMerge` (fn) L1078
+    - `handleRejectProposal` (fn) L1102
+    - `handleRestoreVersion` (fn) L1112
+    - `handleResetToDefault` (fn) L1128
+    - `handleUpdateAttachedSpreadsheet` (fn) L1136
+    - `handleUpdateSpreadsheetCell` (fn) L1182
+    - `handleAssignSpreadsheet` (fn) L1272
+    - `activeDiffs` (fn) L1285 - --------------------------------------------------------------------------
+    - `handleStorage` (fn) L1401
+    - `handleRemoteUpdate` (fn) L1442
+    - `handleConflict` (fn) L1446
+    - `handleSyncError` (fn) L1455
+    - `handleKeyDown` (fn) L1483
 
 ## src/hooks/useSecWorkflows.ts (88 lines) - Active platform users that can be put on a workflow step.
 - `useAssignableUsers` (export function) L22 - Active platform users that can be put on a workflow step.
