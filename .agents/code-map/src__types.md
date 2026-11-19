@@ -58,39 +58,39 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 ## src/types/search.ts (8 lines) - search (types)
 - `SearchResult` (export type) L1
 
-## src/types/secFiling.ts (444 lines) - sec filing (types)
+## src/types/secFiling.ts (448 lines) - sec filing (types)
 - `SecBlockType` (export type) L3
 - `SecHeadingLevel` (export type) L13
 - `SecBlockSpacing` (export type) L15
 - `SecHeadingBlock` (export interface) L17
 - `SecParagraphBlock` (export interface) L38
 - `SecTableRow` (export interface) L59
-- `SecTablePeriodHeader` (export interface) L80 - Centered multi-line comparative reporting-period label above one value column.
-- `SecFinancialTableBlock` (export interface) L85
-- `SecCalloutBlock` (export interface) L108
-- `ESignProvider` (export type) L122
-- `ESignDeliveryMethod` (export type) L123
-- `SecSignatureOfficer` (export interface) L125
-- `SecSignatureBlock` (export interface) L145
-- `SecDividerBlock` (export interface) L158
-- `SecMetadataBlock` (export interface) L171
-- `SecImageBlock` (export interface) L192
-- `SecBlock` (export type) L209
-- `SpreadsheetTab` (export interface) L219
-- `AttachedSpreadsheet` (export interface) L230
-- `AttachedSpreadsheetColumnRecord` (export interface) L248 - Column descriptor stored with a document's spreadsheet in the backend.
-- `AttachedSpreadsheetRecord` (export interface) L256 - Row of `sec_attached_spreadsheets` as returned by the backend.
-- `AttachedSpreadsheetResponse` (export interface) L272 - GET /api/sec-filings/documents/{id}/spreadsheet; `spreadsheet` is null when nothing is linked.
-- `AttachedSpreadsheetPayload` (export interface) L278 - PUT /api/sec-filings/documents/{id}/spreadsheet body.
-- `SecFilingDocument` (export interface) L290
-- `SpreadsheetCellDiff` (export interface) L314
-- `SecChangeProposal` (export interface) L331
-- `SecVersionSnapshot` (export interface) L368
-- `SecChangeCategory` (export type) L381
-- `SecChangeTag` (export interface) L390
-- `SecTableCellDiff` (export interface) L396
-- `SecBlockDiff` (export interface) L407
-- `SecDocumentSummary` (export interface) L425
+- `SecTablePeriodHeader` (export interface) L84 - Centered multi-line comparative reporting-period label above one value column.
+- `SecFinancialTableBlock` (export interface) L89
+- `SecCalloutBlock` (export interface) L112
+- `ESignProvider` (export type) L126
+- `ESignDeliveryMethod` (export type) L127
+- `SecSignatureOfficer` (export interface) L129
+- `SecSignatureBlock` (export interface) L149
+- `SecDividerBlock` (export interface) L162
+- `SecMetadataBlock` (export interface) L175
+- `SecImageBlock` (export interface) L196
+- `SecBlock` (export type) L213
+- `SpreadsheetTab` (export interface) L223
+- `AttachedSpreadsheet` (export interface) L234
+- `AttachedSpreadsheetColumnRecord` (export interface) L252 - Column descriptor stored with a document's spreadsheet in the backend.
+- `AttachedSpreadsheetRecord` (export interface) L260 - Row of `sec_attached_spreadsheets` as returned by the backend.
+- `AttachedSpreadsheetResponse` (export interface) L276 - GET /api/sec-filings/documents/{id}/spreadsheet; `spreadsheet` is null when nothing is linked.
+- `AttachedSpreadsheetPayload` (export interface) L282 - PUT /api/sec-filings/documents/{id}/spreadsheet body.
+- `SecFilingDocument` (export interface) L294
+- `SpreadsheetCellDiff` (export interface) L318
+- `SecChangeProposal` (export interface) L335
+- `SecVersionSnapshot` (export interface) L372
+- `SecChangeCategory` (export type) L385
+- `SecChangeTag` (export interface) L394
+- `SecTableCellDiff` (export interface) L400
+- `SecBlockDiff` (export interface) L411
+- `SecDocumentSummary` (export interface) L429
 
 ## src/types/secFilingTemplate.ts (61 lines) - A template as returned by `GET /api/sec-filings/table-templates`.
 - `SecFinancialTableTemplateBlock` (export type) L9 - The structure a template copies into a `financial_table` block.

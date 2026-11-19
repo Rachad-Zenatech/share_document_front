@@ -23,7 +23,7 @@ to find the right file.
 | .agents/code-map/src__pages__Dashboard.md | 1 | 1 KB |
 | .agents/code-map/src__pages__Logs.md | 2 | 1 KB |
 | .agents/code-map/src__pages__SecFilings.md | 6 | 5 KB |
-| .agents/code-map/src__pages__SecFilings__components.md | 32 | 23 KB |
+| .agents/code-map/src__pages__SecFilings__components.md | 33 | 24 KB |
 | .agents/code-map/src__pages__SecFilings__embed.md | 6 | 2 KB |
 | .agents/code-map/src__services.md | 13 | 6 KB |
 | .agents/code-map/src__services__secFiling.md | 9 | 10 KB |

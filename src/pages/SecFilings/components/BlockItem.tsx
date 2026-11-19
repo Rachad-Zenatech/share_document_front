@@ -36,8 +36,11 @@ import {
   Smartphone,
   Table2,
   ExternalLink,
-  Unlink
+  Unlink,
+  Pin,
+  PinOff
 } from 'lucide-react';
+import { nextInsertIndexForAddRow, TableRowGutterOverlays } from './TableRowGutterControls';
 import { MediaBucketModal } from './MediaBucketModal';
 import { TableTemplateModal, findMatchingTemplate, sanitizeTableBlock } from './TableTemplateModal';
 import { MobileSigningModal } from './MobileSigningModal';
@@ -1982,7 +1985,7 @@ const FinancialTableBlockEditor: React.FC<{
     onUpdate({ headers: nextHeaders });
   };
   const addRow = (type: SecTableRow['type'] = 'data') => {
-    addRowAt(block.rows.length, type);
+    addRowAt(nextInsertIndexForAddRow(block.rows), type);
   };
   const addRowAt = (targetIdx: number, type: SecTableRow['type'] = 'data') => {
     const newRow: SecTableRow = {
@@ -2171,6 +2174,19 @@ const FinancialTableBlockEditor: React.FC<{
     } else {
       delete r.align;
     }
+    nextRows[rowIndex] = r;
+    onUpdate({ rows: nextRows });
+  };
+  const toggleRowFooter = (rowIndex: number) => {
+    const nextRows = [...block.rows];
+    nextRows[rowIndex] = { ...nextRows[rowIndex], isFooter: !nextRows[rowIndex].isFooter };
+    onUpdate({ rows: nextRows });
+  };
+  const setRowHeight = (rowIndex: number, height: number | undefined) => {
+    const nextRows = [...block.rows];
+    const r = { ...nextRows[rowIndex] };
+    if (height) r.height = height;
+    else delete r.height;
     nextRows[rowIndex] = r;
     onUpdate({ rows: nextRows });
   };
@@ -2729,7 +2745,10 @@ const FinancialTableBlockEditor: React.FC<{
               return (
                 <tr
                   key={row.id || rowIdx}
-                  style={(!isHeaderLikeRow && row.shading) ? { backgroundColor: row.shading } : undefined}
+                  style={{
+                    ...(!isHeaderLikeRow && row.shading ? { backgroundColor: row.shading } : {}),
+                    ...(row.height ? { height: `${row.height}px` } : {}),
+                  }}
                   onDragOver={(e) => {
                     e.preventDefault();
                     e.dataTransfer.dropEffect = 'move';
@@ -2750,11 +2769,19 @@ const FinancialTableBlockEditor: React.FC<{
                     setDragOverRowIdx(null);
                   }}
                   className={`group/row transition-colors duration-75 ${rowClass} ${
+                    row.isFooter ? 'border-t-2 border-slate-300 dark:border-zinc-600 bg-slate-50/80 dark:bg-zinc-900/60' : ''
+                  } ${
                     isOver ? 'border-t-2 border-blue-500 bg-blue-50/40' : ''
                   } ${isBeingDragged ? 'opacity-35 scale-[0.99] bg-blue-50/20' : ''}`}
                 >
                   {/* Left Action Handle: Dedicated drag grip for reordering + instant non-draggable button for actions */}
-                  <td className="w-9 min-w-[36px] max-w-[36px] py-0.5 px-0.5 text-center align-middle select-none">
+                  <td className="relative w-9 min-w-[36px] max-w-[36px] py-0.5 px-0.5 text-center align-middle select-none">
+                    <TableRowGutterOverlays
+                      rowIdx={rowIdx}
+                      isFooter={row.isFooter}
+                      onInsertAt={(idx) => addRowAt(idx, 'data')}
+                      onResizeHeight={(h) => setRowHeight(rowIdx, h)}
+                    />
                     <div className="flex items-center justify-center gap-0.5">
                       {/* Dedicated Drag Grip Handle: Has HTML5 draggable with zero click interference */}
                       <div
@@ -2919,6 +2946,13 @@ const FinancialTableBlockEditor: React.FC<{
                         >
                           <CornerDownRight className="w-3.5 h-3.5 text-slate-500" />
                           <span>Indent Line Item ({row.indent ? `Indent ${row.indent}` : 'No Indent'})</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => { setOpenRowMenuIdx(null); toggleRowFooter(rowIdx); }}
+                          className="flex items-center gap-2 py-1.5 cursor-pointer"
+                        >
+                          {row.isFooter ? <PinOff className="w-3.5 h-3.5 text-blue-600" /> : <Pin className="w-3.5 h-3.5 text-slate-500" />}
+                          <span>{row.isFooter ? 'Unpin Footer Row' : 'Pin as Footer Row'}</span>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {/* Row Alignment: overrides the column alignment for this row only,

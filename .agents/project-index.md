@@ -103,7 +103,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/pages/SecFilings/components/AttachedSpreadsheetModal.tsx (4061 lines) - attached spreadsheet modal (pages  sec filings components)
 - src/pages/SecFilings/components/BlockBuilder.tsx (931 lines) - block builder (pages  sec filings components)
 - src/pages/SecFilings/components/BlockInspector.tsx (736 lines) - block inspector (pages  sec filings components)
-- src/pages/SecFilings/components/BlockItem.tsx (3657 lines) - block item (pages  sec filings components)
+- src/pages/SecFilings/components/BlockItem.tsx (3691 lines) - block item (pages  sec filings components)
 - src/pages/SecFilings/components/ContributorInviteModal.tsx (898 lines) - contributor invite modal (pages  sec filings components)
 - src/pages/SecFilings/components/DocumentMergeReview.tsx (14 lines) - The merge review that fits the open document: the script's own for a script, the filing's for everything else.
 - src/pages/SecFilings/components/DocumentOutline.tsx (345 lines) - document outline (pages  sec filings components)
@@ -127,6 +127,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/pages/SecFilings/components/SpreadsheetReuploadPreviewModal.tsx (699 lines) - spreadsheet reupload preview modal (pages  sec filings components)
 - src/pages/SecFilings/components/SpreadsheetSelectorModal.tsx (502 lines) - spreadsheet selector modal (pages  sec filings components)
 - src/pages/SecFilings/components/SubmitProposalModal.tsx (395 lines) - submit proposal modal (pages  sec filings components)
+- src/pages/SecFilings/components/TableRowGutterControls.tsx (87 lines) - Insert new rows before the first pinned footer row so footers stay anchored at the bottom.
 - src/pages/SecFilings/components/TableTemplateModal.tsx (665 lines) - table template modal (pages  sec filings components)
 - src/pages/SecFilings/components/TemplateCategoryTabs.tsx (27 lines) - The template gallery's tabs.
 - src/pages/SecFilings/components/VersionHistoryModal.tsx (115 lines) - version history modal (pages  sec filings components)
@@ -167,7 +168,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/types/notifications.ts (16 lines) - notifications (types)
 - src/types/scriptReview.ts (91 lines) - Mirrors models/sec_filings/script_review_model.py and the state returned by the script-review routes.
 - src/types/search.ts (8 lines) - search (types)
-- src/types/secFiling.ts (444 lines) - sec filing (types)
+- src/types/secFiling.ts (448 lines) - sec filing (types)
 - src/types/secFilingTemplate.ts (61 lines) - A template as returned by `GET /api/sec-filings/table-templates`.
 - src/types/secWorkflow.ts (46 lines) - Mirrors the backend models in `models/sec_filing_model.py`; keep the two in step.
 - src/types/spreadsheet.ts (63 lines) - Status of a row or column slot when comparing a re-uploaded workbook against the current one.

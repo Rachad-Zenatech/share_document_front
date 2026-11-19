@@ -74,6 +74,10 @@ export interface SecTableRow {
   align?: 'left' | 'center' | 'right';
   /** Per-cell horizontal alignment overrides: row 5 col 2 can be centered individually. */
   cellAlignments?: ('left' | 'center' | 'right' | null | undefined)[];
+  /** Fixed footer row: new rows added at the bottom are inserted above pinned footer rows. */
+  isFooter?: boolean;
+  /** Custom row height in pixels, adjusted by dragging the row resize handle. */
+  height?: number;
 }
 
 /** Centered multi-line comparative reporting-period label above one value column. */
