@@ -117,7 +117,7 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `BlockInspectorProps` (interface) L20
 - `BlockInspector` (export const) L27
 
-## src/pages/SecFilings/components/BlockItem.tsx (3691 lines) - block item (pages  sec filings components)
+## src/pages/SecFilings/components/BlockItem.tsx (3711 lines) - block item (pages  sec filings components)
 - `isComparativeDateHeaderCell` (const) L86
     - `trimmed` (fn) L87
 - `isMajorStatementHeaderCell` (export const) L113
@@ -158,34 +158,36 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
     - `openCreateTemplateModal` (fn) L1856
     - `openUpdateTemplateModal` (fn) L1861
     - `handleDirectQuickUpdate` (fn) L1866
-    - `reorderRow` (fn) L1966
-    - `handleCellChange` (fn) L1973
-    - `handleHeaderChange` (fn) L1982
-    - `addRow` (fn) L1987
-    - `addRowAt` (fn) L1990
-    - `moveRow` (fn) L2005
-    - `duplicateRow` (fn) L2014
-    - `deleteRow` (fn) L2025
-    - `addColumn` (fn) L2027
-    - `addColumnAt` (fn) L2030
-    - `moveColumn` (fn) L2054
-    - `duplicateColumn` (fn) L2080
-    - `deleteColumn` (fn) L2102
-    - `setColumnAlignment` (fn) L2120
-    - `toggleRowIndent` (fn) L2125
-    - `setRowShading` (fn) L2136 - Sets or clears a row's background fill.
-    - `setCellAlignment` (fn) L2148 - Sets or clears a single cell's alignment override (e.g.
-    - `setRowAlignment` (fn) L2169 - Sets or clears a per-row alignment override.
-    - `toggleRowFooter` (fn) L2180
-    - `setRowHeight` (fn) L2185
-    - `setRowType` (fn) L2193
-    - `rowMetadata` (fn) L2216 - Memoize row-level classification to avoid running 1,200 regexes per render
-    - `handleClick` (fn) L3131
-    - `handleInsertSpreadsheetCell` (fn) L3136
-    - `addOfficer` (fn) L3275
-    - `updateOfficer` (fn) L3288
-    - `removeOfficer` (fn) L3295
-    - `handleFileUpload` (fn) L3569
+    - `openRowMenuOnHover` (fn) L1889
+    - `scheduleCloseRowMenu` (fn) L1896
+    - `reorderRow` (fn) L1978
+    - `handleCellChange` (fn) L1985
+    - `handleHeaderChange` (fn) L1994
+    - `addRow` (fn) L1999
+    - `addRowAt` (fn) L2002
+    - `moveRow` (fn) L2017
+    - `duplicateRow` (fn) L2026
+    - `deleteRow` (fn) L2037
+    - `addColumn` (fn) L2039
+    - `addColumnAt` (fn) L2042
+    - `moveColumn` (fn) L2066
+    - `duplicateColumn` (fn) L2092
+    - `deleteColumn` (fn) L2114
+    - `setColumnAlignment` (fn) L2132
+    - `toggleRowIndent` (fn) L2137
+    - `setRowShading` (fn) L2148 - Sets or clears a row's background fill.
+    - `setCellAlignment` (fn) L2160 - Sets or clears a single cell's alignment override (e.g.
+    - `setRowAlignment` (fn) L2181 - Sets or clears a per-row alignment override.
+    - `toggleRowFooter` (fn) L2192
+    - `setRowHeight` (fn) L2197
+    - `setRowType` (fn) L2205
+    - `rowMetadata` (fn) L2228 - Memoize row-level classification to avoid running 1,200 regexes per render
+    - `handleClick` (fn) L3151
+    - `handleInsertSpreadsheetCell` (fn) L3156
+    - `addOfficer` (fn) L3295
+    - `updateOfficer` (fn) L3308
+    - `removeOfficer` (fn) L3315
+    - `handleFileUpload` (fn) L3589
 
 ## src/pages/SecFilings/components/ContributorInviteModal.tsx (898 lines) - contributor invite modal (pages  sec filings components)
 - `ContributorInviteModalProps` (interface) L33
@@ -414,7 +416,7 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `SubmitProposalModalProps` (export interface) L27
 - `SubmitProposalModal` (export const) L43
 
-## src/pages/SecFilings/components/TableRowGutterControls.tsx (87 lines) - Insert new rows before the first pinned footer row so footers stay anchored at the bottom.
+## src/pages/SecFilings/components/TableRowGutterControls.tsx (90 lines) - Insert new rows before the first pinned footer row so footers stay anchored at the bottom.
 - `nextInsertIndexForAddRow` (export function) L9 - Insert new rows before the first pinned footer row so footers stay anchored at the bottom.
 - `TableRowGutterOverlays` (export function) L20 - Fancy row-gutter overlays for financial & script tables:  - Pinned footer badge  - Hover line between rows with a "+" button to insert a ...
 

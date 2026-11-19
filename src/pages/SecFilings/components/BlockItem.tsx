@@ -1885,6 +1885,18 @@ const FinancialTableBlockEditor: React.FC<{
   };
   const [dragOverRowIdx, setDragOverRowIdx] = useState<number | null>(null);
   const [openRowMenuIdx, setOpenRowMenuIdx] = useState<number | null>(null);
+  const rowMenuCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openRowMenuOnHover = (idx: number) => {
+    if (rowMenuCloseTimerRef.current) {
+      clearTimeout(rowMenuCloseTimerRef.current);
+      rowMenuCloseTimerRef.current = null;
+    }
+    setOpenRowMenuIdx(idx);
+  };
+  const scheduleCloseRowMenu = () => {
+    if (rowMenuCloseTimerRef.current) clearTimeout(rowMenuCloseTimerRef.current);
+    rowMenuCloseTimerRef.current = setTimeout(() => setOpenRowMenuIdx(null), 150);
+  };
   // Column of the cell the user last clicked into, so the toolbar can align "that
   // one column" without making them hunt through the column header menu.
   const [activeColIdx, setActiveColIdx] = useState<number | null>(null);
@@ -2779,6 +2791,7 @@ const FinancialTableBlockEditor: React.FC<{
                     <TableRowGutterOverlays
                       rowIdx={rowIdx}
                       isFooter={row.isFooter}
+                      isLastRow={rowIdx === block.rows.length - 1}
                       onInsertAt={(idx) => addRowAt(idx, 'data')}
                       onResizeHeight={(h) => setRowHeight(rowIdx, h)}
                     />
@@ -2810,16 +2823,23 @@ const FinancialTableBlockEditor: React.FC<{
                         <DropdownMenuTrigger asChild>
                           <button
                             type="button"
+                            onMouseEnter={() => openRowMenuOnHover(rowIdx)}
+                            onMouseLeave={scheduleCloseRowMenu}
                             onClick={(e) => {
                               e.stopPropagation();
                             }}
-                            title="Row Actions (Add, Move, Duplicate, Style, Delete)"
+                            aria-label="Row Actions"
                             className="w-5 h-6 rounded flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                           >
                             <Menu className="w-3.5 h-3.5" />
                           </button>
                         </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-56 p-1 text-xs">
+                      <DropdownMenuContent
+                        align="start"
+                        onMouseEnter={() => openRowMenuOnHover(rowIdx)}
+                        onMouseLeave={scheduleCloseRowMenu}
+                        className="w-56 p-1 text-xs"
+                      >
                         <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                           Row {rowIdx + 1} Actions
                         </div>

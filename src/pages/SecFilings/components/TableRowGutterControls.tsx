@@ -20,11 +20,13 @@ export function nextInsertIndexForAddRow(rows: SecTableRow[]): number {
 export function TableRowGutterOverlays({
   rowIdx,
   isFooter,
+  isLastRow,
   onInsertAt,
   onResizeHeight,
 }: {
   rowIdx: number;
   isFooter?: boolean;
+  isLastRow?: boolean;
   onInsertAt: (targetIdx: number) => void;
   onResizeHeight: (height: number | undefined) => void;
 }) {
@@ -65,7 +67,7 @@ export function TableRowGutterOverlays({
           e.stopPropagation();
           onResizeHeight(undefined);
         }}
-        className="group/insert absolute inset-x-0 -bottom-1.5 z-20 flex h-3 cursor-row-resize items-center justify-center touch-none"
+        className={`group/insert absolute inset-x-0 ${isLastRow ? 'bottom-0' : '-bottom-1.5'} z-20 flex h-3 cursor-row-resize items-center justify-center touch-none`}
       >
         <span className="pointer-events-none h-0.5 w-full rounded-full bg-transparent transition-colors group-hover/insert:bg-blue-500" />
         <button
@@ -76,7 +78,8 @@ export function TableRowGutterOverlays({
             onInsertAt(isFooter ? rowIdx : rowIdx + 1);
           }}
           title={isFooter ? 'Insert row above footer' : 'Insert row below'}
-          className="absolute left-1/2 -translate-x-1/2 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-white opacity-0 shadow-xs transition-opacity group-hover/row:opacity-70 group-hover/insert:!opacity-100 hover:bg-blue-700 cursor-pointer"
+          aria-label={isFooter ? 'Insert row above footer' : 'Insert row below'}
+          className="absolute left-1/2 -translate-x-1/2 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-white opacity-0 ring-1 ring-white shadow-sm transition-opacity group-hover/row:opacity-80 group-hover/insert:!opacity-100 hover:bg-blue-700 cursor-pointer"
         >
           <Plus className="h-2.5 w-2.5" />
         </button>
