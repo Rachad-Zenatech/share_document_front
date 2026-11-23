@@ -103,7 +103,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/pages/SecFilings/components/AttachedSpreadsheetModal.tsx (4061 lines) - attached spreadsheet modal (pages  sec filings components)
 - src/pages/SecFilings/components/BlockBuilder.tsx (931 lines) - block builder (pages  sec filings components)
 - src/pages/SecFilings/components/BlockInspector.tsx (736 lines) - block inspector (pages  sec filings components)
-- src/pages/SecFilings/components/BlockItem.tsx (3711 lines) - block item (pages  sec filings components)
+- src/pages/SecFilings/components/BlockItem.tsx (3714 lines) - block item (pages  sec filings components)
 - src/pages/SecFilings/components/ContributorInviteModal.tsx (898 lines) - contributor invite modal (pages  sec filings components)
 - src/pages/SecFilings/components/DocumentMergeReview.tsx (14 lines) - The merge review that fits the open document: the script's own for a script, the filing's for everything else.
 - src/pages/SecFilings/components/DocumentOutline.tsx (345 lines) - document outline (pages  sec filings components)
@@ -111,6 +111,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/pages/SecFilings/components/DocumentSelectionBar.tsx (92 lines) - document selection bar (pages  sec filings components)
 - src/pages/SecFilings/components/DocumentTypeTabs.tsx (42 lines) - Tabs separating SEC filings and scripts in the Document Hub's recent documents section.
 - src/pages/SecFilings/components/DocumentVariableRenderer.tsx (162 lines) - document variable renderer (pages  sec filings components)
+- src/pages/SecFilings/components/EmbedFieldHighlightOverlay.tsx (128 lines) - Fallback: match ignoring minor whitespace differences inside the selection
 - src/pages/SecFilings/components/EmbeddedSpreadsheetDiffViewer.tsx (925 lines) - embedded spreadsheet diff viewer (pages  sec filings components)
 - src/pages/SecFilings/components/ImportDocumentModal.tsx (623 lines) - import document modal (pages  sec filings components)
 - src/pages/SecFilings/components/InlineAddBlock.tsx (329 lines) - inline add block (pages  sec filings components)

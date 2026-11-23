@@ -57,7 +57,7 @@ function EmbedFrame({ documentId }: { documentId: string }) {
   useHeartbeat(true); // the person is active in the portal that hosts this, so their session here stays alive too
 
   useEffect(() => {
-    if (!readOnly || !bodyRef.current) return;
+    if (!bodyRef.current) return;
     const root = bodyRef.current;
     const blockEdit = (e: Event) => {
       e.preventDefault();
@@ -79,19 +79,23 @@ function EmbedFrame({ documentId }: { documentId: string }) {
       const mark = (e.target as HTMLElement | null)?.closest?.('[data-embed-note]') as HTMLElement | null;
       if (mark?.dataset.embedNote) postToParent({ type: 'script-embed:select-note', documentId, id: mark.dataset.embedNote });
     };
-    root.addEventListener('beforeinput', blockEdit, true);
-    root.addEventListener('paste', blockEdit, true);
-    root.addEventListener('drop', blockEdit, true);
-    root.addEventListener('keydown', blockKey, true);
+    if (readOnly) {
+      root.addEventListener('beforeinput', blockEdit, true);
+      root.addEventListener('paste', blockEdit, true);
+      root.addEventListener('drop', blockEdit, true);
+      root.addEventListener('keydown', blockKey, true);
+    }
     root.addEventListener('mouseup', reportSelection);
     root.addEventListener('keyup', reportSelection);
     root.addEventListener('select', reportSelection, true);
     root.addEventListener('click', onClick);
     return () => {
-      root.removeEventListener('beforeinput', blockEdit, true);
-      root.removeEventListener('paste', blockEdit, true);
-      root.removeEventListener('drop', blockEdit, true);
-      root.removeEventListener('keydown', blockKey, true);
+      if (readOnly) {
+        root.removeEventListener('beforeinput', blockEdit, true);
+        root.removeEventListener('paste', blockEdit, true);
+        root.removeEventListener('drop', blockEdit, true);
+        root.removeEventListener('keydown', blockKey, true);
+      }
       root.removeEventListener('mouseup', reportSelection);
       root.removeEventListener('keyup', reportSelection);
       root.removeEventListener('select', reportSelection, true);
@@ -102,10 +106,6 @@ function EmbedFrame({ documentId }: { documentId: string }) {
   useEffect(() => {
     if (!bodyRef.current) return;
     const root = bodyRef.current;
-    if (!readOnly) {
-      import('./embedNotes').then(({ clearEmbedHighlights }) => clearEmbedHighlights(root));
-      return;
-    }
     let applying = false;
     let timer = 0;
     const run = () => {
@@ -130,7 +130,7 @@ function EmbedFrame({ documentId }: { documentId: string }) {
       window.clearTimeout(timer);
       observer.disconnect();
     };
-  }, [readOnly, notesState]);
+  }, [notesState]);
 
   const notesCtx = useMemo(
     () => ({ readOnly, notes: notesState.notes, activeNoteId: notesState.activeNoteId }),

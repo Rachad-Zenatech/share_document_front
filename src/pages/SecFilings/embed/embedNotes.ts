@@ -162,7 +162,7 @@ export function applyEmbedHighlights(root: HTMLElement, notes: EmbedNote[], acti
   const fieldMatches = new Map<HTMLInputElement | HTMLTextAreaElement, FieldMatch[]>();
   const fields = Array.from(
     root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
-      'textarea:not([data-script-cell]), input[type="text"], input:not([type])',
+      'textarea:not([data-script-cell]):not([data-embed-field-managed]), input[type="text"], input:not([type])',
     ),
   );
 

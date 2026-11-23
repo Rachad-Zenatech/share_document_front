@@ -39,7 +39,7 @@ export function ScriptTableCell({ initialValue, onCommit, onFocus, placeholder, 
   }, [value]);
   const { readOnly, notes, activeNoteId } = useEmbedNotes();
   const segments = useMemo(() => {
-    if (!readOnly || !value || !notes.length) return null;
+    if (!value || !notes.length) return null;
     const ranges: { start: number; end: number; color: string; id: string }[] = [];
     for (const note of notes) {
       if (note.resolved || !note.quote.trim()) continue;

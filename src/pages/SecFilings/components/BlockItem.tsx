@@ -41,6 +41,7 @@ import {
   PinOff
 } from 'lucide-react';
 import { nextInsertIndexForAddRow, TableRowGutterOverlays } from './TableRowGutterControls';
+import { HighlightedBlockTextarea } from './EmbedFieldHighlightOverlay';
 import { MediaBucketModal } from './MediaBucketModal';
 import { TableTemplateModal, findMatchingTemplate, sanitizeTableBlock } from './TableTemplateModal';
 import { MobileSigningModal } from './MobileSigningModal';
@@ -1283,8 +1284,9 @@ const HeadingBlockEditor: React.FC<{
             />
           </div>
         ) : (
-          <textarea
+          <HighlightedBlockTextarea
             ref={setTextareaRef}
+            text={localText}
             rows={1}
             value={localText}
             onChange={handleChange}
@@ -1486,8 +1488,9 @@ const ParagraphBlockEditor: React.FC<{
             />
           </div>
         ) : (
-          <textarea
+          <HighlightedBlockTextarea
             ref={setTextareaRef}
+            text={localText}
             rows={1}
             value={localText}
             onChange={handleChange}

@@ -117,77 +117,77 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `BlockInspectorProps` (interface) L20
 - `BlockInspector` (export const) L27
 
-## src/pages/SecFilings/components/BlockItem.tsx (3711 lines) - block item (pages  sec filings components)
-- `isComparativeDateHeaderCell` (const) L86
-    - `trimmed` (fn) L87
-- `isMajorStatementHeaderCell` (export const) L113
-- `BlockItemProps` (interface) L127
-- `BlockItemComponent` (const) L156
-    - `currentAlign` (fn) L216
-    - `isBold` (fn) L217
-    - `currentColor` (fn) L220
-    - `currentFontFamily` (fn) L231
-    - `updateSpacingTop` (fn) L259
-    - `setDirectSpacingTop` (fn) L264
-    - `updateFontSize` (fn) L268
-    - `setAlignment` (fn) L273
-    - `convertBlockType` (fn) L277
-- `BlockItem` (export const) L1127
-    - `handleClick` (fn) L1171
-    - `handleInsertSpreadsheetCell` (fn) L1176
-    - `handleChange` (fn) L1203
-    - `handleBlur` (fn) L1212
-    - `adjustHeight` (fn) L1219
-    - `setTextareaRef` (fn) L1226
-    - `handleClick` (fn) L1376
-    - `handleInsertSpreadsheetCell` (fn) L1381
-    - `handleChange` (fn) L1408
-    - `handleBlur` (fn) L1417
-    - `adjustHeight` (fn) L1424
-    - `setTextareaRef` (fn) L1431
-    - `handleClick` (fn) L1610
-    - `handleChange` (fn) L1615
-    - `handleBlur` (fn) L1624
-    - `handleKeyDown` (fn) L1632
-    - `handleLinkCell` (fn) L1646
-    - `handleUnlinkCell` (fn) L1662
-    - `resizeColumn` (fn) L1835
-    - `updateTemplateMutation` (fn) L1838
-    - `cellDiffMap` (fn) L1844
-    - `matchedTemplate` (fn) L1853
-    - `openCreateTemplateModal` (fn) L1856
-    - `openUpdateTemplateModal` (fn) L1861
-    - `handleDirectQuickUpdate` (fn) L1866
-    - `openRowMenuOnHover` (fn) L1889
-    - `scheduleCloseRowMenu` (fn) L1896
-    - `reorderRow` (fn) L1978
-    - `handleCellChange` (fn) L1985
-    - `handleHeaderChange` (fn) L1994
-    - `addRow` (fn) L1999
-    - `addRowAt` (fn) L2002
-    - `moveRow` (fn) L2017
-    - `duplicateRow` (fn) L2026
-    - `deleteRow` (fn) L2037
-    - `addColumn` (fn) L2039
-    - `addColumnAt` (fn) L2042
-    - `moveColumn` (fn) L2066
-    - `duplicateColumn` (fn) L2092
-    - `deleteColumn` (fn) L2114
-    - `setColumnAlignment` (fn) L2132
-    - `toggleRowIndent` (fn) L2137
-    - `setRowShading` (fn) L2148 - Sets or clears a row's background fill.
-    - `setCellAlignment` (fn) L2160 - Sets or clears a single cell's alignment override (e.g.
-    - `setRowAlignment` (fn) L2181 - Sets or clears a per-row alignment override.
-    - `toggleRowFooter` (fn) L2192
-    - `setRowHeight` (fn) L2197
-    - `setRowType` (fn) L2205
-    - `rowMetadata` (fn) L2228 - Memoize row-level classification to avoid running 1,200 regexes per render
-    - `handleClick` (fn) L3151
-    - `handleInsertSpreadsheetCell` (fn) L3156
-    - `addOfficer` (fn) L3295
-    - `updateOfficer` (fn) L3308
-    - `removeOfficer` (fn) L3315
-    - `handleFileUpload` (fn) L3589
+## src/pages/SecFilings/components/BlockItem.tsx (3714 lines) - block item (pages  sec filings components)
+- `isComparativeDateHeaderCell` (const) L87
+    - `trimmed` (fn) L88
+- `isMajorStatementHeaderCell` (export const) L114
+- `BlockItemProps` (interface) L128
+- `BlockItemComponent` (const) L157
+    - `currentAlign` (fn) L217
+    - `isBold` (fn) L218
+    - `currentColor` (fn) L221
+    - `currentFontFamily` (fn) L232
+    - `updateSpacingTop` (fn) L260
+    - `setDirectSpacingTop` (fn) L265
+    - `updateFontSize` (fn) L269
+    - `setAlignment` (fn) L274
+    - `convertBlockType` (fn) L278
+- `BlockItem` (export const) L1128
+    - `handleClick` (fn) L1172
+    - `handleInsertSpreadsheetCell` (fn) L1177
+    - `handleChange` (fn) L1204
+    - `handleBlur` (fn) L1213
+    - `adjustHeight` (fn) L1220
+    - `setTextareaRef` (fn) L1227
+    - `handleClick` (fn) L1378
+    - `handleInsertSpreadsheetCell` (fn) L1383
+    - `handleChange` (fn) L1410
+    - `handleBlur` (fn) L1419
+    - `adjustHeight` (fn) L1426
+    - `setTextareaRef` (fn) L1433
+    - `handleClick` (fn) L1613
+    - `handleChange` (fn) L1618
+    - `handleBlur` (fn) L1627
+    - `handleKeyDown` (fn) L1635
+    - `handleLinkCell` (fn) L1649
+    - `handleUnlinkCell` (fn) L1665
+    - `resizeColumn` (fn) L1838
+    - `updateTemplateMutation` (fn) L1841
+    - `cellDiffMap` (fn) L1847
+    - `matchedTemplate` (fn) L1856
+    - `openCreateTemplateModal` (fn) L1859
+    - `openUpdateTemplateModal` (fn) L1864
+    - `handleDirectQuickUpdate` (fn) L1869
+    - `openRowMenuOnHover` (fn) L1892
+    - `scheduleCloseRowMenu` (fn) L1899
+    - `reorderRow` (fn) L1981
+    - `handleCellChange` (fn) L1988
+    - `handleHeaderChange` (fn) L1997
+    - `addRow` (fn) L2002
+    - `addRowAt` (fn) L2005
+    - `moveRow` (fn) L2020
+    - `duplicateRow` (fn) L2029
+    - `deleteRow` (fn) L2040
+    - `addColumn` (fn) L2042
+    - `addColumnAt` (fn) L2045
+    - `moveColumn` (fn) L2069
+    - `duplicateColumn` (fn) L2095
+    - `deleteColumn` (fn) L2117
+    - `setColumnAlignment` (fn) L2135
+    - `toggleRowIndent` (fn) L2140
+    - `setRowShading` (fn) L2151 - Sets or clears a row's background fill.
+    - `setCellAlignment` (fn) L2163 - Sets or clears a single cell's alignment override (e.g.
+    - `setRowAlignment` (fn) L2184 - Sets or clears a per-row alignment override.
+    - `toggleRowFooter` (fn) L2195
+    - `setRowHeight` (fn) L2200
+    - `setRowType` (fn) L2208
+    - `rowMetadata` (fn) L2231 - Memoize row-level classification to avoid running 1,200 regexes per render
+    - `handleClick` (fn) L3154
+    - `handleInsertSpreadsheetCell` (fn) L3159
+    - `addOfficer` (fn) L3298
+    - `updateOfficer` (fn) L3311
+    - `removeOfficer` (fn) L3318
+    - `handleFileUpload` (fn) L3592
 
 ## src/pages/SecFilings/components/ContributorInviteModal.tsx (898 lines) - contributor invite modal (pages  sec filings components)
 - `ContributorInviteModalProps` (interface) L33
@@ -234,6 +234,11 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `DocumentVariableRendererProps` (interface) L12
 - `renderHighlightedText` (function) L26 - Splits plain text and wraps instances of query in a glowing <mark> highlight.
 - `DocumentVariableRenderer` (export const) L48
+
+## src/pages/SecFilings/components/EmbedFieldHighlightOverlay.tsx (128 lines) - Fallback: match ignoring minor whitespace differences inside the selection
+- `findMatchRange` (function) L4
+- `EmbedFieldHighlightOverlay` (export function) L34 - Renders translucent highlight marks directly behind a paragraph/heading <textarea>  so partial-word and full-sentence highlights align wi...
+- `HighlightedBlockTextarea` (export const) L102 - Wraps a block <textarea> with its highlight overlay in a single element so BlockItem stays compact.
 
 ## src/pages/SecFilings/components/EmbeddedSpreadsheetDiffViewer.tsx (925 lines) - embedded spreadsheet diff viewer (pages  sec filings components)
 - `EmbeddedSpreadsheetDiffViewerProps` (export interface) L24
