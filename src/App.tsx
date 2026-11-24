@@ -6,6 +6,8 @@ import { Button } from "./components/ui/button";
 
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import SecFilingDataGate from "./components/SecFilings/SecFilingDataGate";
+import { lazy } from "react";
+const AiStatusPage = lazy(() => import("./pages/Configurations/AiStatusPage"));
 
 const AppShell = lazy(() => import("./components/AppShell/AppShell"));
 const Users = lazy(() => import("./pages/Configurations/Users"));
@@ -317,7 +319,8 @@ function App() {
               />
 
               {/* Catch-All / 404 Route */}
-              <Route path="*" element={<NotFoundAlert />} />
+                        <Route path="/configurations/ai-status" element={<AiStatusPage />} />
+          <Route path="*" element={<NotFoundAlert />} />
             </Route>
           </Routes>
         </Suspense>
