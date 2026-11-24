@@ -6,7 +6,6 @@ import { Button } from "./components/ui/button";
 
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import SecFilingDataGate from "./components/SecFilings/SecFilingDataGate";
-import { lazy } from "react";
 const AiStatusPage = lazy(() => import("./pages/Configurations/AiStatusPage"));
 
 const AppShell = lazy(() => import("./components/AppShell/AppShell"));

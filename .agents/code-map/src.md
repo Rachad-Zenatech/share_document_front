@@ -4,12 +4,12 @@
 
 Each symbol shows its start line (`L<n>`); read from there to the next symbol's line, not the whole file.
 
-## src/App.tsx (330 lines) - app
-- `loadSecFilings` (const) L23
-- `SpreadsheetHubRoute` (function) L45
-- `SecFilingsHubRoute` (function) L55
-- `SecFilingsEditorRoute` (function) L82
-- `NotFoundAlert` (function) L109
-- `App` (function) L127
+## src/App.tsx (332 lines) - app
+- `loadSecFilings` (const) L24
+- `SpreadsheetHubRoute` (function) L46
+- `SecFilingsHubRoute` (function) L56
+- `SecFilingsEditorRoute` (function) L83
+- `NotFoundAlert` (function) L110
+- `App` (function) L128
 
 ## src/main.tsx (53 lines) - Create a client

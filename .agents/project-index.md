@@ -5,12 +5,12 @@
 Scan this index first to locate the right file and description without loading symbol trees or line numbers.
 For function and route definitions with their line numbers, grep `.agents/code-map/` (listed in `.agents/code-map.md`).
 
-- src/App.tsx (330 lines) - app
+- src/App.tsx (332 lines) - app
 - src/components/AppShell/AppShell.tsx (51 lines) - Set initial state
 - src/components/AppShell/Breadcrumbs.tsx (144 lines) - breadcrumbs (components  app shell)
 - src/components/AppShell/ConnectionStatusLight.tsx (255 lines) - connection status light (components  app shell)
 - src/components/AppShell/MessageHubStatusDropdown.tsx (96 lines) - Top-bar dropdown showing live RabbitMQ Message Hub and connected app server status.
-- src/components/AppShell/Navigation.tsx (59 lines) - navigation (components  app shell)
+- src/components/AppShell/Navigation.tsx (60 lines) - navigation (components  app shell)
 - src/components/AppShell/NotificationDropdown.tsx (180 lines) - notification dropdown (components  app shell)
 - src/components/AppShell/Sidebar.tsx (308 lines) - sidebar (components  app shell)
 - src/components/AppShell/ThemeSwitch.tsx (41 lines) - theme switch (components  app shell)
@@ -66,6 +66,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/data/secDocumentTemplates.ts (950 lines) - sec document templates (data)
 - src/data/socialMediaScriptTemplate.ts (71 lines) - social media script template (data)
 - src/data/zenatechLogoAsset.ts (4 lines) - zenatech logo asset (data)
+- src/hooks/useAiOverview.ts (16 lines) - use ai overview (hooks)
 - src/hooks/useDocumentLiveSync.ts (35 lines) - use document live sync (hooks)
 - src/hooks/useDocumentSelection.ts (38 lines) - Which documents of the visible list are ticked, for deleting several at once.
 - src/hooks/useFinancialTableTemplates.ts (87 lines) - The kind of the document being edited (its list entry is in memory once the documents have loaded).
@@ -84,12 +85,19 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/main.tsx (53 lines) - Create a client
 - src/pages/Auth/Login.tsx (149 lines) - login (pages  auth)
 - src/pages/Auth/PendingAccess.tsx (62 lines) - If user somehow gets another role, maybe redirect them to home
+- src/pages/Configurations/AiStatusPage.tsx (86 lines) - ai status page (pages  configurations)
 - src/pages/Configurations/RoleApiPermissions.tsx (411 lines) - We order actions so they appear logically: CREATE, READ (VIEW), UPDATE, DELETE
 - src/pages/Configurations/RoleGroupPermissions.tsx (488 lines) - role group permissions (pages  configurations)
 - src/pages/Configurations/RoleMcpToolPermissions.tsx (306 lines) - Left panel search
 - src/pages/Configurations/Roles.tsx (799 lines) - roles (pages  configurations)
 - src/pages/Configurations/UserRoleAssignment.tsx (387 lines) - user role assignment (pages  configurations)
 - src/pages/Configurations/Users.tsx (692 lines) - users (pages  configurations)
+- src/pages/Configurations/aiStatus/AiCoresGrid.tsx (78 lines) - ai cores grid (pages  configurations ai status)
+- src/pages/Configurations/aiStatus/AiErrorsDialog.tsx (110 lines) - ai errors dialog (pages  configurations ai status)
+- src/pages/Configurations/aiStatus/AiFeatureMatrix.tsx (203 lines) - ai feature matrix (pages  configurations ai status)
+- src/pages/Configurations/aiStatus/AiPipelineTelemetry.tsx (179 lines) - ai pipeline telemetry (pages  configurations ai status)
+- src/pages/Configurations/aiStatus/AiSummaryCards.tsx (140 lines) - ai summary cards (pages  configurations ai status)
+- src/pages/Configurations/aiStatus/statusStyles.ts (31 lines) - status styles (pages  configurations ai status)
 - src/pages/Dashboard/Dashboard.tsx (297 lines) - dashboard (pages  dashboard)
 - src/pages/Logs/AuditLog.tsx (482 lines) - audit log (pages  logs)
 - src/pages/Logs/SystemLogsPage.tsx (1065 lines) - system logs page (pages  logs)
@@ -162,6 +170,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/services/secWorkflowService.ts (296 lines) - src/services/secWorkflowService.ts
 - src/services/spreadsheetService.ts (100 lines) - Spreadsheet merge service – handles proposals and merging
 - src/types/aiAssistant.ts (5 lines) - ai assistant (types)
+- src/types/aiOverview.ts (152 lines) - ai overview (types)
 - src/types/auth.ts (98 lines) - auth (types)
 - src/types/collaborator.ts (13 lines) - collaborator (types)
 - src/types/documentType.ts (42 lines) - The kinds of document the editor handles.

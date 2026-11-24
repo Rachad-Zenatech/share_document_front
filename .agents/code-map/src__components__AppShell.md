@@ -20,7 +20,7 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 ## src/components/AppShell/MessageHubStatusDropdown.tsx (96 lines) - Top-bar dropdown showing live RabbitMQ Message Hub and connected app server status.
 - `MessageHubStatusDropdown` (export function) L24 - Top-bar dropdown showing live RabbitMQ Message Hub and connected app server status.
 
-## src/components/AppShell/Navigation.tsx (59 lines) - navigation (components  app shell)
+## src/components/AppShell/Navigation.tsx (60 lines) - navigation (components  app shell)
 - `NavigationSubItem` (export interface) L8
 - `NavigationItem` (export interface) L14
 - `navigation` (export const) L23

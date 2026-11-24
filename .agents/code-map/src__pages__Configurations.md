@@ -4,6 +4,9 @@
 
 Each symbol shows its start line (`L<n>`); read from there to the next symbol's line, not the whole file.
 
+## src/pages/Configurations/AiStatusPage.tsx (86 lines) - ai status page (pages  configurations)
+- `AiStatusPage` (export function) L21
+
 ## src/pages/Configurations/RoleApiPermissions.tsx (411 lines) - We order actions so they appear logically: CREATE, READ (VIEW), UPDATE, DELETE
 - `isActionSupported` (const) L37
 - `RoleApiPermissions` (export function) L44

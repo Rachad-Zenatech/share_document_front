@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
-import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -45,30 +44,32 @@ export default function AiStatusPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1280px] space-y-4 pb-6 animate-in fade-in duration-300">
-      <DashboardHeader
-        title="AI Status, Usage & Core Mapping"
-        subtitle="See which AI cores and features are healthy, out, or overflowing, token/call usage, and which core powers each feature."
-        actions={
-          <div className="flex items-center gap-2">
-            <Select value={String(hours)} onValueChange={(v) => setHours(Number(v))}>
-              <SelectTrigger className="h-8 w-36 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {WINDOW_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => void refetch()}>
-              <RefreshCw className={isFetching ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
-              Refresh
-            </Button>
-          </div>
-        }
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold text-foreground">AI Status, Usage &amp; Core Mapping</h1>
+          <p className="text-sm text-muted-foreground">
+            See which AI cores and features are healthy, out, or overflowing, token/call usage, and which core powers each feature.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={String(hours)} onValueChange={(v) => setHours(Number(v))}>
+            <SelectTrigger className="h-8 w-36 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {WINDOW_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => void refetch()}>
+            <RefreshCw className={isFetching ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+            Refresh
+          </Button>
+        </div>
+      </div>
       <AiSummaryCards data={data} onShowErrors={setErrorFilter} />
       <AiCoresGrid cores={data.cores} selectedCore={selectedCore} onSelectCore={setSelectedCore} />
       <AiFeatureMatrix features={data.features} selectedCore={selectedCore} coreLabel={coreLabel} onShowErrors={setErrorFilter} />

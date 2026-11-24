@@ -16,10 +16,11 @@ to find the right file.
 | .agents/code-map/src__components__SecFilings.md | 1 | 1 KB |
 | .agents/code-map/src__components__ui.md | 35 | 8 KB |
 | .agents/code-map/src__data.md | 8 | 3 KB |
-| .agents/code-map/src__hooks.md | 11 | 7 KB |
+| .agents/code-map/src__hooks.md | 12 | 7 KB |
 | .agents/code-map/src__lib.md | 4 | 2 KB |
 | .agents/code-map/src__pages__Auth.md | 2 | 1 KB |
-| .agents/code-map/src__pages__Configurations.md | 6 | 3 KB |
+| .agents/code-map/src__pages__Configurations.md | 7 | 3 KB |
+| .agents/code-map/src__pages__Configurations__aiStatus.md | 6 | 2 KB |
 | .agents/code-map/src__pages__Dashboard.md | 1 | 1 KB |
 | .agents/code-map/src__pages__Logs.md | 2 | 1 KB |
 | .agents/code-map/src__pages__SecFilings.md | 6 | 5 KB |
@@ -27,5 +28,5 @@ to find the right file.
 | .agents/code-map/src__pages__SecFilings__embed.md | 6 | 2 KB |
 | .agents/code-map/src__services.md | 13 | 6 KB |
 | .agents/code-map/src__services__secFiling.md | 9 | 10 KB |
-| .agents/code-map/src__types.md | 12 | 6 KB |
+| .agents/code-map/src__types.md | 13 | 7 KB |
 | .agents/code-map/src__utils.md | 13 | 17 KB |

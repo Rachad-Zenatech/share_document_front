@@ -4,6 +4,9 @@
 
 Each symbol shows its start line (`L<n>`); read from there to the next symbol's line, not the whole file.
 
+## src/hooks/useAiOverview.ts (16 lines) - use ai overview (hooks)
+- `useAiOverview` (export function) L5
+
 ## src/hooks/useDocumentLiveSync.ts (35 lines) - use document live sync (hooks)
 - `useDocumentLiveSync` (export function) L17 - Keeps the open document up to date: when the server announces a change to it (a save, a proposal, a merge, a check-in or a  decision by s...
 

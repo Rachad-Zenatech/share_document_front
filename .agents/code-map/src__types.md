@@ -7,6 +7,20 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 ## src/types/aiAssistant.ts (5 lines) - ai assistant (types)
 - `Message` (export type) L2
 
+## src/types/aiOverview.ts (152 lines) - ai overview (types)
+- `AiStateCode` (export type) L1
+- `AiFeatureCoreRef` (export interface) L3
+- `AiFeatureUsage24h` (export interface) L8
+- `AiOverviewFeature` (export interface) L17
+- `AiCoreStatus` (export interface) L45
+- `AiModelBreakdownRow` (export interface) L59
+- `AiStepBreakdownRow` (export interface) L72
+- `AiGuardBreakdownRow` (export interface) L81
+- `AiErrorsFilter` (export interface) L87
+- `AiErrorEntry` (export interface) L93
+- `AiErrorsResponse` (export interface) L108
+- `AiOverviewResponse` (export interface) L115
+
 ## src/types/auth.ts (98 lines) - auth (types)
 - `User` (export interface) L1
 - `Role` (export interface) L14
