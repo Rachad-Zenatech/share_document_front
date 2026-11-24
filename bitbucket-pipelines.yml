@@ -1,0 +1,33 @@
+image: node:22
+
+pipelines:
+  branches:
+    main:
+      - step:
+          name: Build Frontend
+          caches:
+            - node
+          script:
+            - npm ci || npm install
+            - npm run build
+          artifacts:
+            - dist/**
+      - step:
+          name: Deploy to AWS (S3 & CloudFront)
+          trigger: manual
+          deployment: production
+          script:
+            - echo "Deploying to AWS S3 & CloudFront..."
+            - pipe: atlassian/aws-s3-deploy:1.6.0
+              variables:
+                AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+                AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+                AWS_DEFAULT_REGION: $AWS_REGION
+                S3_BUCKET: $S3_BUCKET_NAME
+                LOCAL_PATH: 'dist'
+            - pipe: atlassian/aws-cloudfront-invalidate:0.7.0
+              variables:
+                AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+                AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+                AWS_DEFAULT_REGION: $AWS_REGION
+                DISTRIBUTION_ID: $CLOUDFRONT_DISTRIBUTION_ID
