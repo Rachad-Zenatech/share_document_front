@@ -171,8 +171,22 @@ jobs:
         run: |
           set -euxo pipefail
 
+          # Keep previous hashed chunks in assets/ so already-open tabs can still lazy-load their routes during/after a deploy.
+          if [ -d "dist/assets" ]; then
+            aws s3 sync dist/assets/ "s3://${S3_BUCKET_NAME}/assets/" \
+              --cache-control "public, max-age=31536000, immutable" \
+              --only-show-errors
+          fi
+
           aws s3 sync dist/ "s3://${S3_BUCKET_NAME}" \
-            --delete \
+            --exclude "assets/*" \
+            --exclude "index.html" \
+            --only-show-errors
+
+          # Upload index.html last with no-cache so new page loads always resolve the latest hashed chunks.
+          aws s3 cp dist/index.html "s3://${S3_BUCKET_NAME}/index.html" \
+            --cache-control "no-cache, no-store, must-revalidate" \
+            --content-type "text/html; charset=utf-8" \
             --only-show-errors
 
           echo "S3 deployment completed successfully."
@@ -245,3 +259,6 @@ jobs:
           fi
 
           echo "CloudFront invalidation created: ${invalidation_id}"
+          aws cloudfront wait invalidation-completed \
+            --distribution-id "${target_dist}" \
+            --id "${invalidation_id}" || echo "::warning::Could not wait for CloudFront invalidation completion; propagation continues asynchronously."
