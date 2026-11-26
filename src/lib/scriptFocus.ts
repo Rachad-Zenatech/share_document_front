@@ -11,11 +11,17 @@ export function parseScriptFocus(data: unknown): { requestId: number; terms: str
   return { requestId: value.requestId as number, terms: value.terms as string[] };
 }
 
+function evidenceCandidates(raw: string): string[] {
+  // Compliance evidence may describe a row as "[0:27] Visual: ..." even though
+  // the timecode lives in its own cell and the column label is only a header.
+  const passage = raw.replace(/^\s*(?:\[\s*)?\d{1,2}:\d{2}(?::\d{2})?(?:\s*\])?\s*(?:[|–—-]\s*)?/, '');
+  const cell = passage.replace(/^\s*(?:visuals?|voice[ -]?over|supers?|on[ -]?screen(?:\s+text)?|narration|audio)\s*:\s*/i, '');
+  return [...new Set([raw, passage, cell])];
+}
+
 export function scriptFocusMatch(text: string, terms: string[]): { start: number; end: number } | null {
   for (const raw of terms) {
-    // Evidence can include a table timecode even when the visual text is an editable field in another cell.
-    const candidates = [raw, raw.replace(/^\s*\d{1,2}:\d{2}\s+/, '')];
-    for (const term of candidates) {
+    for (const term of evidenceCandidates(raw)) {
       const tokens = term.replace(/[‘’]/g, "'").match(words);
       if (!tokens?.length) continue;
       const parts = tokens.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/'/g, "['‘’]"));

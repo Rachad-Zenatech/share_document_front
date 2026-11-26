@@ -25,13 +25,14 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `postToParent` (export function) L51
 - `listenToParent` (export function) L57 - Calls `handler` for each valid message from the hosting page.
 
-## src/lib/scriptFocus.ts (91 lines) - Focus evidence in the live editor without editing or saving document content.
+## src/lib/scriptFocus.ts (97 lines) - Focus evidence in the live editor without editing or saving document content.
 - `parseScriptFocus` (export function) L6
-- `scriptFocusMatch` (export function) L14
-- `clearScriptFocus` (export function) L29
-- `markElement` (function) L34
-- `focusText` (function) L40
-- `focusScriptPassage` (export function) L74
+- `evidenceCandidates` (function) L14
+- `scriptFocusMatch` (export function) L22
+- `clearScriptFocus` (export function) L35
+- `markElement` (function) L40
+- `focusText` (function) L46
+- `focusScriptPassage` (export function) L80
 
 ## src/lib/userDepartment.ts (170 lines) - user department (lib)
 - `isGenericRole` (function) L22

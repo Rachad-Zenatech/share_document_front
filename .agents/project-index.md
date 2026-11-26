@@ -84,7 +84,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/hooks/useSecWorkflows.ts (88 lines) - Active platform users that can be put on a workflow step.
 - src/lib/AuthContext.tsx (221 lines) - auth context (lib)
 - src/lib/embedBridge.ts (83 lines) - The hosting portal signs this person in by putting a short-lived token in the URL's #token=; it is kept for this tab and the URL cleaned.
-- src/lib/scriptFocus.ts (91 lines) - Focus evidence in the live editor without editing or saving document content.
+- src/lib/scriptFocus.ts (97 lines) - Focus evidence in the live editor without editing or saving document content.
 - src/lib/userDepartment.ts (170 lines) - user department (lib)
 - src/lib/utils.ts (7 lines) - utils (lib)
 - src/main.tsx (53 lines) - Create a client

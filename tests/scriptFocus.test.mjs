@@ -27,3 +27,30 @@ test('retains original casing and curly apostrophes without matching partial wor
   assert.equal(text.slice(match.start, match.end), 'company’s APPROVED');
   assert.equal(scriptFocusMatch(text, ['craft']), null);
 });
+
+test('matches the reported bracketed timecode and synthetic Visual label against its cell', () => {
+  const visual = 'PRODUCT: Slow push on an approved aircraft still. Then return to the scale.';
+  const evidence = '[0:27] Visual: PRODUCT: Slow push on an approved aircraft still.';
+  for (const text of [visual, '0:27\n' + visual]) {
+    const match = scriptFocusMatch(text, [evidence]);
+    assert.ok(match);
+    assert.equal(text.slice(match.start, match.end), 'PRODUCT: Slow push on an approved aircraft still');
+  }
+});
+
+test('supports table column labels while preserving the full passage and its meaningful prefixes', () => {
+  for (const label of ['Visuals', 'Voiceover', 'Voice over', 'Supers', 'On-screen text', 'Audio']) {
+    const text = 'PRODUCT: Slow push on an approved aircraft still.';
+    const match = scriptFocusMatch(text, [`[0:27] ${label}: ${text}`]);
+    assert.equal(text.slice(match.start, match.end), text.slice(0, -1));
+  }
+  const literal = 'Visual: show the approved aircraft';
+  const match = scriptFocusMatch(literal, [literal]);
+  assert.equal(literal.slice(match.start, match.end), literal);
+});
+
+test('does not fall back to a repeated trigger when the actual evidence passage is missing', () => {
+  assert.equal(scriptFocusMatch('An approved aircraft with a different visual.', [
+    '[0:27] Visual: PRODUCT: Slow push on an approved aircraft still.',
+  ]), null);
+});
