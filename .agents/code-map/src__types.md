@@ -54,7 +54,7 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `Notification` (export interface) L1
 - `UnreadNotificationCount` (export interface) L13
 
-## src/types/scriptReview.ts (91 lines) - Mirrors models/sec_filings/script_review_model.py and the state returned by the script-review routes.
+## src/types/scriptReview.ts (93 lines) - Mirrors models/sec_filings/script_review_model.py and the state returned by the script-review routes.
 - `ScriptStatus` (export type) L4
 - `ScriptCapacity` (export type) L5
 - `ScriptCollaboratorRole` (export type) L6
@@ -67,7 +67,7 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `ScriptHistoryEvent` (export interface) L54
 - `EmbedNote` (export interface) L62
 - `EmbedOutbound` (export type) L73 - Messages between this embed and the Social Media portal page that hosts it (see lib/embedBridge.ts).
-- `EmbedInbound` (export type) L83
+- `EmbedInbound` (export type) L84
 
 ## src/types/search.ts (8 lines) - search (types)
 - `SearchResult` (export type) L1

@@ -78,7 +78,8 @@ export type EmbedOutbound =
   | { type: 'script-embed:close'; documentId: string }
   | { type: 'script-embed:auth-required' }
   | { type: 'script-embed:selection'; documentId: string; quote: string; start: number }
-  | { type: 'script-embed:select-note'; documentId: string; id: string };
+  | { type: 'script-embed:select-note'; documentId: string; id: string }
+  | { type: 'script-embed:focus-result'; requestId: number; found: boolean };
 
 export type EmbedInbound =
   | { type: 'script-embed:close-request' }
@@ -87,4 +88,5 @@ export type EmbedInbound =
   | { type: 'script-embed:token'; token: string }
   | { type: 'script-embed:notes'; notes: EmbedNote[]; activeNoteId: string | null }
   | { type: 'script-embed:go-to-note'; id: string }
-  | { type: 'script-embed:set-readonly'; readOnly: boolean };
+  | { type: 'script-embed:set-readonly'; readOnly: boolean }
+  | { type: 'script-embed:focus-passage'; requestId: number; terms: string[] };

@@ -37,5 +37,5 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `applyEmbedHighlights` (export function) L159
 - `scrollToEmbedNote` (export function) L203
 
-## src/pages/SecFilings/embed/useEmbedBridge.ts (65 lines) - use embed bridge (pages  sec filings embed)
-- `useEmbedBridge` (export function) L10 - Tells the Social Media portal page that hosts this embed what is happening (ready, status changes, a merge, a post  request) and obeys it...
+## src/pages/SecFilings/embed/useEmbedBridge.ts (71 lines) - use embed bridge (pages  sec filings embed)
+- `useEmbedBridge` (export function) L11 - Tells the Social Media portal page that hosts this embed what is happening (ready, status changes, a merge, a post  request) and obeys it...

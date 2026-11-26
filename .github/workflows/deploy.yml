@@ -121,6 +121,9 @@ jobs:
           set -euxo pipefail
           npm ci
 
+      - name: Verify script highlight receiver
+        run: node --experimental-strip-types --test tests/scriptFocus.test.mjs
+
       - name: Build the app
         shell: bash
         env:
@@ -262,3 +265,6 @@ jobs:
           aws cloudfront wait invalidation-completed \
             --distribution-id "${target_dist}" \
             --id "${invalidation_id}" || echo "::warning::Could not wait for CloudFront invalidation completion; propagation continues asynchronously."
+
+      - name: Verify hosted script highlight release
+        run: python3 scripts/verify_hosted_highlights.py --origin https://d2oc5qgulk278o.cloudfront.net --pattern 'ScriptEmbedPage*.js' --pattern 'ScriptEmbedPage*.css'

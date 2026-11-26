@@ -43,6 +43,14 @@ const SpreadsheetHubPage = lazy(() => import("./pages/SecFilings/SpreadsheetHubP
 const WorkflowAssignmentsPage = lazy(() => import("./pages/SecFilings/WorkflowAssignmentsPage"));
 const ScriptEmbedPage = lazy(() => import("./pages/SecFilings/embed/ScriptEmbedPage"));
 
+function ContributorRoute() {
+  return (
+    <SecFilingDataGate>
+      <SecFilingContributorPage />
+    </SecFilingDataGate>
+  );
+}
+
 function SpreadsheetHubRoute() {
   return (
     <ProtectedRoute navigationCode="SEC_FILINGS">
@@ -138,14 +146,7 @@ function App() {
             <Route path="/documents" element={<Navigate to="/sec-filings" replace />} />
 
             {/* Standalone Contributor & Mobile Signing Routes */}
-            <Route
-              path="/sec-filings/contribute"
-              element={
-                <SecFilingDataGate>
-                  <SecFilingContributorPage />
-                </SecFilingDataGate>
-              }
-            />
+            <Route path="/sec-filings/contribute" element={<ContributorRoute />} />
 
             <Route path="/embed/script/:documentId" element={<ScriptEmbedPage />} /> {/* Social Media portal dialog */}
             {/* Main app layout routes (AppShell stays permanently mounted) */}

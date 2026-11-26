@@ -9,6 +9,7 @@ to find the right file.
 
 | Folder map | Files | Size |
 | --- | --- | --- |
+| .agents/code-map/scripts.md | 1 | 1 KB |
 | .agents/code-map/src.md | 2 | 1 KB |
 | .agents/code-map/src__components__AppShell.md | 10 | 3 KB |
 | .agents/code-map/src__components__AppShell__messageHub.md | 3 | 2 KB |
@@ -17,7 +18,7 @@ to find the right file.
 | .agents/code-map/src__components__ui.md | 35 | 8 KB |
 | .agents/code-map/src__data.md | 8 | 3 KB |
 | .agents/code-map/src__hooks.md | 12 | 7 KB |
-| .agents/code-map/src__lib.md | 4 | 2 KB |
+| .agents/code-map/src__lib.md | 5 | 2 KB |
 | .agents/code-map/src__pages__Auth.md | 2 | 1 KB |
 | .agents/code-map/src__pages__Configurations.md | 7 | 3 KB |
 | .agents/code-map/src__pages__Configurations__aiStatus.md | 6 | 2 KB |

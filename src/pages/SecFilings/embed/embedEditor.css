@@ -1,3 +1,21 @@
+::highlight(script-compliance-focus) {
+  background-color: #fecaca;
+  color: #991b1b;
+}
+
+[data-script-compliance-focus]::selection,
+[data-script-compliance-focus] input::selection,
+[data-script-compliance-focus] textarea::selection {
+  background-color: #fecaca;
+  color: #991b1b;
+}
+
+[data-script-compliance-focus] {
+  outline: 3px solid #ef4444;
+  outline-offset: -3px;
+  background-color: #fff1f2 !important;
+}
+
 /* The script embed in its editor-only mode (?mode=editor): the page, and the editor's controls laid out as one tidy toolbar.
    Everything marked data-chrome (the title block, the search strip, the page tools, the ruler) is hidden: the Social Media
    portal supplies the title, the pages list and the review around the editor. The controls (marked data-tb, in three groups)

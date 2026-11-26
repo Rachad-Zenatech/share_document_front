@@ -5,7 +5,8 @@
 Scan this index first to locate the right file and description without loading symbol trees or line numbers.
 For function and route definitions with their line numbers, grep `.agents/code-map/` (listed in `.agents/code-map.md`).
 
-- src/App.tsx (332 lines) - app
+- scripts/verify_hosted_highlights.py (61 lines) - Verify that CloudFront serves this build's script-highlight assets after deployment.
+- src/App.tsx (333 lines) - app
 - src/components/AppShell/AppShell.tsx (51 lines) - Set initial state
 - src/components/AppShell/Breadcrumbs.tsx (144 lines) - breadcrumbs (components  app shell)
 - src/components/AppShell/ConnectionStatusLight.tsx (255 lines) - connection status light (components  app shell)
@@ -79,7 +80,8 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/hooks/useSecFiling.ts (1582 lines) - use sec filing (hooks)
 - src/hooks/useSecWorkflows.ts (88 lines) - Active platform users that can be put on a workflow step.
 - src/lib/AuthContext.tsx (221 lines) - auth context (lib)
-- src/lib/embedBridge.ts (77 lines) - The hosting portal signs this person in by putting a short-lived token in the URL's #token=; it is kept for this tab and the URL cleaned.
+- src/lib/embedBridge.ts (83 lines) - The hosting portal signs this person in by putting a short-lived token in the URL's #token=; it is kept for this tab and the URL cleaned.
+- src/lib/scriptFocus.ts (91 lines) - Focus evidence in the live editor without editing or saving document content.
 - src/lib/userDepartment.ts (170 lines) - user department (lib)
 - src/lib/utils.ts (7 lines) - utils (lib)
 - src/main.tsx (53 lines) - Create a client
@@ -146,7 +148,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/pages/SecFilings/embed/ScriptInviteDialog.tsx (98 lines) - script invite dialog (pages  sec filings embed)
 - src/pages/SecFilings/embed/ScriptReviewBar.tsx (132 lines) - script review bar (pages  sec filings embed)
 - src/pages/SecFilings/embed/embedNotes.ts (207 lines) - embed notes (pages  sec filings embed)
-- src/pages/SecFilings/embed/useEmbedBridge.ts (65 lines) - use embed bridge (pages  sec filings embed)
+- src/pages/SecFilings/embed/useEmbedBridge.ts (71 lines) - use embed bridge (pages  sec filings embed)
 - src/services/api.ts (6 lines) - api (services)
 - src/services/apiClient.ts (333 lines) - api client (services)
 - src/services/eSignatureService.ts (294 lines) - e signature service (services)
@@ -176,7 +178,7 @@ For function and route definitions with their line numbers, grep `.agents/code-m
 - src/types/documentType.ts (42 lines) - The kinds of document the editor handles.
 - src/types/mediaBucket.ts (11 lines) - media bucket (types)
 - src/types/notifications.ts (16 lines) - notifications (types)
-- src/types/scriptReview.ts (91 lines) - Mirrors models/sec_filings/script_review_model.py and the state returned by the script-review routes.
+- src/types/scriptReview.ts (93 lines) - Mirrors models/sec_filings/script_review_model.py and the state returned by the script-review routes.
 - src/types/search.ts (8 lines) - search (types)
 - src/types/secFiling.ts (448 lines) - sec filing (types)
 - src/types/secFilingTemplate.ts (61 lines) - A template as returned by `GET /api/sec-filings/table-templates`.

@@ -1,4 +1,5 @@
 import type { EmbedInbound, EmbedOutbound } from '../types/scriptReview';
+import { parseScriptFocus } from './scriptFocus';
 
 /**
  * The script embed talks to the Social Media portal page that hosts it (an iframe in a dialog) with window.postMessage.
@@ -57,8 +58,13 @@ export function listenToParent(handler: (message: EmbedInbound) => void): () => 
   const onMessage = (event: MessageEvent) => {
     const origin = parentOrigin();
     if (!origin || event.origin !== origin || event.source !== window.parent) return;
+    if (!event.data || typeof event.data !== 'object') return;
     const data = event.data as Record<string, unknown> | null;
     const type = data?.type;
+    if (type === 'script-embed:focus-passage') {
+      const focus = parseScriptFocus(data);
+      if (focus) handler({ type, ...focus });
+    }
     if (type === 'script-embed:close-request' || type === 'script-embed:refresh') handler(data as EmbedInbound);
     if (type === 'script-embed:token' && typeof data?.token === 'string') handler({ type, token: data.token });
     if (type === 'script-embed:notes' && Array.isArray(data?.notes)) {

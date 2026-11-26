@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { focusScriptPassage, clearScriptFocus } from '../../../lib/scriptFocus';
 import { listenToParent, postToParent } from '../../../lib/embedBridge';
 import type { EmbedNote, ScriptHistoryEvent, ScriptReviewState } from '../../../types/scriptReview';
 
@@ -27,6 +28,10 @@ export function useEmbedBridge(
     postToParent({ type: 'script-embed:ready', documentId });
     const unlisten = listenToParent((message) => {
       if (message.type === 'script-embed:refresh') onRefresh();
+      if (message.type === 'script-embed:focus-passage') {
+        const found = focusScriptPassage(message.terms);
+        postToParent({ type: 'script-embed:focus-result', requestId: message.requestId, found });
+      }
       if (message.type === 'script-embed:token') {
         sessionStorage.setItem('token', message.token);
         if (authRequired.current) {
@@ -42,6 +47,7 @@ export function useEmbedBridge(
     return () => {
       window.removeEventListener('script-embed:auth-required', onAuthRequired);
       unlisten();
+      clearScriptFocus();
     };
   }, [documentId, onRefresh, onNotes, onGoToNote, onReadOnly]);
 

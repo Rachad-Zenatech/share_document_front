@@ -13,17 +13,25 @@ Each symbol shows its start line (`L<n>`); read from there to the next symbol's 
 - `AuthProvider` (export function) L51
 - `useAuth` (export function) L214
 
-## src/lib/embedBridge.ts (77 lines) - The hosting portal signs this person in by putting a short-lived token in the URL's #token=; it is kept for this tab and the URL cleaned.
-- `isEmbedRoute` (export const) L10
-- `isEditorOnly` (export const) L13 - ?mode=editor`: only the script editor, the hosting portal runs the review around it.
-- `isReadOnlyEmbed` (export const) L16 - ?readonly=1`: read-only view of the shared document where reviewers/creators highlight and comment.
-- `adoptEmbedToken` (export function) L19 - The hosting portal signs this person in by putting a short-lived token in the URL's #token=; it is kept for this tab and the URL cleaned.
-- `isEmbedded` (export const) L27
-- `allowedParentOrigins` (export function) L29
-- `originOf` (const) L34
-- `parentOrigin` (export function) L43 - The hosting page's origin when it is on the allow-list, else null (from ?parent=, else the referrer).
-- `postToParent` (export function) L50
-- `listenToParent` (export function) L56 - Calls `handler` for each valid message from the hosting page.
+## src/lib/embedBridge.ts (83 lines) - The hosting portal signs this person in by putting a short-lived token in the URL's #token=; it is kept for this tab and the URL cleaned.
+- `isEmbedRoute` (export const) L11
+- `isEditorOnly` (export const) L14 - ?mode=editor`: only the script editor, the hosting portal runs the review around it.
+- `isReadOnlyEmbed` (export const) L17 - ?readonly=1`: read-only view of the shared document where reviewers/creators highlight and comment.
+- `adoptEmbedToken` (export function) L20 - The hosting portal signs this person in by putting a short-lived token in the URL's #token=; it is kept for this tab and the URL cleaned.
+- `isEmbedded` (export const) L28
+- `allowedParentOrigins` (export function) L30
+- `originOf` (const) L35
+- `parentOrigin` (export function) L44 - The hosting page's origin when it is on the allow-list, else null (from ?parent=, else the referrer).
+- `postToParent` (export function) L51
+- `listenToParent` (export function) L57 - Calls `handler` for each valid message from the hosting page.
+
+## src/lib/scriptFocus.ts (91 lines) - Focus evidence in the live editor without editing or saving document content.
+- `parseScriptFocus` (export function) L6
+- `scriptFocusMatch` (export function) L14
+- `clearScriptFocus` (export function) L29
+- `markElement` (function) L34
+- `focusText` (function) L40
+- `focusScriptPassage` (export function) L74
 
 ## src/lib/userDepartment.ts (170 lines) - user department (lib)
 - `isGenericRole` (function) L22
