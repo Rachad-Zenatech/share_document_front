@@ -4,16 +4,17 @@
 
 Each symbol shows its start line (`L<n>`); read from there to the next symbol's line, not the whole file.
 
-## scripts/configure_embed_headers.py (84 lines) - Preserve CloudFront settings while allowing the trusted review portal to frame documents.
+## scripts/configure_embed_headers.py (89 lines) - Preserve CloudFront settings while allowing the trusted review portal to frame documents.
 - `aws` (def) L12
 - `framing_policy` (def) L28
-- `configure` (def) L54
+- `configure` (def) L59
 
-## scripts/test_embed_headers.py (49 lines) - Regression checks for the hosted script editor's framing policy.
+## scripts/test_embed_headers.py (58 lines) - Regression checks for the hosted script editor's framing policy.
 - `EmbedHeadersTests` (class) L10
-    - `test_preserves_other_headers_and_does_not_mutate_shared_policy` (def) L11
-    - `test_custom_conflicting_headers_are_replaced` (def) L26
-    - `test_live_check_rejects_browser_blocking_headers` (def) L34
+    - `test_aws_empty_disabled_fields_round_trip_to_the_same_policy` (def) L11
+    - `test_preserves_other_headers_and_does_not_mutate_shared_policy` (def) L20
+    - `test_custom_conflicting_headers_are_replaced` (def) L35
+    - `test_live_check_rejects_browser_blocking_headers` (def) L43
 
 ## scripts/verify_embed_headers.py (31 lines) - Fail deployment if the hosted editor cannot be framed by the review portal.
 - `verify` (def) L7

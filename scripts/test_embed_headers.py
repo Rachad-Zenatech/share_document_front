@@ -8,6 +8,15 @@ from verify_embed_headers import verify
 
 
 class EmbedHeadersTests(unittest.TestCase):
+    def test_aws_empty_disabled_fields_round_trip_to_the_same_policy(self):
+        desired = framing_policy({}, "DIST")
+        returned = copy.deepcopy(desired)
+        returned["CorsConfig"] = {}
+        returned["ServerTimingHeadersConfig"] = {}
+        for key in ["XSSProtection", "ReferrerPolicy", "ContentTypeOptions", "StrictTransportSecurity"]:
+            returned["SecurityHeadersConfig"][key] = {}
+        self.assertEqual(framing_policy(returned, "DIST"), desired)
+
     def test_preserves_other_headers_and_does_not_mutate_shared_policy(self):
         original = {"Name": "managed", "SecurityHeadersConfig": {
             "FrameOptions": {"Override": True, "FrameOption": "SAMEORIGIN"},

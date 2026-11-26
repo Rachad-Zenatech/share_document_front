@@ -5,8 +5,8 @@
 Scan this index first to locate the right file and description without loading symbol trees or line numbers.
 For function and route definitions with their line numbers, grep `.agents/code-map/` (listed in `.agents/code-map.md`).
 
-- scripts/configure_embed_headers.py (84 lines) - Preserve CloudFront settings while allowing the trusted review portal to frame documents.
-- scripts/test_embed_headers.py (49 lines) - Regression checks for the hosted script editor's framing policy.
+- scripts/configure_embed_headers.py (89 lines) - Preserve CloudFront settings while allowing the trusted review portal to frame documents.
+- scripts/test_embed_headers.py (58 lines) - Regression checks for the hosted script editor's framing policy.
 - scripts/verify_embed_headers.py (31 lines) - Fail deployment if the hosted editor cannot be framed by the review portal.
 - scripts/verify_hosted_highlights.py (61 lines) - Verify that CloudFront serves this build's script-highlight assets after deployment.
 - src/App.tsx (333 lines) - app

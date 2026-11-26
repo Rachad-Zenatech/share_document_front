@@ -26,8 +26,13 @@ def aws(operation, **arguments):
 
 
 def framing_policy(original, distribution):
-    config = copy.deepcopy(original)
+    # CloudFront returns empty objects for disabled settings, but rejects those
+    # same objects in create requests because their required fields are absent.
+    config = {key: copy.deepcopy(value) for key, value in original.items() if value != {}}
     security = config.setdefault("SecurityHeadersConfig", {})
+    for key in list(security):
+        if security[key] == {}:
+            del security[key]
     security.pop("FrameOptions", None)
     custom = config.get("CustomHeadersConfig", {}).get("Items", [])
     custom_csp = next((item["Value"] for item in custom if item["Header"].lower() == "content-security-policy"), "")
