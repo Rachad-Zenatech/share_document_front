@@ -9,7 +9,7 @@ to find the right file.
 
 | Folder map | Files | Size |
 | --- | --- | --- |
-| .agents/code-map/scripts.md | 1 | 1 KB |
+| .agents/code-map/scripts.md | 4 | 1 KB |
 | .agents/code-map/src.md | 2 | 1 KB |
 | .agents/code-map/src__components__AppShell.md | 10 | 3 KB |
 | .agents/code-map/src__components__AppShell__messageHub.md | 3 | 2 KB |

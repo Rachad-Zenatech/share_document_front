@@ -124,6 +124,9 @@ jobs:
       - name: Verify script highlight receiver
         run: node --experimental-strip-types --test tests/scriptFocus.test.mjs
 
+      - name: Verify embed header configuration
+        run: python3 -m unittest discover -s scripts -p test_embed_headers.py -v
+
       - name: Build the app
         shell: bash
         env:
@@ -225,6 +228,9 @@ jobs:
             --query "Distribution.{Id:Id,DomainName:DomainName,Status:Status,Enabled:DistributionConfig.Enabled}" \
             --output table
 
+      - name: Allow trusted script review embedding
+        run: python3 scripts/configure_embed_headers.py
+
       - name: Invalidate CloudFront cache
         shell: bash
         run: |
@@ -268,3 +274,6 @@ jobs:
 
       - name: Verify hosted script highlight release
         run: python3 scripts/verify_hosted_highlights.py --origin https://d2oc5qgulk278o.cloudfront.net --pattern 'ScriptEmbedPage*.js' --pattern 'ScriptEmbedPage*.css'
+
+      - name: Verify hosted editor framing headers
+        run: python3 scripts/verify_embed_headers.py
