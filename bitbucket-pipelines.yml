@@ -41,7 +41,7 @@ pipelines:
             - dist/**
 
       - step:
-          name: Deploy to AWS (S3 & CloudFront)
+          name: Deploy to AWS (S3 & CloudFront) - Staging
           image: python:3.12
           trigger: manual
           deployment: production
