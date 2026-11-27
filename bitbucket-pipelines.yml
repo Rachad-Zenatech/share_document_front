@@ -22,6 +22,7 @@ pipelines:
 
               if [ -f .env.production ]; then
                 SAVED_VITE_API_BASE_URL="${VITE_API_BASE_URL:-}"
+                sed -i 's/\r$//' .env.production
                 set -a
                 . ./.env.production
                 set +a
@@ -66,6 +67,7 @@ pipelines:
                 SAVED_AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}"
                 SAVED_S3_BUCKET_NAME="${S3_BUCKET_NAME:-}"
                 SAVED_CLOUDFRONT_DISTRIBUTION_ID="${CLOUDFRONT_DISTRIBUTION_ID:-}"
+                sed -i 's/\r$//' .env.production
                 set -a
                 . ./.env.production
                 set +a
