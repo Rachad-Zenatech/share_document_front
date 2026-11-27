@@ -9,36 +9,117 @@ pipelines:
             - node
           script:
             - |
-              if [ -n "$GIT_CRYPT_KEY" ]; then
-                echo "Unlocking git-crypt encrypted files..."
-                apt-get update && apt-get install -y git-crypt
+              set -euo pipefail
+              apt-get update && apt-get install -y --no-install-recommends git-crypt
+              if [ -n "${GIT_CRYPT_KEY:-}" ]; then
                 echo "$GIT_CRYPT_KEY" | base64 -d > /tmp/git-crypt-key
                 git-crypt unlock /tmp/git-crypt-key
                 rm -f /tmp/git-crypt-key
-                echo "Files unlocked successfully."
-              else
-                echo "GIT_CRYPT_KEY variable not set, skipping git-crypt unlock."
+              elif [ -f .env.production ] && head -c 9 .env.production | grep -q "GITCRYPT"; then
+                echo "ERROR: .env.production is encrypted and GIT_CRYPT_KEY is not set."
+                exit 1
               fi
-            - npm ci || npm install
-            - npm run build
+
+              if [ -f .env.production ]; then
+                SAVED_VITE_API_BASE_URL="${VITE_API_BASE_URL:-}"
+                set -a
+                . ./.env.production
+                set +a
+                [ -n "$SAVED_VITE_API_BASE_URL" ] && VITE_API_BASE_URL="$SAVED_VITE_API_BASE_URL"
+                export VITE_API_BASE_URL="${VITE_API_BASE_URL:-}"
+              fi
+
+              npm ci || npm install
+              npm run build
+
+              if [ ! -d "dist" ] || [ ! -f "dist/index.html" ]; then
+                echo "ERROR: dist/ or dist/index.html was not created."
+                exit 1
+              fi
           artifacts:
             - dist/**
+
       - step:
           name: Deploy to AWS (S3 & CloudFront)
+          image: python:3.12
           trigger: manual
           deployment: production
           script:
-            - echo "Deploying to AWS S3 & CloudFront..."
-            - pipe: atlassian/aws-s3-deploy:1.6.0
-              variables:
-                AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
-                AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
-                AWS_DEFAULT_REGION: $AWS_REGION
-                S3_BUCKET: $S3_BUCKET_NAME
-                LOCAL_PATH: 'dist'
-            - pipe: atlassian/aws-cloudfront-invalidate:0.7.0
-              variables:
-                AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
-                AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
-                AWS_DEFAULT_REGION: $AWS_REGION
-                DISTRIBUTION_ID: $CLOUDFRONT_DISTRIBUTION_ID
+            - |
+              set -euo pipefail
+              trap 'rm -f /tmp/git-crypt-key' EXIT
+              apt-get update && apt-get install -y --no-install-recommends git-crypt
+              pip install --no-cache-dir awscli
+
+              if [ -n "${GIT_CRYPT_KEY:-}" ]; then
+                echo "$GIT_CRYPT_KEY" | base64 -d > /tmp/git-crypt-key
+                git-crypt unlock /tmp/git-crypt-key
+                rm -f /tmp/git-crypt-key
+              elif [ -f .env.production ] && head -c 9 .env.production | grep -q "GITCRYPT"; then
+                echo "ERROR: .env.production is encrypted and GIT_CRYPT_KEY is not set."
+                exit 1
+              fi
+
+              if [ -f .env.production ]; then
+                SAVED_AWS_REGION="${AWS_REGION:-}"
+                SAVED_AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}"
+                SAVED_AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}"
+                SAVED_S3_BUCKET_NAME="${S3_BUCKET_NAME:-}"
+                SAVED_CLOUDFRONT_DISTRIBUTION_ID="${CLOUDFRONT_DISTRIBUTION_ID:-}"
+                set -a
+                . ./.env.production
+                set +a
+                [ -n "$SAVED_AWS_REGION" ] && AWS_REGION="$SAVED_AWS_REGION"
+                [ -n "$SAVED_AWS_ACCESS_KEY_ID" ] && AWS_ACCESS_KEY_ID="$SAVED_AWS_ACCESS_KEY_ID"
+                [ -n "$SAVED_AWS_SECRET_ACCESS_KEY" ] && AWS_SECRET_ACCESS_KEY="$SAVED_AWS_SECRET_ACCESS_KEY"
+                [ -n "$SAVED_S3_BUCKET_NAME" ] && S3_BUCKET_NAME="$SAVED_S3_BUCKET_NAME"
+                [ -n "$SAVED_CLOUDFRONT_DISTRIBUTION_ID" ] && CLOUDFRONT_DISTRIBUTION_ID="$SAVED_CLOUDFRONT_DISTRIBUTION_ID"
+              fi
+
+              AWS_REGION_VAL="${AWS_REGION:-${REGION:-ca-central-1}}"
+              S3_BUCKET_VAL="${S3_BUCKET_NAME:-${BUCKET_NAME:-}}"
+              CF_DIST_VAL="${CLOUDFRONT_DISTRIBUTION_ID:-${DISTRIBUTION_ID:-${DISTRIBUTION_NAME:-}}}"
+              AWS_KEY="${AWS_ACCESS_KEY_ID:-${AWS_ACCESS_KEY:-${ACCESS_KEY:-}}}"
+              AWS_SECRET="${AWS_SECRET_ACCESS_KEY:-${SECRET_ACCESS_KEY:-}}"
+
+              if [ -z "$S3_BUCKET_VAL" ] || [ -z "$CF_DIST_VAL" ]; then
+                echo "ERROR: S3_BUCKET_NAME/BUCKET_NAME or CLOUDFRONT_DISTRIBUTION_ID/DISTRIBUTION_ID is missing."
+                exit 1
+              fi
+              if [ -n "$AWS_KEY" ] && [ -n "$AWS_SECRET" ]; then
+                export AWS_ACCESS_KEY_ID="$AWS_KEY"
+                export AWS_SECRET_ACCESS_KEY="$AWS_SECRET"
+              fi
+              export AWS_DEFAULT_REGION="$AWS_REGION_VAL"
+
+              # Keep previous hashed chunks in assets/ so already-open tabs can still lazy-load routes.
+              if [ -d "dist/assets" ]; then
+                aws s3 sync dist/assets/ "s3://${S3_BUCKET_VAL}/assets/" \
+                  --cache-control "public, max-age=31536000, immutable" \
+                  --only-show-errors
+              fi
+
+              aws s3 sync dist/ "s3://${S3_BUCKET_VAL}" \
+                --exclude "assets/*" \
+                --exclude "index.html" \
+                --only-show-errors
+
+              # Upload index.html last with no-cache so new page loads always resolve the latest hashed chunks.
+              aws s3 cp dist/index.html "s3://${S3_BUCKET_VAL}/index.html" \
+                --cache-control "no-cache, no-store, must-revalidate" \
+                --content-type "text/html; charset=utf-8" \
+                --only-show-errors
+
+              aws s3api head-object --bucket "${S3_BUCKET_VAL}" --key "index.html"
+
+              target_dist="$CF_DIST_VAL"
+              if [[ "$target_dist" == *"."* ]]; then
+                resolved_id="$(aws cloudfront list-distributions --query "DistributionList.Items[?DomainName=='${target_dist}' || contains(Aliases.Items || \`[]\`, '${target_dist}')].Id | [0]" --output text 2>/dev/null || true)"
+                if [ -n "$resolved_id" ] && [ "$resolved_id" != "None" ]; then
+                  target_dist="$resolved_id"
+                fi
+              fi
+
+              invalidation_id="$(aws cloudfront create-invalidation --distribution-id "$target_dist" --paths "/*" --query "Invalidation.Id" --output text)"
+              echo "CloudFront invalidation created: ${invalidation_id}"
+              aws cloudfront wait invalidation-completed --distribution-id "$target_dist" --id "$invalidation_id" || true
